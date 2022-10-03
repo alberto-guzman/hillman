@@ -1,16 +1,11 @@
-#bring in library
-library(tidyverse)
-library(readxl)
-library(magrittr)
-library(janitor)
+here()
 
 
-#set working directory
-setwd("~/Projects/inProgress/2020_hillman/data")
+source(here('code','hillman_clean_raw.R'))
 
 
 #import updated alumni tracker 2022
-alum <- read_csv("Alumni Tracker SL 5.9.2022.csv", 
+alum <- read_csv(here('data',"Alumni Tracker SL 5.9.2022.csv"), 
                  col_types = cols(`Source (Survey, LinkedIn, NSC Etc.)` = col_skip(), 
                                   `Last check` = col_skip(), Email = col_skip(), 
                                   `Project title` = col_skip(), `Public Profile` = col_skip(), 
@@ -22,8 +17,9 @@ alum <- read_csv("Alumni Tracker SL 5.9.2022.csv",
 
 
 #clean column names
-alum <- alum |> 
-  clean_names() 
+colnames(alum) %<>% str_replace_all("\\s", "_") %<>% tolower()
+colnames(alum) %<>% str_replace_all(":", "")
+colnames(alum) %<>% str_replace_all("\\?", "")
 
 # removed prefered name to just legal name for matching purposes 
 alum$first <- gsub('\\(.*',"",alum$first)
@@ -57,6 +53,8 @@ alum$high_school_graduation_expected <- gsub('\\(.*',"",alum$high_school_graduat
 #   filter(year_min >= 2017 & year_max <= 2020)
 # 
 
+# dob
+
 
 alum <- alum %>% select(last, first, year1:year4, notes, high_school_graduation_expected, year_max, year_min)
 
@@ -69,10 +67,35 @@ alum <- rename(alum,last_name = last)
 alum <- alum %>% mutate(first_name = tolower(first_name))
 alum <- alum %>% mutate(last_name = tolower(last_name))
 
+
+
+#write_csv(out,'hillman_part_year.csv')
+
+alum %>% group_by(first_name, last_name) %>% 
+  filter(n()>1) %>% summarize(n=n())
+
+alum <- alum %>% group_by(first_name, last_name) %>% 
+  filter(n()==1) |> 
+  ungroup()
+
+# pivot to long
+alum <- alum |> 
+  select(first_name, last_name, year1:year4) |> 
+  pivot_longer(
+    cols = starts_with('year'),
+    names_to = 'year'
+  )
+
+
+alum <- alum |>  select(first_name, last_name, value) |> 
+  rename(year = value) 
+
+alum <- drop_na(alum)
+
+
 alum$treatment <- 1
 
 
-write_csv(out,'hillman_part_year.csv')
 
 
 
@@ -84,77 +107,5 @@ write_csv(out,'hillman_part_year.csv')
 
 
 
-#years participated
-alum <- alum |> 
-  separate(years_participated, c("year_a","year_b","year_c","year_d"), sep = "[/,]", remove = FALSE, extra = 'merge', fill = "right") 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-alum |>
-  tabyl(gender)
-
-
-
-
-
-alum$still_in_high_school[is.na(alum$still_in_high_school)] <- 0
-
-alum <- alum |> mutate(still_in_high_school=recode(still_in_high_school, 
-                                                    `High School`=1,
-                                                    `0`=0))
-
-
-alum |>
-  tabyl(still_in_high_school)
-
-
-
-alum |>
-  tabyl(upci_participation_year)
-
-alum <- alum |> 
-  separate(upci_participation_year, c("year_a","year_b","year_c","year_d"), sep = "[/,]", remove = FALSE, extra = 'merge', fill = "right") 
-
-
-
-head(alum)
-alum |>
-  select(upci_participation_year,year_a,year_b,year_c,year_d) |>
-  write_csv("test.csv")
-
-
-
-
-alum |>
-  tabyl(high_school)
-
-
-
-alum |>
-  tabyl(high_school_graduation_year)
-
-
-alum |>
-  select(last_name,first_name,gender,still_in_high_school,upci_participation_year,year_a,year_b,year_c,year_d,high_school,high_school_graduation_year)
-
-
-
-alum |>
-  tabyl(upci_participation_year)
 
 

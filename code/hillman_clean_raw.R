@@ -409,7 +409,7 @@ df$age <- trunc((df$dob %--% df$year_dt) / years(1))
 
 
 hist(df$grade)
-hist(df$gpa)
+hist(df$house_size)
 
 df |> vtable(missing = T)
 
@@ -422,108 +422,46 @@ df <- df |> mutate(gpa = case_when(
 ))
 
 # fixing sat
+which(colnames(df)=="act_writing")
+df[, 11:20][df[, 11:20] == 0] <- NA
+
+# fixing house size
+df$house_size[df$house_size > 11] <- NA
+
+#age
+df$age[df$age == 0] <- NA
+df$age[df$age == 7] <- NA
 
 
 
+# find duplicates
+
+df %>% group_by(first_name, last_name, year) %>% 
+  filter(n()>1) %>% summarize(n=n())
 
 
 
+#sat issue with multiple scores
+#
+#
+#
+#
+#
+
+#dealing with duplicates, taking their latest applicaiton year because they report sat
+df <- df %>%
+  group_by(first_name, last_name) |>
+  mutate(applicant_max = max(year)) 
 
 
 
+df %>% group_by(first_name, last_name, year) %>% 
+  filter(n()>1) %>% summarize(n=n())
 
+df<-df[!(df$first_name=="amanda" & df$last_name=="lu"),]
+df<-df[!(df$first_name=="imani" & df$last_name=="smith"),]
 
-
-
-
-df |>
-  filter(is.na(Record.Found.Y.N) | is.na(Graduated.)) |>
-  vtable(missing = T)
-
-df |>
-  filter(is.na(Record.Found.Y.N) | is.na(Graduated.)) |>
-  ht()
 
 
 applicants <- df
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-#
-#
-#
-# #maybe we dont need to filter them becuase we are exact atching on year I only need a variable that flags if they were ever treated so they are not controls
-#
-# applicants %>%
-#   filter(year == 2020) |>
-#   missing_plot()
-#
-#
-# applicants %>%
-#   missing_plot()
-#
-#
-# #dealing with duplicates, taking their latest applicaiton year because they report sat
-# applicants <- applicants %>%
-#   group_by(first_name, last_name, dob) |>
-#   mutate(applicant_max = max(year)) |>
-#   filter(year == applicant_max)
-#
-#
-#
-# applicants %>%
-#   missing_plot()
-#
-#
-#
-# #create max and min participation year
-# test <- test |>
-#   mutate(applicant_max = max(year))
-#
-#
-#
-#
-# duplicated(applicants$first_name, applicants$last_name)
-# find_duplicates
-#
-#
-# glimpse()
-#
-#
-#
-#
-#
-#
-# tabyl(df$zip)
+        
