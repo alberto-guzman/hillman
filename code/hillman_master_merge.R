@@ -1,4 +1,3 @@
-
 # merge treatment
 
 master_df <- merge(alum, applicants, by = c('first_name','last_name'), all = T)
