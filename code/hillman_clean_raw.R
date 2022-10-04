@@ -69,8 +69,8 @@ df_2017 <- df
 ########################################################
 
 # read in data
-df <- read_excel(here('data','hillman_2018.xlsx'))
-                 
+df <- read_excel(here("data", "hillman_2018.xlsx"))
+
 colnames(df) %<>% str_replace_all("\\s", "_") %<>% tolower()
 colnames(df) %<>% str_replace_all(":", "")
 colnames(df) %<>% str_replace_all("\\?", "")
@@ -165,7 +165,7 @@ df_2018 <- df
 ########################################################
 
 # read in data
-df <- read_excel(here('data',"hillman_2019.xlsx"), sheet = "All (Extra info)")
+df <- read_excel(here("data", "hillman_2019.xlsx"), sheet = "All (Extra info)")
 colnames(df) %<>% str_replace_all("\\s", "_") %<>% tolower()
 colnames(df) %<>% str_replace_all(":", "")
 colnames(df) %<>% str_replace_all("\\?", "")
@@ -254,8 +254,9 @@ df <- df %>%
   )
 
 # need to bring in stipend eligible
-df_stipend <- read_excel(here('data',"hillman_raw.xlsx"),
-  sheet = "2019")
+df_stipend <- read_excel(here("data", "hillman_raw.xlsx"),
+  sheet = "2019"
+)
 
 df_stipend <- df_stipend %>% select(first_name, last_name, stipend)
 df <- left_join(df, df_stipend)
@@ -276,7 +277,7 @@ df_2019 <- df
 ########################################################
 
 # read in data
-df <- read_excel(here('data',"hillman_2020.xlsx"))
+df <- read_excel(here("data", "hillman_2020.xlsx"))
 colnames(df) %<>% str_replace_all("\\s", "_") %<>% tolower()
 colnames(df) %<>% str_replace_all(":", "")
 colnames(df) %<>% str_replace_all("\\?", "")
@@ -367,7 +368,7 @@ df <- bind_rows(df_2017, df_2018, df_2019, df_2020)
 
 
 # merge back dob
-dob_df <- read_excel(here('data',"hillman_raw.xlsx"),
+dob_df <- read_excel(here("data", "hillman_raw.xlsx"),
   col_types = c(
     "text", "text", "date",
     "numeric"
@@ -385,7 +386,7 @@ df <- df %>% select(-c(middle_name, high_school_pub_priv, school_district, reduc
 df %>%
   missing_plot()
 
-# create missing indicator 
+# create missing indicator
 # create dataframe and make them for all the variables I match on, although coursened should be ok?
 
 # ask david if I can have a clean stipend eligible
@@ -422,13 +423,13 @@ df <- df |> mutate(gpa = case_when(
 ))
 
 # fixing sat
-which(colnames(df)=="act_writing")
+which(colnames(df) == "act_writing")
 df[, 11:20][df[, 11:20] == 0] <- NA
 
 # fixing house size
 df$house_size[df$house_size > 11] <- NA
 
-#age
+# age
 df$age[df$age == 0] <- NA
 df$age[df$age == 7] <- NA
 
@@ -436,32 +437,35 @@ df$age[df$age == 7] <- NA
 
 # find duplicates
 
-df %>% group_by(first_name, last_name, year) %>% 
-  filter(n()>1) %>% summarize(n=n())
+df %>%
+  group_by(first_name, last_name, year) %>%
+  filter(n() > 1) %>%
+  summarize(n = n())
 
 
 
-#sat issue with multiple scores
+# sat issue with multiple scores
 #
 #
 #
 #
 #
 
-#dealing with duplicates, taking their latest applicaiton year because they report sat
+# dealing with duplicates, taking their latest applicaiton year because they report sat
 df <- df %>%
   group_by(first_name, last_name) |>
-  mutate(applicant_max = max(year)) 
+  mutate(applicant_max = max(year))
 
 
 
-df %>% group_by(first_name, last_name, year) %>% 
-  filter(n()>1) %>% summarize(n=n())
+df %>%
+  group_by(first_name, last_name, year) %>%
+  filter(n() > 1) %>%
+  summarize(n = n())
 
-df<-df[!(df$first_name=="amanda" & df$last_name=="lu"),]
-df<-df[!(df$first_name=="imani" & df$last_name=="smith"),]
+df <- df[!(df$first_name == "amanda" & df$last_name == "lu"), ]
+df <- df[!(df$first_name == "imani" & df$last_name == "smith"), ]
 
 
 
 applicants <- df
-        
