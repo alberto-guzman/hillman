@@ -30,7 +30,7 @@ master_df |>
 
 
 
-master_df <- select(master_df,-c(zip,gpa_weight,psat_reading_writing,sat_reading_writing,dob,year_dt,age,applicant_max,jkcf))
+master_df <- select(master_df,-c(zip,gpa_weight,psat_reading_writing,sat_reading_writing,dob,year_dt,applicant_max,jkcf))
 
 
 
@@ -44,7 +44,7 @@ master_df <- master_df %>% mutate(stipend = recode(stipend, 'Yes'=1, 'No'=0))
 master_df <-
   master_df |>
   mutate(
-    african_america = case_when(
+    african_american = case_when(
       self_identity == "African American" | self_identity == "African-America" | self_identity == "Black" ~ 1,
       TRUE ~ 0),
     asian = case_when(
@@ -61,16 +61,29 @@ master_df <-
       TRUE ~ 0)
     )
       
+
+
+
+
+
+
       
       
 master_df <-
   master_df |>
   mutate(
     bi_multi_racial = case_when(
-      african_america == 0 &  asian == 0 & hawaiian_pacific_islander == 0 & latinx == 0 & white == 0 ~ 1,
+      african_american == 0 &  asian == 0 & hawaiian_pacific_islander == 0 & latinx == 0 & white == 0 ~ 1,
       TRUE ~ 0)
   )
 
+master_df <-
+  master_df |>
+  mutate(
+    racially_marginalized = case_when(
+      african_american == 1 | hawaiian_pacific_islander == 1 | latinx == 1 ~ 1,
+      TRUE ~ 0)
+  )
  
 master_df <-
   master_df |>
@@ -85,16 +98,6 @@ master_df <-
       geographic_location == "Rural/Small Town" | geographic_location == "Rural/SmallTown" ~ 1,
       TRUE ~ 0)
   )
-
-
-
-master_df <-
-  master_df |>
-  mutate(
-    disability = case_when(
-      documented_disability == "Disability" | documented_disability == "Yes" | documented_disability == "yes" ~ 1,
-      documented_disability == "No" | documented_disability == "no" ~ 0,
-      TRUE ~ NA))
 
 
 master_df <- master_df %>% mutate(disability = recode(documented_disability, 'Yes' = 1, 'yes' = 1, 'Disability' = 1, 'No' = 0, 'no' = 0))
@@ -125,21 +128,51 @@ master_df <- select(master_df,-c(self_identity,geographic_location,documented_di
 
 
 
-
   
 master_df |> vtable(missing = T)
 
 
+
+
 # missing indicators
 library(optmatch)
-test <- fill.NAs(treatment ~ age + gender, data = master_df)
 
+
+master_df_fill <- fill.NAs(treatment ~ gender + grade + age + gpa + sat_math + sat_verbal + sat_writing + psat_math + psat_verbal + psat_writing +
+                             act_math + act_read + act_science + act_writing + stipend + house_size + first_gen + racially_marginalized + 
+                             bi_multi_racial + urban + suburban + year +
+                             rural + disability + neg_school + us_citizen, data = master_df)
+
+
+
+master_df_fill |> vtable(missing = T)
+
+
+# subset to years we have data for
 # playing with matching
 # first will need to fix the excel shifting issue
+# create only urm and and use bi-multi racial 
 
 
 library(MatchIt)
 
+m.out <- matchit(treatment ~ gender + grade + age + gpa + sat_math + sat_verbal + sat_writing + psat_math + psat_verbal + psat_writing +
+                   act_math + act_read + act_science + act_writing + stipend + house_size + first_gen + racially_marginalized + 
+                   bi_multi_racial + urban + suburban +
+                   rural + disability + neg_school + us_citizen + 
+                   gender.NA + grade.NA + age.NA + gpa.NA + sat_math.NA + sat_verbal.NA + sat_writing.NA + psat_math.NA + psat_verbal.NA + psat_writing.NA +
+                   act_math.NA + act_read.NA + act_science.NA + act_writing.NA + stipend.NA + house_size.NA + first_gen.NA + 
+                   disability.NA + neg_school.NA + us_citizen.NA,
+                 data = master_df_fill,
+                 exact = ~ year + stipend,
+                 method = "optimal", 
+                 distance = "glm", 
+                 discard = 'control')
 
-m.out <- matchit(treatment ~ gender + gpa + latinx, 
-                 data = master_df, method = "cem")
+plot(summary(m.out))
+
+bal.plot(m.out, var.name = "distance", which = "both", colors = c("#003594","#FFB81C")) +
+  ggtitle("Propensity Score Distribution") + xlab('Propensity Score')
+
+
+summary(m.out)
