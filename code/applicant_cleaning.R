@@ -5,6 +5,8 @@ library(here)
 library(stringr)
 library(styler)
 library(lubridate)
+library(naniar)
+
 # Set default code style for {styler} functions
 grkstyle::use_grk_style()
 
@@ -496,3 +498,36 @@ df <- df[!(df$first_name == "imani" & df$last_name == "smith"), ]
 
 # Final dataframe
 applicants <- df
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Calculate the proportion of missing data in each variable, grouped by 'year'
+missing_by_year <- applicants %>%
+  group_by(year) %>%
+  summarise_all(funs(prop_miss = mean(is.na(.))))
+
+# Reshape the data for plotting
+missing_by_year_melted <- gather(missing_by_year, variable, prop_miss, -year)
+
+# Create the bar plot of missing data proportions by 'year'
+ggplot(missing_by_year_melted, aes(x = year, y = prop_miss, fill = variable)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  theme_minimal() +
+  labs(title = "Proportion of Missing Data by Year",
+       x = "Year",
+       y = "Proportion Missing") +
+  theme(legend.title = element_blank())
+
+
