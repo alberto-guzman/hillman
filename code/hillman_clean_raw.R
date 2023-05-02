@@ -1,17 +1,17 @@
 # Load packages
 library(tidyverse)
-library(magrittr)
 library(readxl)
 library(here)
 library(stringr)
 library(styler)
+library(lubridate)
 # Set default code style for {styler} functions
 grkstyle::use_grk_style()
 
 # Set directory
 here()
 
-######################################################## 3
+########################################################
 ######################## 2017
 ########################################################
 # Read in data
@@ -19,10 +19,10 @@ df_2017 <- read_excel(here("data", "hillman_2017.xlsx"))
 
 # Clean column names
 df_2017 <- df_2017 %>%
-  rename_all(str_to_lower) %>%
-  rename_all(~ str_replace_all(., "\\s", "_")) %>%
-  rename_all(~ str_replace_all(., ":", "")) %>%
-  rename_all(~ str_replace_all(., "\\?", ""))
+  rename_with(~ str_to_lower(.) %>%
+    str_replace_all(., "\\s", "_") %>%
+    str_replace_all(., ":", "") %>%
+    str_replace_all(., "\\?", ""))
 
 # Select and rename columns
 df_2017 <- df_2017 %>%
@@ -104,17 +104,17 @@ df_2017 <- df_2017 %>%
 ########################################################
 
 # Read in data
-df <- read_excel(here("data", "hillman_2018.xlsx"))
+df_2018 <- read_excel(here("data", "hillman_2018.xlsx"))
 
 # Clean column names
-colnames(df) %<>%
-  str_replace_all("\\s", "_") %<>%
-  tolower() %<>%
-  str_replace_all(":", "") %<>%
-  str_replace_all("\\?", "")
+df_2018 <- df_2018 %>%
+  rename_with(~ str_to_lower(.) %>%
+    str_replace_all(., "\\s", "_") %>%
+    str_replace_all(., ":", "") %>%
+    str_replace_all(., "\\?", ""))
 
 # Select and rename columns
-df <- df %>%
+df_2018 <- df_2018 %>%
   select(
     -c(
       site,
@@ -179,7 +179,7 @@ df <- df %>%
 
 
 # Clean and process columns
-df <- df %>%
+df_2018 <- df_2018 %>%
   mutate(
     gender = if_else(tolower(gender) == "male", 1, 0),
     gpa_weight = if_else(tolower(gpa_weight) == "yes", 1, 0),
@@ -196,40 +196,26 @@ df <- df %>%
     act_read = as.integer(act_read),
     act_science = as.integer(act_science),
     act_writing = as.integer(act_writing),
-    house_size = as.integer(house_size)
+    house_size = as.integer(house_size),
+    year = 2018
   )
-
-# Add year column
-df$year <- 2018
-
-# Store processed data
-df_2018 <- df
-
-
-
-
-
-
-
-
-
 
 ######################################################## 3
 ######################## 2019
 ########################################################
 
 # Read in data
-df <- read_excel(here("data", "hillman_2019.xlsx"), sheet = "All (Extra info)")
+df_2019 <- read_excel(here("data", "hillman_2019.xlsx"), sheet = "All (Extra info)")
 
 # Clean column names
-colnames(df) <- colnames(df) %>%
-  str_replace_all("\\s", "_") %>%
-  tolower() %>%
-  str_replace_all(":", "") %>%
-  str_replace_all("\\?", "")
+df_2019 <- df_2019 %>%
+  rename_with(~ str_to_lower(.) %>%
+    str_replace_all(., "\\s", "_") %>%
+    str_replace_all(., ":", "") %>%
+    str_replace_all(., "\\?", ""))
 
-
-df <- select(df, -c(
+# Select and rename columns
+df_2019 <- select(df_2019, -c(
   date_of_birth,
   email,
   home_phone,
@@ -281,7 +267,8 @@ df <- select(df, -c(
   "stipend_eligible"
 ))
 
-df <- df %>%
+# Rename columns
+df_2019 <- df_2019 %>%
   rename(
     high_school = "school",
     city = "city...11",
@@ -310,8 +297,8 @@ df <- df %>%
     house_size = "household_size"
   )
 
-
-df <- df %>%
+# Clean and process columns
+df_2019 <- df_2019 %>%
   mutate(
     gender = as.integer(tolower(gender) == "male"),
     gpa_weight = as.integer(tolower(gpa_weight) == "yes"),
@@ -336,31 +323,28 @@ df <- df %>%
 df_stipend <- read_excel(here("data", "hillman_raw.xlsx"), sheet = "2019") %>%
   select(first_name, last_name, stipend)
 
-df <- df %>%
+df_2019 <- df_2019 %>%
   left_join(df_stipend)
 
-df_2019 <- df
-
-
-
-
-
-
-
+rm(df_stipend)
 
 ########################################################
 ######################## 2020
 ########################################################
 
-# read in data
-df <- read_excel(here("data", "hillman_2020.xlsx"))
-colnames(df) %<>% str_replace_all("\\s", "_") %<>% tolower()
-colnames(df) %<>% str_replace_all(":", "")
-colnames(df) %<>% str_replace_all("\\?", "")
+# Read in data
+df_2020 <- read_excel(here("data", "hillman_2020.xlsx"))
 
-colnames(df)
-df <- select(
-  df,
+# Clean column names
+df_2020 <- df_2020 %>%
+  rename_with(~ str_to_lower(.) %>%
+    str_replace_all(., "\\s", "_") %>%
+    str_replace_all(., ":", "") %>%
+    str_replace_all(., "\\?", ""))
+
+# Select and rename columns
+df_2020 <- select(
+  df_2020,
   c(
     first,
     last,
@@ -387,51 +371,41 @@ df <- select(
   )
 )
 
-df <- rename(df, high_school = "school")
+# Rename columns
+df_2020 <- df_2020 %>%
+  rename(
+    first_name = "first",
+    last_name = "last",
+    grade = "current_grade...5",
+    self_identity = "race...15",
+    high_school = school,
+    jkcf = "are_you_a_current_jack_kent_cooke_foundation_(jkcf)_young_scholar",
+    gpa_weight = "weighted_(y/n)",
+    psat_math = "psat_scores_|__|_math",
+    psat_reading_writing = "psat_scores_|__|_reading_and_writing",
+    sat_math = "sat_scores_|__|_math",
+    sat_reading_writing = "sat_scores_|__|_reading_and_writing",
+    act_math = "act_scores_|__|_math",
+    act_verbal = "act_scores_|__|_verbal",
+    act_writing = "act_scores_|__|_writing",
+    act_read = "act_scores_|__|_reading",
+    act_science = "act_scores_|__|_science",
+    documented_disability = disability,
+    first_gen = "1st_gen_college",
+    house_size = "what_is_your_total_household_size",
+    geographic_location = "how_do_you_describe_where_you_live",
+    school_impact = "do_you_believe_your_environment_negatively_impacts_your_educational_opportunities_related_to_obtaining_a_career_in_science_research_please_look_at_the_list_below,_if_you_meet_at_least_two_of_the_following_criteria_you_w...",
+    american_citizen = "are_you_an_american_citizen",
+    stipend = "stipend_eligible...77"
+  )
 
-df <- rename(df, first_name = first)
-df <- rename(df, last_name = last)
-df <- rename(df, grade = "current_grade...5")
-df <- rename(df, self_identity = "race...15")
-df <- rename(df, jkcf = "are_you_a_current_jack_kent_cooke_foundation_(jkcf)_young_scholar")
-df <- rename(df, gpa_weight = "weighted_(y/n)")
-df <- rename(df, psat_math = "psat_scores_|__|_math")
-df <- rename(df, psat_reading_writing = "psat_scores_|__|_reading_and_writing")
-df <- rename(df, sat_math = "sat_scores_|__|_math")
-df <- rename(df, sat_reading_writing = "sat_scores_|__|_reading_and_writing")
-df <- rename(df, act_math = "act_scores_|__|_math")
-df <- rename(df, act_verbal = "act_scores_|__|_verbal")
-df <- rename(df, act_writing = "act_scores_|__|_writing")
-df <- rename(df, act_read = "act_scores_|__|_reading")
-df <- rename(df, act_science = "act_scores_|__|_science")
-df <- rename(df, documented_disability = "disability")
-df <- rename(df, first_gen = "1st_gen_college")
-df <- rename(df, house_size = "what_is_your_total_household_size")
-df <- rename(df, geographic_location = "how_do_you_describe_where_you_live")
-df <- rename(df, school_impact = "do_you_believe_your_environment_negatively_impacts_your_educational_opportunities_related_to_obtaining_a_career_in_science_research_please_look_at_the_list_below,_if_you_meet_at_least_two_of_the_following_criteria_you_w...")
-df <- rename(df, american_citizen = "are_you_an_american_citizen")
-df <- rename(df, stipend = "stipend_eligible...77")
-
-
-
-
-
-
-
-
-
-
-
-
-
-df <- df %>% mutate(gender = tolower(gender))
-df <- df %>% mutate(gender = if_else(gender == "male", 1, 0))
-df <- df %>% mutate(gpa_weight = tolower(gpa_weight))
-df <- df %>% mutate(gpa_weight = if_else(gpa_weight == "yes", 1, 0))
-
-
-df <- df %>%
+# Process data
+df_2020 <- df_2020 %>%
   mutate(
+    gender = tolower(gender),
+    gender = if_else(gender == "male", 1, 0),
+    gpa_weight = tolower(gpa_weight),
+    gpa_weight = if_else(gpa_weight == "yes", 1, 0),
     zip = as.integer(zip),
     grade = as.integer(grade),
     gpa = as.numeric(gpa),
@@ -446,123 +420,79 @@ df <- df %>%
     house_size = as.integer(house_size)
   )
 
-
-df$year <- 2020
-
-df_2020 <- df
-
-
+# Add year column
+df_2020$year <- 2020
 
 ########################################################
-######################## merge
+######################## Merge Code
 ########################################################
 
-# append all df
+# 1. Append all dataframes
 df <- bind_rows(df_2017, df_2018, df_2019, df_2020)
 
-
-# merge back dob
+# 2. Read and merge date of birth (dob) data
 dob_df <- read_excel(
   here("data", "hillman_raw.xlsx"),
-  col_types = c(
-    "text",
-    "text",
-    "date",
-    "numeric"
-  )
+  col_types = c("text", "text", "date", "numeric")
 )
-
 
 dob_df <- rename(dob_df, year = "hillman_year")
 df <- left_join(df, dob_df)
 
+# 3. Clean the dataframe
+df <- df %>% select(-c(
+  middle_name,
+  high_school_pub_priv,
+  school_district,
+  reduced_lunch,
+  offer_ap,
+  decision,
+  `income_eligible_(reduced_lunch)`,
+  alumni,
+  act_verbal,
+  low_income
+))
 
-df <- df %>% select(-c(middle_name, high_school_pub_priv, school_district, reduced_lunch, offer_ap, decision, `income_eligible_(reduced_lunch)`, alumni, act_verbal, low_income))
-
-
-df %>%
-  missing_plot()
-
-# create missing indicator
-# create dataframe and make them for all the variables I match on, although coursened should be ok?
-
-# ask david if I can have a clean stipend eligible
-
-df %>%
-  filter(year == 2017) |>
-  missing_plot()
-
-
-
-df <- df %>% mutate(first_name = tolower(first_name))
-df <- df %>% mutate(last_name = tolower(last_name))
-
+# 5. Clean first and last names
+df <- df %>% mutate(
+  first_name = tolower(first_name),
+  last_name = tolower(last_name)
+)
 
 df$first_name <- gsub("\\(.*", "", df$first_name)
 df$first_name <- gsub('\\".*', "", df$first_name)
 
-# age relative to the year they applied
-df$year_dt <- lubridate::ymd(df$year, truncated = 2L)
+# 6. Calculate age relative to the year they applied
+df$year_dt <- ymd(df$year, truncated = 2L)
 df$age <- trunc((df$dob %--% df$year_dt) / years(1))
 
-
-hist(df$grade)
-hist(df$house_size)
-
-df |> vtable(missing = T)
-
-
-# fixing gpa
-df <- df |> mutate(gpa = case_when(
+# 7. Fix GPA values
+df <- df %>% mutate(gpa = case_when(
   gpa > 96 ~ 4.0,
   between(gpa, 90, 96) ~ 3.7,
   TRUE ~ as.numeric(gpa)
 ))
 
-# fixing sat
-which(colnames(df) == "act_writing")
-df[, 11:20][df[, 11:20] == 0] <- NA
+# 8. Fix SAT, PSAT, and ACT scores by replacing 0 with NA
+test_cols <- colnames(df)[startsWith(colnames(df), "sat_") | startsWith(colnames(df), "psat_") | startsWith(colnames(df), "act_")]
+df[test_cols] <- lapply(df[test_cols], function(x) ifelse(x == 0, NA, x))
 
-# fixing house size
+# 9. Fix house size
 df$house_size[df$house_size > 11] <- NA
 
-# age
+# 10. Fix age values
 df$age[df$age == 0] <- NA
 df$age[df$age == 7] <- NA
 
-
-
-# find duplicates
-
+# 11. Identify duplicate records
 df %>%
   group_by(first_name, last_name, year) %>%
   filter(n() > 1) %>%
   summarize(n = n())
 
-
-
-# sat issue with multiple scores
-#
-#
-#
-#
-#
-
-# dealing with duplicates, taking their latest applicaiton year because they report sat
-df <- df %>%
-  group_by(first_name, last_name) |>
-  mutate(applicant_max = max(year))
-
-
-
-df %>%
-  group_by(first_name, last_name, year) %>%
-  filter(n() > 1) %>%
-  summarize(n = n())
-
+# 13. Remove specific duplicate rows
 df <- df[!(df$first_name == "amanda" & df$last_name == "lu"), ]
 df <- df[!(df$first_name == "imani" & df$last_name == "smith"), ]
 
-
-
+# Final dataframe
 applicants <- df
