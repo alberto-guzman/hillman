@@ -1,49 +1,87 @@
-# load packaged, must have pacman already installed
-pacman::p_load(
-  tidyverse, magrittr, pastecs, readr, readxl, sjlabelled, tibble, psych, dplyr, janitor,
-  eeptools, cobalt, gtsummary, stargazer, data.table, skimr, stringr, vioplot, finalfit,
-  parallel, data.table, tictoc, batchtools, styler, tidyverse, magrittr, lubridate, here, vtable
-)
+# Load packages
+library(tidyverse)
+library(magrittr)
+library(readxl)
+library(here)
+library(stringr)
+library(styler)
+# Set default code style for {styler} functions
+grkstyle::use_grk_style()
 
-# directory
+# Set directory
 here()
 
 ######################################################## 3
 ######################## 2017
 ########################################################
+# Read in data
+df_2017 <- read_excel(here("data", "hillman_2017.xlsx"))
 
-# read in data
-df <- read_excel(here("data", "hillman_2017.xlsx"))
+# Clean column names
+df_2017 <- df_2017 %>%
+  rename_all(str_to_lower) %>%
+  rename_all(~ str_replace_all(., "\\s", "_")) %>%
+  rename_all(~ str_replace_all(., ":", "")) %>%
+  rename_all(~ str_replace_all(., "\\?", ""))
 
-colnames(df) %<>% str_replace_all("\\s", "_") %<>% tolower()
-colnames(df) %<>% str_replace_all(":", "")
-colnames(df) %<>% str_replace_all("\\?", "")
+# Select and rename columns
+df_2017 <- df_2017 %>%
+  select(
+    -c(
+      date_of_birth,
+      email,
+      home_phone,
+      cell_phone,
+      address_1,
+      address_2,
+      parent_guard_full_name,
+      parent_guard_email,
+      parent_guard_add_1,
+      parent_guard_add_2,
+      parent_guard_city,
+      parent_guard_state,
+      parent_guard_zip,
+      science_math_courses,
+      int_cancer_biology,
+      int_tumor_immun,
+      int_computer_science,
+      int_drug_discovery,
+      int_women_cancer,
+      int_cancer_env,
+      prior_research,
+      jkcf_advisor,
+      jkcf_start_date,
+      jkcf_end_date,
+      first_reference_full_name,
+      first_reference_email,
+      sec_reference_full_name,
+      sec_reference_email,
+      computer_proficiency,
+      lab_experimentation,
+      housing,
+      marketing,
+      name,
+      self_agree_statement,
+      ...69,
+      ...70,
+      green_card
+    )
+  ) %>%
+  rename(
+    high_school = high_school_name,
+    grade = current_grade,
+    jkcf = jkcf_young_scholar,
+    house_size = household_size,
+    gpa_weight = gpa_weighted
+  )
 
-df <- select(df, -c(
-  date_of_birth, email, home_phone, cell_phone, address_1, address_2,
-  parent_guard_full_name, parent_guard_email, parent_guard_add_1,
-  parent_guard_add_2, parent_guard_city, parent_guard_state, parent_guard_zip,
-  science_math_courses, int_cancer_biology, int_tumor_immun, int_computer_science,
-  int_drug_discovery, int_women_cancer, int_cancer_env, prior_research, jkcf_advisor,
-  jkcf_start_date, jkcf_end_date, first_reference_full_name, first_reference_email, sec_reference_full_name, sec_reference_email, computer_proficiency, lab_experimentation,
-  housing, marketing, name, self_agree_statement, ...69, ...70, green_card
-))
-
-df <- rename(df, high_school = "high_school_name")
-df <- rename(df, grade = "current_grade")
-df <- rename(df, jkcf = "jkcf_young_scholar")
-df <- rename(df, house_size = "household_size")
-df <- rename(df, gpa_weight = "gpa_weighted")
-
-df <- df %>% mutate(gender = tolower(gender))
-df <- df %>% mutate(gender = if_else(gender == "male", 1, 0))
-df <- df %>% mutate(gpa_weight = tolower(gpa_weight))
-df <- df %>% mutate(gpa_weight = if_else(gpa_weight == "yes", 1, 0))
-df <- df %>% mutate(high_school_pub_priv = tolower(high_school_pub_priv))
-df <- df %>% mutate(jkcf = tolower(jkcf))
-
-df <- df %>%
+# Clean and process data
+df_2017 <- df_2017 %>%
   mutate(
+    gender = if_else(tolower(gender) == "male", 1, 0),
+    gpa_weight = if_else(tolower(gpa_weight) == "yes", 1, 0),
+    high_school_pub_priv = str_to_lower(high_school_pub_priv),
+    jkcf = str_to_lower(jkcf),
     zip = as.integer(zip),
     grade = as.integer(grade),
     gpa = as.numeric(gpa),
@@ -57,74 +95,94 @@ df <- df %>%
     act_read = as.integer(act_read),
     act_science = as.integer(act_science),
     act_writing = as.integer(act_writing),
-    house_size = as.integer(house_size)
+    house_size = as.integer(house_size),
+    year = 2017
   )
 
-df$year <- 2017
-
-df_2017 <- df
-
-######################################################## 3
+########################################################
 ######################## 2018
 ########################################################
 
-# read in data
+# Read in data
 df <- read_excel(here("data", "hillman_2018.xlsx"))
 
-colnames(df) %<>% str_replace_all("\\s", "_") %<>% tolower()
-colnames(df) %<>% str_replace_all(":", "")
-colnames(df) %<>% str_replace_all("\\?", "")
+# Clean column names
+colnames(df) %<>%
+  str_replace_all("\\s", "_") %<>%
+  tolower() %<>%
+  str_replace_all(":", "") %<>%
+  str_replace_all("\\?", "")
 
-df <- select(df, -c(
-  site, date_of_birth, wet_lab_eligible, alumnus, "absences_(y/n)", "absences_(#_of_days)", "wet_v_dry",
-  "how_would_you_judge_your_sense_of_comfort_in_computer_use_and_applications_choose_one_of_the_following",
-  "how_would_you_judge_your_sense_of_comfort_in_computer_use_and_applications_choose_one_of_the_following_[other]",
-  "list_prior_research_experiences_(if_any),_extracurricular_activities,_honors_and_awards.",
-  "list_science_and_math_courses_with_grades",
-  "essay_written_or_uploaded",
-  "upload_your_essay",
-  "a.", "b.", "one_other_topic_of_your_choice_from_the_list_above.", recommender,
-  do_you_have_permanent_resident_or_green_card_status,
-  submission_date,
-  "if_yes,_please_explain",
-  email, home_phone, cell_phone, address, "1st_choice", "2nd_choice",
-  "3rd", "4th", "5th", "6th", "stage_completion_(%)",
-  "do_you_qualify_based_on_your_family_size_and_income_please_refer_to_the_chart_below_indicating_maximum_thresholds.",
-  "how_do_you_identify_yourself_[other]",
-  "vi._housing"
-))
+# Select and rename columns
+df <- df %>%
+  select(
+    -c(
+      site,
+      date_of_birth,
+      wet_lab_eligible,
+      alumnus,
+      "absences_(y/n)",
+      "absences_(#_of_days)",
+      "wet_v_dry",
+      "how_would_you_judge_your_sense_of_comfort_in_computer_use_and_applications_choose_one_of_the_following",
+      "how_would_you_judge_your_sense_of_comfort_in_computer_use_and_applications_choose_one_of_the_following_[other]",
+      "list_prior_research_experiences_(if_any),_extracurricular_activities,_honors_and_awards.",
+      "list_science_and_math_courses_with_grades",
+      "essay_written_or_uploaded",
+      "upload_your_essay",
+      "a.",
+      "b.",
+      "one_other_topic_of_your_choice_from_the_list_above.",
+      recommender,
+      do_you_have_permanent_resident_or_green_card_status,
+      submission_date,
+      "if_yes,_please_explain",
+      email,
+      home_phone,
+      cell_phone,
+      address,
+      "1st_choice",
+      "2nd_choice",
+      "3rd",
+      "4th",
+      "5th",
+      "6th",
+      "stage_completion_(%)",
+      "do_you_qualify_based_on_your_family_size_and_income_please_refer_to_the_chart_below_indicating_maximum_thresholds.",
+      "how_do_you_identify_yourself_[other]",
+      "vi._housing"
+    )
+  ) %>%
+  rename(
+    stipend = "stipend_eligible",
+    self_identity = "how_do_you_identify_yourself",
+    documented_disability = "do_you_have_a_documented_disabilityâ__(e.g.,_auditory,_motor,_visual,_cognitive,_other)_that_substantially_limits_one_or_more_major_life_activites_as_described_by_theâ_americans_with_disabilities_act_of_1990",
+    grade = "grade_(year)",
+    gpa_weight = "gpa_weighted",
+    jkcf = "are_you_a_current_jack_kent_cooke_foundation_(jkcf)_young_scholar",
+    psat_math = "psat_scores_|__|_math",
+    sat_math = "sat_scores_|__|_math",
+    act_math = "act_scores_|__|_math",
+    psat_verbal = "psat_scores_|__|_verbal",
+    psat_writing = "psat_scores_|__|_writing",
+    sat_verbal = "sat_scores_|__|_verbal",
+    sat_writing = "sat_scores_|__|_writing",
+    act_science = "act_scores_|__|_science",
+    act_read = "act_scores_|__|_reading",
+    act_writing = "act_scores_|__|_writing",
+    act_verbal = "act_scores_|__|_verbal",
+    geographic_location = "how_do_you_describe_where_you_live",
+    house_size = "what_is_your_total_household_size",
+    american_citizen = "are_you_an_american_citizen",
+    school_impact = "do_you_believe_your_school_environment_negatively_impacts_your_educational_opportunities_related_to_obtaining_a_career_in_science_research"
+  )
 
 
-df <- rename(df, stipend = "stipend_eligible")
-df <- rename(df, self_identity = "how_do_you_identify_yourself")
-df <- rename(df, documented_disability = "do_you_have_a_documented_disabilityâ__(e.g.,_auditory,_motor,_visual,_cognitive,_other)_that_substantially_limits_one_or_more_major_life_activites_as_described_by_theâ_americans_with_disabilities_act_of_1990")
-df <- rename(df, grade = "grade_(year)")
-df <- rename(df, gpa_weight = "gpa_weighted")
-df <- rename(df, jkcf = "are_you_a_current_jack_kent_cooke_foundation_(jkcf)_young_scholar")
-df <- rename(df, psat_math = "psat_scores_|__|_math")
-df <- rename(df, sat_math = "sat_scores_|__|_math")
-df <- rename(df, act_math = "act_scores_|__|_math")
-df <- rename(df, psat_verbal = "psat_scores_|__|_verbal")
-df <- rename(df, psat_writing = "psat_scores_|__|_writing")
-df <- rename(df, sat_verbal = "sat_scores_|__|_verbal")
-df <- rename(df, sat_writing = "sat_scores_|__|_writing")
-df <- rename(df, act_science = "act_scores_|__|_science")
-df <- rename(df, act_read = "act_scores_|__|_reading")
-df <- rename(df, act_writing = "act_scores_|__|_writing")
-df <- rename(df, act_verbal = "act_scores_|__|_verbal")
-df <- rename(df, geographic_location = "how_do_you_describe_where_you_live")
-df <- rename(df, house_size = "what_is_your_total_household_size")
-df <- rename(df, american_citizen = "are_you_an_american_citizen")
-df <- rename(df, school_impact = "do_you_believe_your_school_environment_negatively_impacts_your_educational_opportunities_related_to_obtaining_a_career_in_science_research")
-
-df <- df %>% mutate(gender = tolower(gender))
-df <- df %>% mutate(gender = if_else(gender == "male", 1, 0))
-df <- df %>% mutate(gpa_weight = tolower(gpa_weight))
-df <- df %>% mutate(gpa_weight = if_else(gpa_weight == "yes", 1, 0))
-
-
+# Clean and process columns
 df <- df %>%
   mutate(
+    gender = if_else(tolower(gender) == "male", 1, 0),
+    gpa_weight = if_else(tolower(gpa_weight) == "yes", 1, 0),
     zip = as.integer(zip),
     grade = as.integer(grade),
     gpa = as.numeric(gpa),
@@ -141,15 +199,11 @@ df <- df %>%
     house_size = as.integer(house_size)
   )
 
-
-
-
+# Add year column
 df$year <- 2018
 
+# Store processed data
 df_2018 <- df
-
-
-
 
 
 
@@ -164,21 +218,43 @@ df_2018 <- df
 ######################## 2019
 ########################################################
 
-# read in data
+# Read in data
 df <- read_excel(here("data", "hillman_2019.xlsx"), sheet = "All (Extra info)")
-colnames(df) %<>% str_replace_all("\\s", "_") %<>% tolower()
-colnames(df) %<>% str_replace_all(":", "")
-colnames(df) %<>% str_replace_all("\\?", "")
+
+# Clean column names
+colnames(df) <- colnames(df) %>%
+  str_replace_all("\\s", "_") %>%
+  tolower() %>%
+  str_replace_all(":", "") %>%
+  str_replace_all("\\?", "")
+
 
 df <- select(df, -c(
-  date_of_birth, email, home_phone, cell_phone, address...10,
+  date_of_birth,
+  email,
+  home_phone,
+  cell_phone,
+  address...10,
   "parent_or_legal_guardian's_full_name...14",
   "parent_or_legal_guardian's_email...15",
-  "housing", "1st_choice", "2nd", "3rd", "4th", "5th", "6th", expected_absences,
-  "#_of_absences", wet_or_dry_lab_preferred, "how_would_you_judge_your_sense_of_comfort_in_computer_use_and_applications_choose_one_of_the_following",
-  "how_would_you_judge_your_sense_of_comfort_in_computer_use_and_applications_choose_one_of_the_following_[other]", "parent_or_legal_guardian's_full_name...40", "parent_or_legal_guardian's_email...41",
+  "housing",
+  "1st_choice",
+  "2nd",
+  "3rd",
+  "4th",
+  "5th",
+  "6th",
+  expected_absences,
+  "#_of_absences",
+  wet_or_dry_lab_preferred,
+  "how_would_you_judge_your_sense_of_comfort_in_computer_use_and_applications_choose_one_of_the_following",
+  "how_would_you_judge_your_sense_of_comfort_in_computer_use_and_applications_choose_one_of_the_following_[other]",
+  "parent_or_legal_guardian's_full_name...40",
+  "parent_or_legal_guardian's_email...41",
   "upload_your_essay...50",
-  "a.", "b.", "upload_transcript",
+  "a.",
+  "b.",
+  "upload_transcript",
   "would_you_like_to_upload_your_essay_or_use_the_space_provided",
   "recommender",
   "submission_date",
@@ -198,45 +274,47 @@ df <- select(df, -c(
   "address...36",
   "city...37",
   "state...38",
-  "zip...39", group, "prior_research_experiences.", list_science_and_math_courses_with_grades, "stipend_eligible"
+  "zip...39",
+  group,
+  "prior_research_experiences.",
+  list_science_and_math_courses_with_grades,
+  "stipend_eligible"
 ))
 
-df <- rename(df, high_school = "school")
-
-df <- rename(df, city = "city...11")
-df <- rename(df, state = "state...12")
-df <- rename(df, zip = "zip...13")
-df <- rename(df, jkcf = "jack_kent_cooke")
-df <- rename(df, gpa_weight = "gpa_weighted_yes/no")
-df <- rename(df, grade = "current_grade")
-df <- rename(df, self_identity = "race")
-df <- rename(df, documented_disability = "do_you_have_a_documented_disabilityâ__(e.g.,_auditory,_motor,_visual,_cognitive,_other)_that_substantially_limits_one_or_more_major_life_activites_as_described_by_theâ_americans_with_disabilities_act_of_1990")
-df <- rename(df, psat_math = "psat_scores_|__|_math")
-df <- rename(df, sat_math = "sat_scores_|__|_math")
-df <- rename(df, act_math = "act_scores_|__|_math")
-df <- rename(df, psat_verbal = "psat_scores_|__|_verbal")
-df <- rename(df, psat_writing = "psat_scores_|__|_writing")
-df <- rename(df, sat_verbal = "sat_scores_|__|_verbal")
-df <- rename(df, sat_writing = "sat_scores_|__|_writing")
-df <- rename(df, act_science = "act_scores_|__|_science")
-df <- rename(df, act_read = "act_scores_|__|_reading")
-df <- rename(df, act_writing = "act_scores_|__|_writing")
-df <- rename(df, act_verbal = "act_scores_|__|_verbal")
-df <- rename(df, american_citizen = "are_you_an_american_citizen")
-df <- rename(df, first_gen = "will_you_be_the_first_person_in_your_family_to_attend_college")
-df <- rename(df, school_impact = "do_you_believe_your_school_environment_negatively_impacts_your_educational_opportunities_related_to_obtaining_a_career_in_science_research")
-df <- rename(df, geographic_location = "how_do_you_describe_where_you_live")
-df <- rename(df, house_size = "household_size")
-
-
-df <- df %>% mutate(gender = tolower(gender))
-df <- df %>% mutate(gender = if_else(gender == "male", 1, 0))
-df <- df %>% mutate(gpa_weight = tolower(gpa_weight))
-df <- df %>% mutate(gpa_weight = if_else(gpa_weight == "yes", 1, 0))
+df <- df %>%
+  rename(
+    high_school = "school",
+    city = "city...11",
+    state = "state...12",
+    zip = "zip...13",
+    jkcf = "jack_kent_cooke",
+    gpa_weight = "gpa_weighted_yes/no",
+    grade = "current_grade",
+    self_identity = "race",
+    documented_disability = "do_you_have_a_documented_disabilityâ__(e.g.,_auditory,_motor,_visual,_cognitive,_other)_that_substantially_limits_one_or_more_major_life_activites_as_described_by_theâ_americans_with_disabilities_act_of_1990",
+    psat_math = "psat_scores_|__|_math",
+    sat_math = "sat_scores_|__|_math",
+    act_math = "act_scores_|__|_math",
+    psat_verbal = "psat_scores_|__|_verbal",
+    psat_writing = "psat_scores_|__|_writing",
+    sat_verbal = "sat_scores_|__|_verbal",
+    sat_writing = "sat_scores_|__|_writing",
+    act_science = "act_scores_|__|_science",
+    act_read = "act_scores_|__|_reading",
+    act_writing = "act_scores_|__|_writing",
+    act_verbal = "act_scores_|__|_verbal",
+    american_citizen = "are_you_an_american_citizen",
+    first_gen = "will_you_be_the_first_person_in_your_family_to_attend_college",
+    school_impact = "do_you_believe_your_school_environment_negatively_impacts_your_educational_opportunities_related_to_obtaining_a_career_in_science_research",
+    geographic_location = "how_do_you_describe_where_you_live",
+    house_size = "household_size"
+  )
 
 
 df <- df %>%
   mutate(
+    gender = as.integer(tolower(gender) == "male"),
+    gpa_weight = as.integer(tolower(gpa_weight) == "yes"),
     zip = as.integer(zip),
     grade = as.integer(grade),
     gpa = as.numeric(gpa),
@@ -250,18 +328,16 @@ df <- df %>%
     act_read = as.integer(act_read),
     act_science = as.integer(act_science),
     act_writing = as.integer(act_writing),
-    house_size = as.integer(house_size)
+    house_size = as.integer(house_size),
+    year = 2019
   )
 
-# need to bring in stipend eligible
-df_stipend <- read_excel(here("data", "hillman_raw.xlsx"),
-  sheet = "2019"
-)
 
-df_stipend <- df_stipend %>% select(first_name, last_name, stipend)
-df <- left_join(df, df_stipend)
+df_stipend <- read_excel(here("data", "hillman_raw.xlsx"), sheet = "2019") %>%
+  select(first_name, last_name, stipend)
 
-df$year <- 2019
+df <- df %>%
+  left_join(df_stipend)
 
 df_2019 <- df
 
@@ -283,15 +359,33 @@ colnames(df) %<>% str_replace_all(":", "")
 colnames(df) %<>% str_replace_all("\\?", "")
 
 colnames(df)
-df <- select(df, c(
-  first, last, gender, current_grade...5, alumni, race...15,
-  school, city, state, zip, "are_you_a_current_jack_kent_cooke_foundation_(jkcf)_young_scholar",
-  gpa, "weighted_(y/n)", "psat_scores_|__|_math":"act_scores_|__|_science",
-  "low_income", "disability", "1st_gen_college", "what_is_your_total_household_size",
-  "how_do_you_describe_where_you_live", "do_you_believe_your_environment_negatively_impacts_your_educational_opportunities_related_to_obtaining_a_career_in_science_research_please_look_at_the_list_below,_if_you_meet_at_least_two_of_the_following_criteria_you_w...",
-  "are_you_an_american_citizen",
-  "stipend_eligible...77"
-))
+df <- select(
+  df,
+  c(
+    first,
+    last,
+    gender,
+    current_grade...5,
+    alumni,
+    race...15,
+    school,
+    city,
+    state,
+    zip,
+    "are_you_a_current_jack_kent_cooke_foundation_(jkcf)_young_scholar",
+    gpa,
+    "weighted_(y/n)",
+    "psat_scores_|__|_math":"act_scores_|__|_science",
+    "low_income",
+    "disability",
+    "1st_gen_college",
+    "what_is_your_total_household_size",
+    "how_do_you_describe_where_you_live",
+    "do_you_believe_your_environment_negatively_impacts_your_educational_opportunities_related_to_obtaining_a_career_in_science_research_please_look_at_the_list_below,_if_you_meet_at_least_two_of_the_following_criteria_you_w...",
+    "are_you_an_american_citizen",
+    "stipend_eligible...77"
+  )
+)
 
 df <- rename(df, high_school = "school")
 
@@ -368,9 +462,12 @@ df <- bind_rows(df_2017, df_2018, df_2019, df_2020)
 
 
 # merge back dob
-dob_df <- read_excel(here("data", "hillman_raw.xlsx"),
+dob_df <- read_excel(
+  here("data", "hillman_raw.xlsx"),
   col_types = c(
-    "text", "text", "date",
+    "text",
+    "text",
+    "date",
     "numeric"
   )
 )
