@@ -1,4 +1,3 @@
-
 todor::todor()
 
 # Pivot the alum dataset to create separate treatment columns for each year
