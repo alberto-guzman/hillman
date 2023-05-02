@@ -1,3 +1,6 @@
+
+todor::todor()
+
 # Pivot the alum dataset to create separate treatment columns for each year
 treated_years <- alum %>%
   pivot_wider(names_from = year, values_from = treatment, names_prefix = "treated_") %>%
@@ -16,10 +19,8 @@ master <- applicants %>%
   left_join(treated_years, by = c("first_name", "last_name")) %>%
   mutate(across(starts_with("treated"), ~ ifelse(is.na(.), 0, .)))
 
-# Select relevant columns
-master <- select(master, -c(zip, gpa_weight, psat_reading_writing, sat_reading_writing, dob, year_dt, applicant_max, jkcf))
-
 # Recode stipend as binary
+# TODO Needs to capture other forms of stipend eligible
 master$stipend <- recode(master$stipend, "Yes" = 1, "No" = 0)
 
 # Create binary columns for each race
