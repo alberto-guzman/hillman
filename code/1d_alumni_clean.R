@@ -1,9 +1,3 @@
-# Load packages
-library(dplyr)
-library(tidyverse)
-library(stringr)
-library(lubridate)
-
 # Load the data
 alum <- read_csv(
   here("data", "Alumni Tracker SL 5.9.2022.csv"),
