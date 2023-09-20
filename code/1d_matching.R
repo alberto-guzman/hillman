@@ -13,9 +13,8 @@ m.out <- matchit(
   method = "nearest", # Matching method
   exact = ~ year, # Exact matching variables
   distance = "glm", # Distance metric
-  link = "probit", # Link function for GLM
   discard = "control", # Discard unmatched control units
-  caliper = .50,
+  caliper = .45,
   std.caliper = TRUE, # Caliper settings
   replace = TRUE # Allow replacement in matching
 )
