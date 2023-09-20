@@ -27,8 +27,6 @@ merged_df <- applicants %>%
   left_join(treated_years, by = c("first_name", "last_name", "gender")) %>%
   mutate(across(starts_with("treated"), ~ ifelse(is.na(.), 0, .)))
 
-
-
 # Clean first-gen
 merged_df <- merged_df %>%
   mutate(first_gen = recode(
@@ -120,15 +118,6 @@ merged_df_fill <- fill.NAs(
   data = merged_df
 )
 
-
-
-
-
-
-
-
-
-
 treatment_summary <- merged_df %>%
   group_by(year) %>%
   summarise(
@@ -139,12 +128,10 @@ treatment_summary <- merged_df %>%
         year == 2019 ~ treated_2019,
         year == 2020 ~ treated_2020,
         TRUE ~ NA_real_
-      ), na.rm = TRUE
+      ),
+      na.rm = TRUE
     ),
     untreated = n() - treated
   )
 
 treatment_summary
-
-
-
