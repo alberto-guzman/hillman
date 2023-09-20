@@ -11,6 +11,7 @@ library(MatchIt)
 library(cobalt)
 library(finalfit)
 library(skimr)
+library(janitor)
 
 # Set default code style for {styler} functions
 grkstyle::use_grk_style()
@@ -505,10 +506,9 @@ df <- df[!(df$first_name == "imani" & df$last_name == "smith"), ]
 
 
 
-# 14. Subset to final dataframe 
+# 14. Subset to final dataframe
 df <- df %>% select(
   first_name,
-  middle_name,
   last_name,
   gender,
   high_school,
@@ -533,7 +533,7 @@ df <- df %>% select(
 
 # Final dataframe
 applicants <- df
-rm(list=setdiff(ls(), "applicants"))
+rm(list = setdiff(ls(), "applicants"))
 
 ###
 missing_plot(applicants)
@@ -542,8 +542,7 @@ skim(applicants)
 
 # Count of unique applicants by year
 applicants %>%
-  group_by(first_name, middle_name, last_name, year) %>%
+  group_by(first_name, last_name, year) %>%
   summarise(n = n()) %>%
   group_by(year) %>%
   summarise(total_unique_students = sum(n))
-

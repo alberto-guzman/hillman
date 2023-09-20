@@ -50,17 +50,12 @@ alum <- alum %>%
     year_min = pmin(year1, year2, year3, year4, na.rm = TRUE)
   )
 
-# High school graduation
-alum$high_school_graduation_expected <- gsub("\\(.*", "", alum$high_school_graduation_expected)
 
-# Filter unique records
-alum <- alum %>%
-  group_by(first_name, last_name) %>%
-  filter(n() == 1) %>%
-  ungroup()
+# Remove specific duplicate rows
+alum <- alum[!(alum$first_name == "amanda" & alum$last_name == "lu"), ]
 
 # Pivot to long format
-alum <- alum %>%
+alum_long <- alum %>%
   select(first_name, last_name, year1:year4) %>%
   pivot_longer(
     cols = starts_with("year"),
@@ -70,5 +65,22 @@ alum <- alum %>%
   rename(year = value) %>%
   drop_na()
 
+# Get year_max and year_min data for each person
+alum_cov <- alum %>%
+  select(first_name, last_name, year_max, year_min, gender) %>%
+  distinct() # This ensures one row per person
+
+# Join back year_max and year_min to the pivoted data
+alum <- alum_long %>%
+  left_join(alum_cov, by = c("first_name", "last_name"))
+
 # Add treatment column
 alum$treatment <- 1
+rm(alum_cov, alum_long)
+
+# Count of unique participants by year
+alum %>%
+  group_by(first_name, last_name, year) %>%
+  summarise(n = n()) %>%
+  group_by(year) %>%
+  summarise(total_unique_students = sum(n))

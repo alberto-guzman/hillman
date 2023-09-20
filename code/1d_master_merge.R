@@ -1,26 +1,50 @@
 # Pivot the alum dataset to create separate treatment columns for each year
 treated_years <- alum %>%
   pivot_wider(names_from = year, values_from = treatment, names_prefix = "treated_") %>%
-  replace_na(list(treated_2017 = 0, treated_2018 = 0, treated_2019 = 0, treated_2020 = 0))
+  replace_na(list(treated_2009 = 0, treated_2010 = 0, treated_2011 = 0, treated_2012 = 0, treated_2013 = 0, treated_2014 = 0, treated_2015 = 0, treated_2016 = 0, treated_2017 = 0, treated_2018 = 0, treated_2019 = 0, treated_2020 = 0, treated_2021 = 0))
+
+# Reorder the columns to start from treated_2009 onwards
+treated_years <- treated_years %>%
+  select(order(grepl("^treated_", names(.)), str_extract(names(.), "\\d{4}") %>% as.numeric()))
+
 
 # Create an "ever treated" variable based on the year-specific treatment columns
 treated_years <- treated_years %>%
-  mutate(treated_ever = if_else((treated_2017 + treated_2018 + treated_2019 + treated_2020) > 0, 1, 0))
+  mutate(treated_ever = if_else((treated_2017 + treated_2018 + treated_2019 + treated_2020 + treated_2021) > 0, 1, 0))
 
 # Create a "treated before 2017" variable
 treated_years <- treated_years %>%
-  mutate(treated_before_2017 = if_else(rowSums(select(., starts_with("treated_")), na.rm = TRUE) - (treated_2017 + treated_2018 + treated_2019 + treated_2020) > 0, 1, 0))
+  mutate(treated_before_2017 = if_else(rowSums(select(., matches("^treated_200[0-9]$|^treated_201[0-6]$")), na.rm = TRUE) > 0, 1, 0))
+
+# Subset treated years
+treated_years <- treated_years %>%
+  select(first_name, last_name, gender, treated_ever, treated_before_2017, treated_2017:treated_2020)
+
+
 
 # Merge the applicant and treated_years_wide datasets
-master <- applicants %>%
-  left_join(treated_years, by = c("first_name", "last_name")) %>%
+merged_df <- applicants %>%
+  left_join(treated_years, by = c("first_name", "last_name", "gender")) %>%
   mutate(across(starts_with("treated"), ~ ifelse(is.na(.), 0, .)))
 
-# Recode stipend as binary
-master$stipend <- recode(master$stipend, "Yes" = 1, "Stipend Eligible" = 1, "No" = 0, "Not Stipend Eligible" = 0)
+
+
+# Clean first-gen
+merged_df <- merged_df %>%
+  mutate(first_gen = recode(
+    first_gen,
+    `1st Gen. College` = 1,
+    `Do not wish to answer.` = 0,
+    "Yes" = 1,
+    "No" = 0
+  ))
+
+missing_plot(merged_df)
+glimpse(merged_df)
+skim(merged_df)
 
 # Create binary columns for each race
-master <- master %>%
+merged_df <- merged_df %>%
   mutate(
     african_american = if_else(str_detect(self_identity, "African"), 1, 0),
     asian = if_else(self_identity == "Asian", 1, 0),
@@ -35,7 +59,7 @@ master <- master %>%
   select(-self_identity)
 
 # Create binary columns for geographic location
-master <- master %>%
+merged_df <- merged_df %>%
   mutate(
     urban = if_else(geographic_location == "Urban", 1, 0),
     suburban = if_else(geographic_location == "Suburban", 1, 0),
@@ -44,25 +68,83 @@ master <- master %>%
   select(-geographic_location)
 
 # Recode disability as binary
-master$disability <- recode(master$documented_disability, "Yes" = 1, "yes" = 1, "Disability" = 1, "No" = 0, "no" = 0)
-master <- select(master, -documented_disability)
+merged_df$disability <- recode(merged_df$documented_disability, "Yes" = 1, "yes" = 1, "Disability" = 1, "No" = 0, "no" = 0)
+merged_df <- select(merged_df, -documented_disability)
 
 # Create binary column for negative school impact
-master$neg_school <- if_else(str_detect(master$school_impact, "yes|Yes"), 1, 0)
-master <- select(master, -school_impact)
+merged_df$neg_school <- if_else(str_detect(merged_df$school_impact, "yes|Yes"), 1, 0)
+merged_df <- select(merged_df, -school_impact)
 
 # Create binary column for US citizenship
-master$us_citizen <- if_else(str_detect(master$american_citizen, "yes|Yes"), 1, 0)
-master <- select(master, -american_citizen)
+merged_df$us_citizen <- if_else(str_detect(merged_df$american_citizen, "yes|Yes"), 1, 0)
+merged_df <- select(merged_df, -american_citizen)
 
 # Recode first generation college status as binary
-master$first_gen <- recode(master$first_gen, "Yes" = 1, "yes" = 1, "1st Gen. College" = 1, "No" = 0, "no" = 0)
+merged_df$first_gen <- recode(merged_df$first_gen, "Yes" = 1, "yes" = 1, "1st Gen. College" = 1, "No" = 0, "no" = 0)
+
+# Recode stipend as binary
+merged_df$stipend <- recode(merged_df$stipend, "Yes" = 1, "Stipend Eligible" = 1, "No" = 0, "Not Stipend Eligible" = 0)
+
+
+
+
+
+
+# NEED TO CHECK TO ACCOUNT FOR before 2017
+
+# Create a 'treated_in_year' variable based on year columns
+merged_df <- merged_df %>%
+  mutate(
+    treated_in_year = case_when(
+      year == 2017 ~ treated_2017,
+      year == 2018 ~ treated_2018,
+      year == 2019 ~ treated_2019,
+      year == 2020 ~ treated_2020,
+      TRUE ~ NA_real_
+    )
+  )
+
+
+merged_df <- merged_df %>%
+  arrange(first_name, last_name, gender, year) %>%
+  group_by(first_name, last_name, gender) %>%
+  mutate(PastTreatments = cumsum(treated_in_year) - treated_in_year) %>%
+  ungroup()
+
 
 # Fill missing values using fill.NAs function from optmatch package
-master_fill <- fill.NAs(
-  treated_ever ~ gender + grade + age + gpa + sat_math + sat_verbal + sat_writing + psat_math + psat_verbal + psat_writing +
-    act_math + act_read + act_science + act_writing + stipend + house_size + first_gen + racially_marginalized +
-    bi_multi_racial + urban + suburban + year +
-    rural + disability + neg_school + us_citizen,
-  data = master
+merged_df_fill <- fill.NAs(
+  treated_in_year ~ gender + grade + age + gpa + psat_math + stipend + house_size + first_gen + racially_marginalized +
+    bi_multi_racial + urban + suburban +
+    rural + disability + neg_school + us_citizen + year,
+  data = merged_df
 )
+
+
+
+
+
+
+
+
+
+
+treatment_summary <- merged_df %>%
+  group_by(year) %>%
+  summarise(
+    treated = sum(
+      case_when(
+        year == 2017 ~ treated_2017,
+        year == 2018 ~ treated_2018,
+        year == 2019 ~ treated_2019,
+        year == 2020 ~ treated_2020,
+        TRUE ~ NA_real_
+      ), na.rm = TRUE
+    ),
+    untreated = n() - treated
+  )
+
+treatment_summary
+
+
+
