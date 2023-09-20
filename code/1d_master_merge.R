@@ -131,7 +131,19 @@ treatment_summary <- merged_df %>%
       ),
       na.rm = TRUE
     ),
-    untreated = n() - treated
+    untreated = n() - treated,
+    treated_with_past = sum(ifelse(
+      case_when(
+        year == 2017 ~ treated_2017,
+        year == 2018 ~ treated_2018,
+        year == 2019 ~ treated_2019,
+        year == 2020 ~ treated_2020,
+        TRUE ~ NA_real_
+      ) == 1 & PastTreatments > 0, 1, 0),
+      na.rm = TRUE
+    )
   )
 
 treatment_summary
+
+
