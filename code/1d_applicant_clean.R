@@ -9,6 +9,8 @@ library(naniar)
 library(optmatch)
 library(MatchIt)
 library(cobalt)
+library(finalfit)
+library(skimr)
 
 # Set default code style for {styler} functions
 grkstyle::use_grk_style()
@@ -448,7 +450,6 @@ df <- left_join(df, dob_df)
 
 # 3. Clean the dataframe
 df <- df %>% select(-c(
-  middle_name,
   high_school_pub_priv,
   school_district,
   reduced_lunch,
@@ -463,6 +464,7 @@ df <- df %>% select(-c(
 # 5. Clean first and last names
 df <- df %>% mutate(
   first_name = tolower(first_name),
+  middle_name = tolower(middle_name),
   last_name = tolower(last_name)
 )
 
@@ -501,24 +503,47 @@ df %>%
 df <- df[!(df$first_name == "amanda" & df$last_name == "lu"), ]
 df <- df[!(df$first_name == "imani" & df$last_name == "smith"), ]
 
+
+
+# 14. Subset to final dataframe 
+df <- df %>% select(
+  first_name,
+  middle_name,
+  last_name,
+  gender,
+  high_school,
+  city,
+  state,
+  zip,
+  grade,
+  gpa,
+  psat_math,
+  jkcf,
+  stipend,
+  house_size,
+  self_identity,
+  geographic_location,
+  documented_disability,
+  school_impact,
+  american_citizen,
+  year,
+  first_gen,
+  age
+)
+
 # Final dataframe
 applicants <- df
+rm(list=setdiff(ls(), "applicants"))
 
-# Calculate the proportion of missing data in each variable, grouped by 'year'
-missing_by_year <- applicants %>%
+###
+missing_plot(applicants)
+glimpse(applicants)
+skim(applicants)
+
+# Count of unique applicants by year
+applicants %>%
+  group_by(first_name, middle_name, last_name, year) %>%
+  summarise(n = n()) %>%
   group_by(year) %>%
-  summarise_all(funs(prop_miss = mean(is.na(.))))
+  summarise(total_unique_students = sum(n))
 
-# Reshape the data for plotting
-missing_by_year_melted <- gather(missing_by_year, variable, prop_miss, -year)
-
-# Create the bar plot of missing data proportions by 'year'
-ggplot(missing_by_year_melted, aes(x = year, y = prop_miss, fill = variable)) +
-  geom_bar(stat = "identity", position = "dodge") +
-  theme_minimal() +
-  labs(
-    title = "Proportion of Missing Data by Year",
-    x = "Year",
-    y = "Proportion Missing"
-  ) +
-  theme(legend.title = element_blank())
