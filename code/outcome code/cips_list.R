@@ -32,11 +32,9 @@ curated_cips <- read_csv(here("data", "cips/ManualCurationMajors.csv"))
 # Rename columns in the curated_cips dataframe
 curated_cips <- rename(curated_cips, group = Majors, cip_code = ManualCIP)
 
-# Append the curated_cips dataframe to the cips dataframe
-cips <- rbind(cips, curated_cips)
-
 # Save the cips dataframe as a CSV file
-write_csv(cips, "cip_codes_final.csv")
+write_csv(cips, "cip_codes_stem_final.csv")
+write_csv(curated_cips, "cip_codes_curated_final.csv")
 
 
 
