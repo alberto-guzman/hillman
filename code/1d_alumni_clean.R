@@ -1,22 +1,6 @@
 # Load the data
-alum <- read_csv(
-  here("data", "Alumni Tracker SL 5.9.2022.csv"),
-  col_types = cols(
-    `Source (Survey, LinkedIn, NSC Etc.)` = col_skip(),
-    `Last check` = col_skip(),
-    Email = col_skip(),
-    `Project title` = col_skip(),
-    `Public Profile` = col_skip(),
-    Site = col_skip(),
-    PI = col_skip(),
-    `PI Email` = col_skip(),
-    `Parent Name` = col_skip(),
-    `Parent Email` = col_skip(),
-    Phone = col_skip(),
-    Profession = col_skip(),
-    `Publication link` = col_skip()
-  )
-)
+alum <- read_csv("data/Alumni Tracker (Updated 9.13.2023 - SJ) with Charts.csv", 
+                 col_types = cols(...7 = col_skip()))
 
 # Clean column names
 alum <- alum %>%
@@ -43,6 +27,17 @@ alum <- alum %>%
     "Female" = 0
   ))
 
+
+
+
+
+
+
+
+
+
+
+
 # Create max and min participation year
 alum <- alum %>%
   mutate(
@@ -50,37 +45,59 @@ alum <- alum %>%
     year_min = pmin(year1, year2, year3, year4, na.rm = TRUE)
   )
 
-
-# Remove specific duplicate rows
-alum <- alum[!(alum$first_name == "amanda" & alum$last_name == "lu"), ]
-
 # Pivot to long format
 alum_long <- alum %>%
-  select(first_name, last_name, year1:year4) %>%
+  select(first_name, last_name, year1:year4, gender) %>%
   pivot_longer(
     cols = starts_with("year"),
     names_to = "year"
   ) %>%
-  select(first_name, last_name, value) %>%
+  select(first_name, last_name, value, gender) %>%
   rename(year = value) %>%
   drop_na()
 
-# Get year_max and year_min data for each person
-alum_cov <- alum %>%
-  select(first_name, last_name, year_max, year_min, gender) %>%
-  distinct() # This ensures one row per person
 
-# Join back year_max and year_min to the pivoted data
-alum <- alum_long %>%
-  left_join(alum_cov, by = c("first_name", "last_name"))
+
+alum_long %>%
+  group_by(first_name, last_name, year) %>%
+  filter(n() > 1) %>%
+  summarize(n = n())
+
+alum_long <- alum_long[!(alum_long$first_name == "amanda" & alum_long$last_name == "lu"), ]
+
+alum <- alum_long
 
 # Add treatment column
 alum$treatment <- 1
-rm(alum_cov, alum_long)
+#rm(alum_cov, alum_long)
+
 
 # Count of unique participants by year
-alum %>%
-  group_by(first_name, last_name, year) %>%
-  summarise(n = n()) %>%
-  group_by(year) %>%
-  summarise(total_unique_students = sum(n))
+ alum %>%
+   group_by(first_name, last_name, year) %>%
+   summarise(n = n()) %>%
+   group_by(year) %>%
+   summarise(total_unique_students = sum(n))
+
+# 
+# 
+# # Get year_max and year_min data for each person
+# alum_cov <- alum %>%
+#   select(first_name, last_name, year_max, year_min, gender) %>%
+#   distinct() # This ensures one row per person
+# 
+# # Join back year_max and year_min to the pivoted data
+# alum <- alum_long %>%
+#   left_join(alum_cov, by = c("first_name", "last_name"), relationship = "many-to-many")
+# 
+# 
+# alum %>%
+#   group_by(first_name, last_name) %>%
+#   filter(n() > 1) %>%
+#   summarize(n = n())
+# 
+# 
+# 
+# 
+# 
+

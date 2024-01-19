@@ -12,14 +12,14 @@ library(cobalt)
 library(finalfit)
 library(skimr)
 library(janitor)
+library(readr)
+
 
 # Set default code style for {styler} functions
 grkstyle::use_grk_style()
 
 # Set directory
 here()
-
-todor::todor()
 
 ########################################################
 ######################## 2017
@@ -434,24 +434,359 @@ df_2020 <- df_2020 %>%
 df_2020$year <- 2020
 
 ########################################################
+######################## 2021
+########################################################
+
+# Read in data
+df_2021 <- read_excel(here("data", "hillman_2021.xlsx"))
+
+# Clean column names
+df_2021 <- clean_names(df_2021)
+
+# Select and rename columns
+df_2021 <- select(
+  df_2021,
+  c(
+    first_1,
+    last_2,
+    gender,
+    date_of_birth,
+    grades_current_grade_6,
+    race,
+    "school_you_attend_if_homeschooled_please_enter_school_district_of_residence",
+    city,
+    state,
+    zip,
+    "are_you_a_current_jack_kent_cooke_foundation_jkcf_young_scholar",
+    grades_gpa,
+    grades_is_this_gpa_weighted,
+    "psat_scores_math":"act_scores_science",
+    "do_you_have_a_documented_disability_e_g_auditory_motor_visual_cognitive_other_that_substantially_limits_one_or_more_major_life_activites_as_described_by_the_americans_with_disabilities_act_of_1990_other",
+    "will_you_be_the_first_person_in_your_family_to_attend_college",
+    "how_many_people_live_in_your_home",
+    "how_do_you_describe_where_you_live",
+    "do_you_believe_your_environment_negatively_impacts_your_educational_opportunities_related_to_obtaining_a_career_in_science_research_please_look_at_the_list_below_if_you_meet_at_least_two_of_the_following_criteria_you_would_be_eligible_for_a_stipend_please_explain_how_you_qualify",
+    "are_you_an_american_citizen",
+    "stipend_eligible"
+  )
+)
+
+# Rename columns
+df_2021 <- df_2021 %>%
+  rename(
+    first_name = "first_1",
+    last_name = "last_2",
+    grade = "grades_current_grade_6",
+    self_identity = "race",
+    gpa = "grades_gpa",
+    high_school = "school_you_attend_if_homeschooled_please_enter_school_district_of_residence",
+    jkcf = "are_you_a_current_jack_kent_cooke_foundation_jkcf_young_scholar",
+    gpa_weight = "grades_is_this_gpa_weighted",
+    psat_math = "psat_scores_math",
+    psat_reading_writing = "psat_scores_reading_and_writing",
+    sat_math = "sat_scores_math",
+    sat_reading_writing = "sat_scores_reading_and_writing",
+    act_math = "act_scores_math",
+    act_verbal = "act_scores_verbal",
+    act_writing = "act_scores_writing",
+    act_read = "act_scores_reading",
+    act_science = "act_scores_science",
+    documented_disability = "do_you_have_a_documented_disability_e_g_auditory_motor_visual_cognitive_other_that_substantially_limits_one_or_more_major_life_activites_as_described_by_the_americans_with_disabilities_act_of_1990_other",
+    first_gen = "will_you_be_the_first_person_in_your_family_to_attend_college",
+    house_size = "how_many_people_live_in_your_home",
+    geographic_location = "how_do_you_describe_where_you_live",
+    school_impact = "do_you_believe_your_environment_negatively_impacts_your_educational_opportunities_related_to_obtaining_a_career_in_science_research_please_look_at_the_list_below_if_you_meet_at_least_two_of_the_following_criteria_you_would_be_eligible_for_a_stipend_please_explain_how_you_qualify",
+    american_citizen = "are_you_an_american_citizen",
+    stipend = "stipend_eligible"
+  )
+
+# Process data
+df_2021 <- df_2021 %>%
+  mutate(
+    gender = case_when(
+      tolower(gender) == "male" ~ 1,
+      tolower(gender) == "female" ~ 0,
+      TRUE ~ NA_real_  # Assigns NA to all other cases
+    ),
+    gpa_weight = case_when(
+      tolower(gpa_weight) == "yes" ~ 1,
+      tolower(gpa_weight) == "no" ~ 0,
+      TRUE ~ NA_real_  # Assigns NA to all other cases
+    ),
+    zip = as.integer(zip),
+    grade = as.integer(grade),
+    gpa = as.numeric(gpa),
+    sat_math = as.integer(sat_math),
+    sat_reading_writing = as.integer(sat_reading_writing),
+    psat_math = as.integer(psat_math),
+    psat_reading_writing = as.integer(psat_reading_writing),
+    act_math = as.integer(act_math),
+    act_read = as.integer(act_read),
+    act_science = as.integer(act_science),
+    act_writing = as.integer(act_writing),
+    house_size = as.integer(house_size)
+  )
+
+# Add year column
+df_2021$year <- 2021
+
+
+
+########################################################
+######################## 2022
+########################################################
+
+# Read in data
+df_2022 <- read_excel(here("data", "hillman_2022.xlsx"))
+
+# Clean column names
+df_2022 <- clean_names(df_2022)
+
+# Select and rename columns
+df_2022 <- select(
+  df_2022,
+  c(
+    applicant_first_name,
+    applicant_last_name,
+    personal_information_gender,
+    personal_information_date_of_birth,
+    grades_current_grade,
+    what_race_s_do_you_identify_with,
+    "personal_information_school_you_attend_if_homeschooled_please_enter_school_district_of_residence",
+    personal_information_city,
+    personal_information_state,
+    personal_information_zip,
+    "are_you_a_current_jack_kent_cooke_foundation_jkcf_young_scholar",
+    grades_gpa,
+    grades_is_this_gpa_weighted,
+    "psat_scores_math":"act_scores_science",
+    "do_you_have_a_documented_disability_e_g_auditory_motor_visual_cognitive_other_that_substantially_limits_one_or_more_major_life_activites_as_described_by_the_americans_with_disabilities_act_of_1990_other",
+    "will_you_be_the_first_person_in_your_family_to_attend_college",
+    "how_many_people_live_in_your_home",
+    "how_do_you_describe_where_you_live",
+    "do_you_believe_your_environment_negatively_impacts_your_educational_opportunities_related_to_obtaining_a_career_in_science_research_please_look_at_the_list_below_if_you_meet_at_least_two_of_the_following_criteria_you_would_be_eligible_for_a_stipend_please_explain_how_you_qualify",
+    "are_you_an_american_citizen",
+    "stipend_eligible_y_n"
+  )
+)
+
+# Rename columns
+df_2022 <- df_2022 %>%
+  rename(
+    first_name = "applicant_first_name",
+    last_name = "applicant_last_name",
+    grade = "grades_current_grade",
+    date_of_birth = "personal_information_date_of_birth",
+    city = "personal_information_city",
+    state = "personal_information_state",
+    zip = "personal_information_zip", 
+    gender = "personal_information_gender",
+    self_identity = "what_race_s_do_you_identify_with",
+    gpa = "grades_gpa",
+    high_school = "personal_information_school_you_attend_if_homeschooled_please_enter_school_district_of_residence",
+    jkcf = "are_you_a_current_jack_kent_cooke_foundation_jkcf_young_scholar",
+    gpa_weight = "grades_is_this_gpa_weighted",
+    psat_math = "psat_scores_math",
+    psat_reading_writing = "psat_scores_reading_and_writing",
+    sat_math = "sat_scores_math",
+    sat_reading_writing = "sat_scores_reading_and_writing",
+    act_math = "act_scores_math",
+    act_verbal = "act_scores_verbal",
+    act_writing = "act_scores_writing",
+    act_read = "act_scores_reading",
+    act_science = "act_scores_science",
+    documented_disability = "do_you_have_a_documented_disability_e_g_auditory_motor_visual_cognitive_other_that_substantially_limits_one_or_more_major_life_activites_as_described_by_the_americans_with_disabilities_act_of_1990_other",
+    first_gen = "will_you_be_the_first_person_in_your_family_to_attend_college",
+    house_size = "how_many_people_live_in_your_home",
+    geographic_location = "how_do_you_describe_where_you_live",
+    school_impact = "do_you_believe_your_environment_negatively_impacts_your_educational_opportunities_related_to_obtaining_a_career_in_science_research_please_look_at_the_list_below_if_you_meet_at_least_two_of_the_following_criteria_you_would_be_eligible_for_a_stipend_please_explain_how_you_qualify",
+    american_citizen = "are_you_an_american_citizen",
+    stipend = "stipend_eligible_y_n"
+  )
+
+# Process data
+df_2022 <- df_2022 %>%
+  mutate(
+    gender = case_when(
+      tolower(gender) == "male" ~ 1,
+      tolower(gender) == "female" ~ 0,
+      TRUE ~ NA_real_  # Assigns NA to all other cases
+    ),
+    gpa_weight = case_when(
+      tolower(gpa_weight) == "yes" ~ 1,
+      tolower(gpa_weight) == "no" ~ 0,
+      TRUE ~ NA_real_  # Assigns NA to all other cases
+    ),
+    zip = as.integer(zip),
+    grade = as.integer(grade),
+    gpa = as.numeric(gpa),
+    sat_math = as.integer(sat_math),
+    sat_reading_writing = as.integer(sat_reading_writing),
+    psat_math = as.integer(psat_math),
+    psat_reading_writing = as.integer(psat_reading_writing),
+    act_math = as.integer(act_math),
+    act_read = as.integer(act_read),
+    act_science = as.integer(act_science),
+    act_writing = as.integer(act_writing),
+    house_size = as.integer(house_size)
+  )
+
+# Add year column
+df_2022$year <- 2022
+
+########################################################
+######################## 2023
+########################################################
+
+# Read in data
+df_2023 <- read_csv(here("data","hillman_2023.csv"))
+
+# Clean column names
+df_2023 <- clean_names(df_2023)
+
+# Select and rename columns
+df_2023 <- select(
+  df_2023,
+  c(
+    applicant_first_name,
+    applicant_last_name,
+    personal_information_gender,
+    personal_information_date_of_birth,
+    grades_current_grade,
+    what_race_s_do_you_identify_with,
+    "personal_information_school_you_attend_if_homeschooled_please_enter_school_district_of_residence",
+    personal_information_city,
+    personal_information_state,
+    personal_information_zip,
+    "are_you_a_current_jack_kent_cooke_foundation_jkcf_young_scholar",
+    grades_gpa,
+    grades_is_this_gpa_weighted,
+    "psat_scores_math":"act_scores_science",
+    "do_you_have_a_documented_disability_e_g_auditory_motor_visual_cognitive_other_that_substantially_limits_one_or_more_major_life_activites_as_described_by_the_americans_with_disabilities_act_of_1990_other",
+    "did_any_of_your_parents_guardians_attend_college",
+    "how_many_people_live_in_your_home",
+    "how_do_you_describe_where_you_live",
+    "do_you_believe_your_environment_negatively_impacts_your_educational_opportunities_related_to_obtaining_a_career_in_science_research_please_look_at_the_list_below_if_you_meet_at_least_two_of_the_following_criteria_you_would_be_eligible_for_a_stipend_please_explain_how_you_qualify",
+    "are_you_an_american_citizen",
+   # "stipend_eligible_y_n",
+    "application_form_hillman_academy_completion_status"
+  )
+)
+
+# Rename columns
+df_2023 <- df_2023 %>%
+  rename(
+    first_name = "applicant_first_name",
+    last_name = "applicant_last_name",
+    grade = "grades_current_grade",
+    date_of_birth = "personal_information_date_of_birth",
+    city = "personal_information_city",
+    state = "personal_information_state",
+    zip = "personal_information_zip", 
+    gender = "personal_information_gender",
+    self_identity = "what_race_s_do_you_identify_with",
+    gpa = "grades_gpa",
+    high_school = "personal_information_school_you_attend_if_homeschooled_please_enter_school_district_of_residence",
+    jkcf = "are_you_a_current_jack_kent_cooke_foundation_jkcf_young_scholar",
+    gpa_weight = "grades_is_this_gpa_weighted",
+    psat_math = "psat_scores_math",
+    psat_reading_writing = "psat_scores_reading_and_writing",
+    sat_math = "sat_scores_math",
+    sat_reading_writing = "sat_scores_reading_and_writing",
+    act_math = "act_scores_math",
+    act_writing = "act_scores_writing",
+    act_read = "act_scores_reading",
+    act_science = "act_scores_science",
+    documented_disability = "do_you_have_a_documented_disability_e_g_auditory_motor_visual_cognitive_other_that_substantially_limits_one_or_more_major_life_activites_as_described_by_the_americans_with_disabilities_act_of_1990_other",
+    first_gen = "did_any_of_your_parents_guardians_attend_college",
+    house_size = "how_many_people_live_in_your_home",
+    geographic_location = "how_do_you_describe_where_you_live",
+    school_impact = "do_you_believe_your_environment_negatively_impacts_your_educational_opportunities_related_to_obtaining_a_career_in_science_research_please_look_at_the_list_below_if_you_meet_at_least_two_of_the_following_criteria_you_would_be_eligible_for_a_stipend_please_explain_how_you_qualify",
+    american_citizen = "are_you_an_american_citizen"
+   # stipend = "stipend_eligible_y_n"
+  )
+
+
+# Subset to Completion status
+df_2023 <- df_2023 |>
+  filter(application_form_hillman_academy_completion_status == "Completed")
+
+
+
+
+
+
+# Process data
+df_2023 <- df_2023 %>%
+  mutate(
+    gender = case_when(
+      tolower(gender) == "male" ~ 1,
+      tolower(gender) == "female" ~ 0,
+      TRUE ~ NA_real_  # Assigns NA to all other cases
+    ),
+    gpa_weight = case_when(
+      tolower(gpa_weight) == "yes" ~ 1,
+      tolower(gpa_weight) == "no" ~ 0,
+      TRUE ~ NA_real_  # Assigns NA to all other cases
+    ),
+    zip = as.integer(zip),
+    grade = as.integer(grade),
+    gpa = as.numeric(gpa),
+    sat_math = as.integer(sat_math),
+    sat_reading_writing = as.integer(sat_reading_writing),
+    psat_math = as.integer(psat_math),
+    psat_reading_writing = as.integer(psat_reading_writing),
+    act_math = as.integer(act_math),
+    act_read = as.integer(act_read),
+    act_science = as.integer(act_science),
+    act_writing = as.integer(act_writing),
+    house_size = as.integer(house_size)
+  )
+
+# Add year column
+df_2023$year <- 2023
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+########################################################
 ######################## Merge Code
 ########################################################
 
 # 1. Append all dataframes
-df <- bind_rows(df_2017, df_2018, df_2019, df_2020)
+df <- bind_rows(df_2017, df_2018, df_2019, df_2020, df_2021, df_2022, df_2023)
 
 # 2. Read and merge date of birth (dob) data
-dob_df <- read_excel(
-  here("data", "hillman_raw.xlsx"),
-  col_types = c("text", "text", "date", "numeric")
-)
-
-dob_df <- rename(dob_df, year = "hillman_year")
-df <- left_join(df, dob_df)
+# dob_df <- read_excel(
+#   here("data", "hillman_raw.xlsx"),
+#   col_types = c("text", "text", "date", "numeric")
+# )
+# 
+# dob_df <- rename(dob_df, year = "hillman_year")
+# df <- left_join(df, dob_df)
 
 # 3. Clean the dataframe
 df <- df %>% select(-c(
   high_school_pub_priv,
+  date_of_birth,
   school_district,
   reduced_lunch,
   offer_ap,
@@ -459,13 +794,13 @@ df <- df %>% select(-c(
   `income_eligible_(reduced_lunch)`,
   alumni,
   act_verbal,
-  low_income
+  low_income,
+  middle_name
 ))
 
 # 5. Clean first and last names
 df <- df %>% mutate(
   first_name = tolower(first_name),
-  middle_name = tolower(middle_name),
   last_name = tolower(last_name)
 )
 
@@ -473,8 +808,8 @@ df$first_name <- gsub("\\(.*", "", df$first_name)
 df$first_name <- gsub('\\".*', "", df$first_name)
 
 # 6. Calculate age relative to the year they applied
-df$year_dt <- ymd(df$year, truncated = 2L)
-df$age <- trunc((df$dob %--% df$year_dt) / years(1))
+# df$year_dt <- ymd(df$year, truncated = 2L)
+# df$age <- trunc((df$dob %--% df$year_dt) / years(1))
 
 # 7. Fix GPA values
 df <- df %>% mutate(gpa = case_when(
@@ -491,8 +826,10 @@ df[test_cols] <- lapply(df[test_cols], function(x) ifelse(x == 0, NA, x))
 df$house_size[df$house_size > 11] <- NA
 
 # 10. Fix age values
-df$age[df$age == 0] <- NA
-df$age[df$age == 7] <- NA
+# df$age[df$age == 0] <- NA
+# df$age[df$age == 7] <- NA
+# 
+# bring back DOB
 
 # 11. Identify duplicate records
 df %>%
@@ -500,9 +837,15 @@ df %>%
   filter(n() > 1) %>%
   summarize(n = n())
 
-# 13. Remove specific duplicate rows
+# 13. DOUBLE CHECK THESE WITH DAVID
 df <- df[!(df$first_name == "amanda" & df$last_name == "lu"), ]
+df <- df[!(df$first_name == "angela" & df$last_name == "tao"), ]
+df <- df[!(df$first_name == "arnav" & df$last_name == "patel"), ]
+df <- df[!(df$first_name == "charles" & df$last_name == "mawhinney"), ]
+df <- df[!(df$first_name == "daniel" & df$last_name == "wang"), ]
+df <- df[!(df$first_name == "grace" & df$last_name == "wang"), ]
 df <- df[!(df$first_name == "imani" & df$last_name == "smith"), ]
+df <- df[!(df$first_name == "sanyah" & df$last_name == "nabi"), ]
 
 
 
@@ -527,8 +870,7 @@ df <- df %>% select(
   school_impact,
   american_citizen,
   year,
-  first_gen,
-  age
+  first_gen
 )
 
 # Final dataframe

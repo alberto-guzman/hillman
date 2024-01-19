@@ -1,58 +1,47 @@
-#bring in library
-library(readr)
-library(stringr)
-library(tidyverse)
+# Load necessary libraries
+library(readr)       # For reading CSV files
+library(stringr)     # For string manipulation
+library(tidyverse)   # For data manipulation and visualization
 
-#set working directory
-setwd("~/Projects/inProgress/2020_hillman/cips")
+# Read in the DHS STEM OPT extension eligible CIP codes from a text file
+# Source: https://studyinthestates.dhs.gov/stem-opt-hub/additional-resources/eligible-cip-codes-for-the-stem-opt-extension
+df <- read_csv(here("data", "cips/stemList2022.txt"))
 
-#reading in from DHS https://studyinthestates.dhs.gov/stem-opt-hub/additional-resources/eligible-cip-codes-for-the-stem-opt-extension
+# Filter the dataset to keep only CIP codes in the format '00.0000'
+df <- df[grep("\\.[0-9]{4}", df$cip_code),]
 
-df <- read_csv("stemList2022.txt")
-#keep only digits of structure 00.0000
-df <-df[grep("\\.[0-9][0-9][0-9][0-9]", df$cip_code), ] 
-
+# Convert the 'cip_code' column to a vector
 DHSSTEMCIPS <- as.vector(df['cip_code'])
 
-#remove decimals
-DHSSTEMCIPS <- str_replace_all(string = DHSSTEMCIPS$cip_code, pattern = '\\.', '')  
+# Remove decimals from the CIP codes
+DHSSTEMCIPS <- str_replace_all(string = DHSSTEMCIPS$cip_code, pattern = '\\.', '')
 
-#Now add extras from NSF definition and us considering healthcare and technicians
-STEMCIPS <- c(DHSSTEMCIPS, 110000:119999, 140000:159999, 260000:279999, 400000:429999, 450000:459999, 510000:519999, 999999)
+# Add additional CIP codes based on NSF definition and considerations for healthcare and technicians
+cip_code <- c(DHSSTEMCIPS, 110000:119999, 140000:159999, 260000:279999, 400000:429999, 450000:459999, 510000:519999, 999999)
 
-
-cips <- as.data.frame(STEMCIPS) 
+# Convert the list of CIP codes into a data frame and remove duplicates
+cips <- as.data.frame(cip_code) 
 cips <- cips %>% distinct()
-cips$GROUP <- 'STEM'
 
-cips_ls <- as.list(as.numeric(cips$STEMCIPS))
+# Label the group as 'STEM'
+cips$group <- 'STEM'
 
-### CURATED CIPS
-curated_cips <- read_csv("ManualCurationMajors.csv")
+# Read manually curated CIP codes from a CSV file
+curated_cips <- read_csv(here("data", "cips/ManualCurationMajors.csv"))
 
+# Rename columns in the curated_cips dataframe
+curated_cips <- rename(curated_cips, group = Majors, cip_code = ManualCIP)
 
-### ADDINT TEST FRAME
-text_cips <- read_csv("text_cips.csv")
+# Append the curated_cips dataframe to the cips dataframe
+cips <- rbind(cips, curated_cips)
 
-
-text_cips$stem_enroll1 <- as.numeric(text_cips$enrollmentcip1 %in% cips_ls)
-text_cips$stem_enroll2 <- as.numeric(text_cips$enrollmentcip2 %in% cips_ls)
-
-text_cips$stem_enroll <- as.numeric(ifelse(text_cips$stem_enroll1 == 1 | text_cips$stem_enroll1 == 1, 1,0))
-
+# Save the cips dataframe as a CSV file
+write_csv(cips, "cip_codes_final.csv")
 
 
-text_cips$stem_degree1 <- as.numeric(text_cips$degreecip1 %in% cips_ls)
-text_cips$stem_degree2 <- as.numeric(text_cips$degreecip2 %in% cips_ls)
-text_cips$stem_degree3 <- as.numeric(text_cips$degreecip3 %in% cips_ls)
-text_cips$stem_degree4 <- as.numeric(text_cips$degreecip4 %in% cips_ls)
 
 
-text_cips$stem_degree <- as.numeric(ifelse(text_cips$stem_degree1 == 1 | text_cips$stem_degree2 == 1 | text_cips$stem_degree3 == 1 | text_cips$degreecip4 == 1, 1,0))
 
-test <- text_cips %>% 
-  filter(stem_enroll1 == 0)
 
-test <- text_cips %>% 
-  filter(stem_enroll1 == 0 | stem_enroll2 == 0 | stem_degree1 == 0 |
-           stem_degree2 == 0| stem_degree3 == 0 | stem_degree4 == 0)
+
+

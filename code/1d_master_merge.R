@@ -1,7 +1,7 @@
 # Pivot the alum dataset to create separate treatment columns for each year
 treated_years <- alum %>%
   pivot_wider(names_from = year, values_from = treatment, names_prefix = "treated_") %>%
-  replace_na(list(treated_2009 = 0, treated_2010 = 0, treated_2011 = 0, treated_2012 = 0, treated_2013 = 0, treated_2014 = 0, treated_2015 = 0, treated_2016 = 0, treated_2017 = 0, treated_2018 = 0, treated_2019 = 0, treated_2020 = 0, treated_2021 = 0))
+  replace_na(list(treated_2009 = 0, treated_2010 = 0, treated_2011 = 0, treated_2012 = 0, treated_2013 = 0, treated_2014 = 0, treated_2015 = 0, treated_2016 = 0, treated_2017 = 0, treated_2018 = 0, treated_2019 = 0, treated_2020 = 0, treated_2021 = 0, treated_2022 = 0, treated_2023 = 0))
 
 # Reorder the columns to start from treated_2009 onwards
 treated_years <- treated_years %>%
@@ -10,7 +10,7 @@ treated_years <- treated_years %>%
 
 # Create an "ever treated" variable based on the year-specific treatment columns
 treated_years <- treated_years %>%
-  mutate(treated_ever = if_else((treated_2017 + treated_2018 + treated_2019 + treated_2020 + treated_2021) > 0, 1, 0))
+  mutate(treated_ever = if_else((treated_2017 + treated_2018 + treated_2019 + treated_2020 + treated_2021 + treated_2022) > 0, 1, 0))
 
 # Create a "treated before 2017" variable
 treated_years <- treated_years %>%
@@ -18,7 +18,7 @@ treated_years <- treated_years %>%
 
 # Subset treated years
 treated_years <- treated_years %>%
-  select(first_name, last_name, gender, treated_ever, treated_before_2017, treated_2017:treated_2020)
+  select(first_name, last_name, gender, treated_ever, treated_before_2017, treated_2017:treated_2023)
 
 
 
