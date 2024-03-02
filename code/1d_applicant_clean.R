@@ -549,7 +549,7 @@ df_2022 <- select(
     applicant_first_name,
     applicant_last_name,
     personal_information_gender,
-    personal_information_date_of_birth,
+    #personal_information_date_of_birth,
     grades_current_grade,
     what_race_s_do_you_identify_with,
     "personal_information_school_you_attend_if_homeschooled_please_enter_school_district_of_residence",
@@ -576,7 +576,7 @@ df_2022 <- df_2022 %>%
     first_name = "applicant_first_name",
     last_name = "applicant_last_name",
     grade = "grades_current_grade",
-    date_of_birth = "personal_information_date_of_birth",
+    #date_of_birth = "personal_information_date_of_birth",
     city = "personal_information_city",
     state = "personal_information_state",
     zip = "personal_information_zip", 
@@ -651,7 +651,7 @@ df_2023 <- select(
     applicant_first_name,
     applicant_last_name,
     personal_information_gender,
-    personal_information_date_of_birth,
+    #personal_information_date_of_birth,
     grades_current_grade,
     what_race_s_do_you_identify_with,
     "personal_information_school_you_attend_if_homeschooled_please_enter_school_district_of_residence",
@@ -679,7 +679,7 @@ df_2023 <- df_2023 %>%
     first_name = "applicant_first_name",
     last_name = "applicant_last_name",
     grade = "grades_current_grade",
-    date_of_birth = "personal_information_date_of_birth",
+    #date_of_birth = "personal_information_date_of_birth",
     city = "personal_information_city",
     state = "personal_information_state",
     zip = "personal_information_zip", 
@@ -786,7 +786,7 @@ df <- bind_rows(df_2017, df_2018, df_2019, df_2020, df_2021, df_2022, df_2023)
 # 3. Clean the dataframe
 df <- df %>% select(-c(
   high_school_pub_priv,
-  date_of_birth,
+  #date_of_birth,
   school_district,
   reduced_lunch,
   offer_ap,
@@ -888,3 +888,17 @@ applicants %>%
   summarise(n = n()) %>%
   group_by(year) %>%
   summarise(total_unique_students = sum(n))
+
+
+# preparing file for danielle
+
+# subset applicants file to only include first_name, last_name, grade, year
+applicants_danielle <- applicants %>%
+  select(first_name, last_name, grade, year)
+
+# create a new variable called hs_grad_year which gives me the year a student will graduate high based on the grade they were in when they applied
+applicants_danielle <- applicants_danielle %>%
+  mutate(hs_grad_year = year + (12 - grade))
+
+# write out csv thats called hillman_hs_grad_year.csv
+write_csv(applicants_danielle, here("data", "hillman_hs_grad_year.csv"))
