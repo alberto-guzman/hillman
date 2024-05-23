@@ -891,6 +891,10 @@ applicants %>%
   summarise(total_unique_students = sum(n))
 
 
+
+#######################
+#######################
+
 # preparing file for danielle
 
 # subset applicants file to only include first_name, last_name, grade, year
