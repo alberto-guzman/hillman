@@ -506,12 +506,12 @@ df_2021 <- df_2021 %>%
     gender = case_when(
       tolower(gender) == "male" ~ 1,
       tolower(gender) == "female" ~ 0,
-      TRUE ~ NA_real_  # Assigns NA to all other cases
+      TRUE ~ NA_real_ # Assigns NA to all other cases
     ),
     gpa_weight = case_when(
       tolower(gpa_weight) == "yes" ~ 1,
       tolower(gpa_weight) == "no" ~ 0,
-      TRUE ~ NA_real_  # Assigns NA to all other cases
+      TRUE ~ NA_real_ # Assigns NA to all other cases
     ),
     zip = as.integer(zip),
     grade = as.integer(grade),
@@ -549,7 +549,7 @@ df_2022 <- select(
     applicant_first_name,
     applicant_last_name,
     personal_information_gender,
-    #personal_information_date_of_birth,
+    # personal_information_date_of_birth,
     grades_current_grade,
     what_race_s_do_you_identify_with,
     "personal_information_school_you_attend_if_homeschooled_please_enter_school_district_of_residence",
@@ -576,10 +576,10 @@ df_2022 <- df_2022 %>%
     first_name = "applicant_first_name",
     last_name = "applicant_last_name",
     grade = "grades_current_grade",
-    #date_of_birth = "personal_information_date_of_birth",
+    # date_of_birth = "personal_information_date_of_birth",
     city = "personal_information_city",
     state = "personal_information_state",
-    zip = "personal_information_zip", 
+    zip = "personal_information_zip",
     gender = "personal_information_gender",
     self_identity = "what_race_s_do_you_identify_with",
     gpa = "grades_gpa",
@@ -610,12 +610,12 @@ df_2022 <- df_2022 %>%
     gender = case_when(
       tolower(gender) == "male" ~ 1,
       tolower(gender) == "female" ~ 0,
-      TRUE ~ NA_real_  # Assigns NA to all other cases
+      TRUE ~ NA_real_ # Assigns NA to all other cases
     ),
     gpa_weight = case_when(
       tolower(gpa_weight) == "yes" ~ 1,
       tolower(gpa_weight) == "no" ~ 0,
-      TRUE ~ NA_real_  # Assigns NA to all other cases
+      TRUE ~ NA_real_ # Assigns NA to all other cases
     ),
     zip = as.integer(zip),
     grade = as.integer(grade),
@@ -639,7 +639,7 @@ df_2022$year <- 2022
 ########################################################
 
 # Read in data
-df_2023 <- read_csv(here("data","hillman_2023.csv"))
+df_2023 <- read_csv(here("data", "hillman_2023.csv"))
 
 # Clean column names
 df_2023 <- clean_names(df_2023)
@@ -651,7 +651,7 @@ df_2023 <- select(
     applicant_first_name,
     applicant_last_name,
     personal_information_gender,
-    #personal_information_date_of_birth,
+    # personal_information_date_of_birth,
     grades_current_grade,
     what_race_s_do_you_identify_with,
     "personal_information_school_you_attend_if_homeschooled_please_enter_school_district_of_residence",
@@ -668,7 +668,7 @@ df_2023 <- select(
     "how_do_you_describe_where_you_live",
     "do_you_believe_your_environment_negatively_impacts_your_educational_opportunities_related_to_obtaining_a_career_in_science_research_please_look_at_the_list_below_if_you_meet_at_least_two_of_the_following_criteria_you_would_be_eligible_for_a_stipend_please_explain_how_you_qualify",
     "are_you_an_american_citizen",
-   # "stipend_eligible_y_n",
+    # "stipend_eligible_y_n",
     "application_form_hillman_academy_completion_status"
   )
 )
@@ -679,10 +679,10 @@ df_2023 <- df_2023 %>%
     first_name = "applicant_first_name",
     last_name = "applicant_last_name",
     grade = "grades_current_grade",
-    #date_of_birth = "personal_information_date_of_birth",
+    # date_of_birth = "personal_information_date_of_birth",
     city = "personal_information_city",
     state = "personal_information_state",
-    zip = "personal_information_zip", 
+    zip = "personal_information_zip",
     gender = "personal_information_gender",
     self_identity = "what_race_s_do_you_identify_with",
     gpa = "grades_gpa",
@@ -703,7 +703,7 @@ df_2023 <- df_2023 %>%
     geographic_location = "how_do_you_describe_where_you_live",
     school_impact = "do_you_believe_your_environment_negatively_impacts_your_educational_opportunities_related_to_obtaining_a_career_in_science_research_please_look_at_the_list_below_if_you_meet_at_least_two_of_the_following_criteria_you_would_be_eligible_for_a_stipend_please_explain_how_you_qualify",
     american_citizen = "are_you_an_american_citizen"
-   # stipend = "stipend_eligible_y_n"
+    # stipend = "stipend_eligible_y_n"
   )
 
 
@@ -722,12 +722,12 @@ df_2023 <- df_2023 %>%
     gender = case_when(
       tolower(gender) == "male" ~ 1,
       tolower(gender) == "female" ~ 0,
-      TRUE ~ NA_real_  # Assigns NA to all other cases
+      TRUE ~ NA_real_ # Assigns NA to all other cases
     ),
     gpa_weight = case_when(
       tolower(gpa_weight) == "yes" ~ 1,
       tolower(gpa_weight) == "no" ~ 0,
-      TRUE ~ NA_real_  # Assigns NA to all other cases
+      TRUE ~ NA_real_ # Assigns NA to all other cases
     ),
     zip = as.integer(zip),
     grade = as.integer(grade),
@@ -750,17 +750,22 @@ df_2023$year <- 2023
 
 
 # Read in stipend eligible .txt file from David - Dec 2023 updated
-df2023_stipend <- read_delim("data/2023_applicants_stipendEligible.txt", 
-                                               delim = "\t", escape_double = FALSE, 
-                                               trim_ws = TRUE)
+df2023_stipend <- read_delim(
+  "data/2023_applicants_stipendEligible.txt",
+  delim = "\t",
+  escape_double = FALSE,
+  trim_ws = TRUE
+)
 # Use clean names on df2023_stipend df
 df2023_stipend <- clean_names(df2023_stipend)
 
 # Rename columns
 df2023_stipend <- df2023_stipend %>%
-  rename(stipend = "stipend_eligible",
-         first_name = "applicant_first_name",
-         last_name = "applicant_last_name")
+  rename(
+    stipend = "stipend_eligible",
+    first_name = "applicant_first_name",
+    last_name = "applicant_last_name"
+  )
 
 # Merge stipend eligible
 df_2023 <- df_2023 %>%
@@ -780,14 +785,14 @@ df <- bind_rows(df_2017, df_2018, df_2019, df_2020, df_2021, df_2022, df_2023)
 #   here("data", "hillman_raw.xlsx"),
 #   col_types = c("text", "text", "date", "numeric")
 # )
-# 
+#
 # dob_df <- rename(dob_df, year = "hillman_year")
 # df <- left_join(df, dob_df)
 
 # 3. Clean the dataframe
 df <- df %>% select(-c(
   high_school_pub_priv,
-  #date_of_birth,
+  # date_of_birth,
   school_district,
   reduced_lunch,
   offer_ap,
@@ -829,7 +834,7 @@ df$house_size[df$house_size > 11] <- NA
 # 10. Fix age values
 # df$age[df$age == 0] <- NA
 # df$age[df$age == 7] <- NA
-# 
+#
 # bring back DOB
 
 # 11. Identify duplicate records
