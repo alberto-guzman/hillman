@@ -746,23 +746,27 @@ df_2023 <- df_2023 %>%
 # Add year column
 df_2023$year <- 2023
 
+
+
+
 # Read in stipend eligible .txt file from David - Dec 2023 updated
 df2023_stipend <- read_delim("data/2023_applicants_stipendEligible.txt", 
                                                delim = "\t", escape_double = FALSE, 
                                                trim_ws = TRUE)
-
 # Use clean names on df2023_stipend df
 df2023_stipend <- clean_names(df2023_stipend)
 
-# Merge stipend eligible, will need to clean to make it 1:1 instead of m:m
+# Rename columns
+df2023_stipend <- df2023_stipend %>%
+  rename(stipend = "stipend_eligible",
+         first_name = "applicant_first_name",
+         last_name = "applicant_last_name")
+
+# Merge stipend eligible
 df_2023 <- df_2023 %>%
   left_join(df2023_stipend, relationship = "many-to-many")
 
 rm(df2023_stipend)
-
-
-
-
 
 ########################################################
 ######################## Merge Code
