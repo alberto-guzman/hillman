@@ -7,7 +7,6 @@ treated_years <- alum %>%
 treated_years <- treated_years %>%
   select(order(grepl("^treated_", names(.)), str_extract(names(.), "\\d{4}") %>% as.numeric()))
 
-
 # Create an "ever treated" variable based on the year-specific treatment columns
 treated_years <- treated_years %>%
   mutate(treated_ever = if_else((treated_2017 + treated_2018 + treated_2019 + treated_2020 + treated_2021 + treated_2022) > 0, 1, 0))
@@ -20,12 +19,37 @@ treated_years <- treated_years %>%
 treated_years <- treated_years %>%
   select(first_name, last_name, gender, treated_ever, treated_before_2017, treated_2017:treated_2023)
 
+# Frequency table for treated_2017 to treated_2023
+treated_years %>%
+  select(treated_2017:treated_2023) %>%
+  gather(key = "year", value = "treated") %>%
+  group_by(year, treated) %>%
+  summarize(n = n()) %>%
+  spread(key = "treated", value = "n")
+
+
+
+#### This works!
+
+
+
 
 
 # Merge the applicant and treated_years_wide datasets
 merged_df <- applicants %>%
   left_join(treated_years, by = c("first_name", "last_name", "gender")) %>%
   mutate(across(starts_with("treated"), ~ ifelse(is.na(.), 0, .)))
+
+
+
+
+
+
+
+
+
+
+
 
 # Clean first-gen
 merged_df <- merged_df %>%
@@ -40,6 +64,15 @@ merged_df <- merged_df %>%
 missing_plot(merged_df)
 glimpse(merged_df)
 skim(merged_df)
+
+
+
+
+
+
+
+
+
 
 # Create binary columns for each race
 merged_df <- merged_df %>%
@@ -83,13 +116,6 @@ merged_df$first_gen <- recode(merged_df$first_gen, "Yes" = 1, "yes" = 1, "1st Ge
 # Recode stipend as binary
 merged_df$stipend <- recode(merged_df$stipend, "Yes" = 1, "Stipend Eligible" = 1, "No" = 0, "Not Stipend Eligible" = 0)
 
-
-
-
-
-
-# NEED TO CHECK TO ACCOUNT FOR before 2017
-
 # Create a 'treated_in_year' variable based on year columns
 merged_df <- merged_df %>%
   mutate(
@@ -98,52 +124,24 @@ merged_df <- merged_df %>%
       year == 2018 ~ treated_2018,
       year == 2019 ~ treated_2019,
       year == 2020 ~ treated_2020,
+      year == 2021 ~ treated_2021,
+      year == 2022 ~ treated_2022,
+      year == 2023 ~ treated_2023,
       TRUE ~ NA_real_
     )
   )
 
-
 merged_df <- merged_df %>%
   arrange(first_name, last_name, gender, year) %>%
   group_by(first_name, last_name, gender) %>%
-  mutate(PastTreatments = cumsum(treated_in_year) - treated_in_year) %>%
+  mutate(pastTreatments = cumsum(treated_in_year) - treated_in_year) %>%
   ungroup()
-
 
 # Fill missing values using fill.NAs function from optmatch package
 merged_df_fill <- fill.NAs(
-  treated_in_year ~ gender + grade + age + gpa + psat_math + stipend + house_size + first_gen + racially_marginalized +
+  treated_in_year ~ gender + grade + gpa + psat_math + stipend + house_size + first_gen + racially_marginalized +
     bi_multi_racial + urban + suburban +
     rural + disability + neg_school + us_citizen + year,
   data = merged_df
 )
-
-treatment_summary <- merged_df %>%
-  group_by(year) %>%
-  summarise(
-    treated = sum(
-      case_when(
-        year == 2017 ~ treated_2017,
-        year == 2018 ~ treated_2018,
-        year == 2019 ~ treated_2019,
-        year == 2020 ~ treated_2020,
-        TRUE ~ NA_real_
-      ),
-      na.rm = TRUE
-    ),
-    untreated = n() - treated,
-    treated_with_past = sum(ifelse(
-      case_when(
-        year == 2017 ~ treated_2017,
-        year == 2018 ~ treated_2018,
-        year == 2019 ~ treated_2019,
-        year == 2020 ~ treated_2020,
-        TRUE ~ NA_real_
-      ) == 1 & PastTreatments > 0, 1, 0),
-      na.rm = TRUE
-    )
-  )
-
-treatment_summary
-
 
