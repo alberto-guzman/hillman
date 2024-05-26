@@ -27,14 +27,6 @@ treated_years %>%
   summarize(n = n()) %>%
   spread(key = "treated", value = "n")
 
-
-
-#### This works!
-
-
-
-
-
 # Merge the applicant and treated_years_wide datasets
 merged_df <- applicants %>%
   left_join(treated_years, by = c("first_name", "last_name", "gender")) %>%
@@ -141,7 +133,6 @@ merged_df <- merged_df %>%
 merged_df_fill <- fill.NAs(
   treated_in_year ~ gender + grade + gpa + psat_math + stipend + house_size + first_gen + racially_marginalized +
     bi_multi_racial + urban + suburban +
-    rural + disability + neg_school + us_citizen + year,
+    rural + disability + neg_school + us_citizen + year + hs_grad_year,
   data = merged_df
 )
-
