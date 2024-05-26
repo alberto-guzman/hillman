@@ -1,4 +1,17 @@
 
+
+
+# Fill missing values using fill.NAs function from optmatch package
+merged_df_fill <- fill.NAs(
+  treated_in_year ~ gender + grade + gpa + psat_math + stipend + house_size + first_gen + racially_marginalized +
+    bi_multi_racial + urban + suburban +
+    rural + disability + neg_school + us_citizen + year,
+  data = merged_df
+)
+
+
+
+
 #exact match by year
 
 # Perform matching using the 'matchit' function with multiple covariates
