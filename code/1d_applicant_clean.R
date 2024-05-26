@@ -13,6 +13,7 @@ library(finalfit)
 library(skimr)
 library(janitor)
 library(readr)
+library(haven)
 
 
 # Set default code style for {styler} functions
@@ -881,6 +882,10 @@ df <- df %>% select(
 
 # Final dataframe
 applicants <- df
+# create a new variable called hs_grad_year which gives me the year a student will graduate high based on the grade they were in when they applied
+applicants <- applicants %>%
+  mutate(hs_grad_year = year + (12 - grade))
+
 rm(list = setdiff(ls(), "applicants"))
 
 ###
