@@ -68,24 +68,3 @@ alum %>%
   group_by(year) %>%
   summarise(total_unique_students = sum(n))
 
-#
-#
-# # Get year_max and year_min data for each person
-# alum_cov <- alum %>%
-#   select(first_name, last_name, year_max, year_min, gender) %>%
-#   distinct() # This ensures one row per person
-#
-# # Join back year_max and year_min to the pivoted data
-# alum <- alum_long %>%
-#   left_join(alum_cov, by = c("first_name", "last_name"), relationship = "many-to-many")
-#
-#
-# alum %>%
-#   group_by(first_name, last_name) %>%
-#   filter(n() > 1) %>%
-#   summarize(n = n())
-#
-#
-#
-#
-#
