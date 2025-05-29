@@ -31,3 +31,4 @@ vignettes/*.pdf
 /data
 .DS_Store
 2020_hillman.Rproj
+.html

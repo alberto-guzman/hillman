@@ -130,3 +130,104 @@ merged_df <- merged_df %>%
   ungroup()
 
 
+
+merged_df <- merged_df %>%
+  mutate(
+    urban = if_else(str_detect(geographic_location, regex("urban", ignore_case = TRUE)), 1, 0),
+    suburban = if_else(str_detect(geographic_location, regex("suburban", ignore_case = TRUE)), 1, 0),
+    rural = if_else(str_detect(geographic_location, regex("rural|small town", ignore_case = TRUE)), 1, 0)
+  )
+
+merged_df <- merged_df %>%
+  mutate(
+    african_american = if_else(str_detect(self_identity, regex("african|black", ignore_case = TRUE)), 1, 0),
+    asian = if_else(str_detect(self_identity, regex("asian", ignore_case = TRUE)), 1, 0),
+    hawaiian_pacific_islander = if_else(str_detect(self_identity, regex("hawaiian|pacific", ignore_case = TRUE)), 1, 0),
+    latinx = if_else(str_detect(self_identity, regex("hispanic|latino", ignore_case = TRUE)), 1, 0),
+    white = if_else(str_detect(self_identity, regex("caucasian|white", ignore_case = TRUE)), 1, 0),
+    middle_eastern = if_else(str_detect(self_identity, regex("middle eastern", ignore_case = TRUE)), 1, 0),
+    other_race = if_else(str_detect(self_identity, regex("other", ignore_case = TRUE)), 1, 0),
+    unknown_race = if_else(str_detect(self_identity, regex("do not wish", ignore_case = TRUE)), 1, 0)
+  ) %>%
+  mutate(
+    bi_multi_racial = if_else(
+      rowSums(across(c(african_american, asian, hawaiian_pacific_islander, latinx, white, middle_eastern, other_race))) > 1,
+      1, 0
+    )
+  )
+
+merged_df <- merged_df %>%
+  mutate(
+    racially_marginalized = if_else(
+      african_american == 1 | latinx == 1 | hawaiian_pacific_islander == 1,
+      1, 0
+    )
+  )
+
+
+merged_df <- merged_df %>%
+  mutate(
+    neg_school = if_else(
+      str_detect(school_impact, regex("^no$", ignore_case = TRUE)),
+      0, 1
+    )
+  )
+
+merged_df <- merged_df %>%
+  mutate(
+    disability = if_else(
+      str_detect(documented_disability, regex("^yes$", ignore_case = TRUE)),
+      1, 0
+    )
+  )
+
+merged_df <- merged_df %>%
+  mutate(
+    us_citizen = if_else(
+      str_detect(american_citizen, regex("^yes$", ignore_case = TRUE)),
+      1, 0
+    )
+  )
+
+merged_df <- merged_df %>%
+  mutate(
+    stipend = if_else(
+      str_detect(stipend, regex("^yes$", ignore_case = TRUE)),
+      1, 0
+    )
+  )
+
+merged_df <- merged_df %>%
+  mutate(
+    treated_in_year = case_when(
+      year == 2017 ~ treated_2017,
+      year == 2018 ~ treated_2018,
+      year == 2019 ~ treated_2019,
+      year == 2020 ~ treated_2020,
+      year == 2021 ~ treated_2021,
+      year == 2022 ~ treated_2022,
+      year == 2023 ~ treated_2023,
+      TRUE ~ NA_real_
+    )
+  )
+
+
+
+# First, gather all treated_year variables into long format
+treated_long <- merged_df %>%
+  select(first_name, last_name, gender, starts_with("treated_")) %>%
+  pivot_longer(cols = starts_with("treated_"), 
+               names_to = "year_var", 
+               values_to = "treated") %>%
+  mutate(year = str_extract(year_var, "\\d{4}") %>% as.integer()) %>%
+  filter(treated == 1)
+
+# Now count the number of years each student was treated
+multi_treated <- treated_long %>%
+  group_by(first_name, last_name, gender) %>%
+  summarise(years_treated = n(), 
+            .groups = "drop") %>%
+  filter(years_treated > 1)
+
+# View results
+print(multi_treated)
