@@ -36,10 +36,22 @@ merged_df <- applicants %>%
 
 
 
+#### MOVE this were approparitae
+ merged_df <-merged_df |>
+   group_by(first_name, last_name, year) |>
+   mutate(id = cur_group_id()) |>
+   ungroup()
+
+danielle_df <- merged_df |>
+  select(id, first_name,last_name, gender, high_school, city, state, zip)
+
+# Filter danielle_df to only students in PA, Pennsylvania
+danielle_df <- danielle_df |>
+  filter(state == "PA" | state == "Pennsylvania")
 
 
 
-
+write_csv(danielle_df, here("data", "hillman_pa_hs.csv"))
 
 
 

@@ -13,6 +13,8 @@ library(janitor)
 library(readr)
 library(tidylog)
 library(MatchIt)
+library(finalfit)
+library(skimr)
 
 # -----------------------------------------------------------------------------
 here()  
@@ -597,3 +599,6 @@ unique_counts <- applicants |>
   summarise(total_unique_students = sum(n), .groups = "drop")
 
 print(unique_counts)
+
+rm(list = setdiff(ls(), "applicants"))  # Keep only the applicants data frame in memory
+

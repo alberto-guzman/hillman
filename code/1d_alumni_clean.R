@@ -68,3 +68,6 @@ alum %>%
   group_by(year) %>%
   summarise(total_unique_students = sum(n))
 
+rm(list = setdiff(ls(), c("alum", "applicants")))  # Keep only the applicants data frame in memory
+
+
