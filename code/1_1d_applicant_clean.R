@@ -432,16 +432,8 @@ df_2021 <- read_excel(here("data", "hillman_2021.xlsx")) |>
     stipend = stipend_eligible
   ) |>
   mutate(
-    gender = case_when(
-      tolower(gender) == "male" ~ 1,
-      tolower(gender) == "female" ~ 0,
-      TRUE ~ NA_real_
-    ),
-    gpa_weight = case_when(
-      tolower(gpa_weight) == "yes" ~ 1,
-      tolower(gpa_weight) == "no" ~ 0,
-      TRUE ~ NA_real_
-    ),
+    gender = if_else(tolower(gender) == "male", 1, 0),
+    gpa_weight = if_else(tolower(gpa_weight) == "yes", 1, 0),
     zip = as.integer(zip),
     grade = as.integer(grade),
     gpa = as.numeric(gpa),
@@ -514,16 +506,8 @@ df_2022 <- read_excel(here("data", "hillman_2022.xlsx")) |>
     stipend = "stipend_eligible_y_n"
   ) |>
   mutate(
-    gender = case_when(
-      tolower(gender) == "male" ~ 1,
-      tolower(gender) == "female" ~ 0,
-      TRUE ~ NA_real_
-    ),
-    gpa_weight = case_when(
-      tolower(gpa_weight) == "yes" ~ 1,
-      tolower(gpa_weight) == "no" ~ 0,
-      TRUE ~ NA_real_
-    ),
+    gender = if_else(tolower(gender) == "male", 1, 0),
+    gpa_weight = if_else(tolower(gpa_weight) == "yes", 1, 0),
     zip = as.integer(zip),
     grade = as.integer(grade),
     gpa = as.numeric(gpa),
@@ -596,16 +580,8 @@ df_2023 <- read_csv(here("data", "hillman_2023.csv")) |>
   # Subset to only records with a "Completed" application form status
   filter(application_form_hillman_academy_completion_status == "Completed") |>
   mutate(
-    gender = case_when(
-      tolower(gender) == "male" ~ 1,
-      tolower(gender) == "female" ~ 0,
-      TRUE ~ NA_real_
-    ),
-    gpa_weight = case_when(
-      tolower(gpa_weight) == "yes" ~ 1,
-      tolower(gpa_weight) == "no" ~ 0,
-      TRUE ~ NA_real_
-    ),
+    gender = if_else(tolower(gender) == "male", 1, 0),
+    gpa_weight = if_else(tolower(gpa_weight) == "yes", 1, 0),
     zip = as.integer(zip),
     grade = as.integer(grade),
     gpa = as.numeric(gpa),
@@ -677,12 +653,14 @@ applicants <- applicants |>
 # 1. Adjust GPA values (convert percentages to 4.0 scale; adjust thresholds as needed)
 applicants <- applicants |>
   mutate(
+    gpa = suppressWarnings(as.numeric(gpa)),
     gpa = case_when(
-      gpa > 96 ~ 4.0,
-      between(gpa, 90, 96) ~ 3.7,
-      TRUE ~ as.numeric(gpa)
+      is.na(gpa) ~ NA_real_,
+      gpa > 5 ~ pmin(4, pmax(0, gpa / 25)), # 0–100 → 0–4
+      TRUE ~ gpa # already 0–4 scale
     )
   )
+
 
 # 2. Replace 0 values with NA for SAT, PSAT, and ACT scores using across()
 score_cols <- names(applicants) |>
@@ -734,18 +712,12 @@ applicants <- applicants |>
 
 # -----------------------------------------------------------------------------
 # Final Checks & Summaries ---------------------------------------------------
-# Display missingness overview, structure, and summary statistics.
-naniar::vis_miss(applicants)
-glimpse(applicants)
-skimr::skim(applicants)
 
 # Count unique applicants by year
-unique_counts <- applicants |>
+applicants |>
   group_by(first_name, last_name, year) |>
   summarise(n = n(), .groups = "drop") |>
   group_by(year) |>
   summarise(total_unique_students = sum(n), .groups = "drop")
-
-print(unique_counts)
 
 rm(list = setdiff(ls(), "applicants")) # Keep only the applicants data frame in memory
