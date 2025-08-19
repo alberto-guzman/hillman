@@ -647,6 +647,23 @@ applicants <- applicants |>
 # -----------------------------------------------------------------------------
 # Additional Data Adjustments ------------------------------------------------
 
+# Clean names
+applicants <- applicants |>
+  mutate(
+    first_name = first_name |>
+      str_to_lower() |>
+      str_replace_all('"(.*?)"|\\((.*?)\\)', " ") |>
+      str_replace_all("[^a-z]", " ") |>
+      str_squish(),
+
+    last_name = last_name |>
+      str_to_lower() |>
+      str_replace_all('"(.*?)"|\\((.*?)\\)', " ") |>
+      str_replace_all("[^a-z]", " ") |>
+      str_squish()
+  )
+
+
 # Adjust GPA values
 applicants <- applicants |>
   mutate(
