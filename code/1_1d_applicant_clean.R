@@ -2,7 +2,6 @@
 # Hillman Summer Applicants
 # =============================================================================
 
-# Load necessary packages
 library(tidyverse)
 library(readxl)
 library(here)
@@ -15,12 +14,13 @@ library(tidylog)
 library(MatchIt)
 library(finalfit)
 library(skimr)
+library(haven)
 
 # -----------------------------------------------------------------------------
 here()
 
 # -----------------------------------------------------------------------------
-# Helper Function: Custom column name cleaning (if needed)
+# Helper Function: Custom column name cleaning
 clean_custom_names <- function(df) {
   df |>
     rename_with(
@@ -34,8 +34,7 @@ clean_custom_names <- function(df) {
 # -----------------------------------------------------------------------------
 # 2017 Data ------------------------------------------------------------------
 df_2017 <- read_excel(here("data", "hillman_2017.xlsx")) |>
-  clean_custom_names() |> # standardize column names
-  # Drop columns that will not be used in analysis
+  clean_custom_names() |>
   select(
     -c(
       date_of_birth,
@@ -77,7 +76,6 @@ df_2017 <- read_excel(here("data", "hillman_2017.xlsx")) |>
       green_card
     )
   ) |>
-  # Rename columns for consistency
   rename(
     high_school = high_school_name,
     grade = current_grade,
@@ -85,7 +83,6 @@ df_2017 <- read_excel(here("data", "hillman_2017.xlsx")) |>
     house_size = household_size,
     gpa_weight = gpa_weighted
   ) |>
-  # Clean and process variables; note conversion of binary fields and numeric fields
   mutate(
     gender = if_else(tolower(gender) == "male", 1, 0),
     gpa_weight = if_else(tolower(gpa_weight) == "yes", 1, 0),
@@ -577,7 +574,6 @@ df_2023 <- read_csv(here("data", "hillman_2023.csv")) |>
     school_impact = "do_you_believe_your_environment_negatively_impacts_your_educational_opportunities_related_to_obtaining_a_career_in_science_research_please_look_at_the_list_below_if_you_meet_at_least_two_of_the_following_criteria_you_would_be_eligible_for_a_stipend_please_explain_how_you_qualify",
     american_citizen = "are_you_an_american_citizen"
   ) |>
-  # Subset to only records with a "Completed" application form status
   filter(application_form_hillman_academy_completion_status == "Completed") |>
   mutate(
     gender = if_else(tolower(gender) == "male", 1, 0),
@@ -650,40 +646,45 @@ applicants <- applicants |>
 
 # -----------------------------------------------------------------------------
 # Additional Data Adjustments ------------------------------------------------
-# 1. Adjust GPA values (convert percentages to 4.0 scale; adjust thresholds as needed)
+
+# Adjust GPA values
 applicants <- applicants |>
   mutate(
-    gpa = suppressWarnings(as.numeric(gpa)),
     gpa = case_when(
       is.na(gpa) ~ NA_real_,
-      gpa > 5 ~ pmin(4, pmax(0, gpa / 25)), # 0–100 → 0–4
-      TRUE ~ gpa # already 0–4 scale
+      gpa > 10 ~ pmin(4, pmax(0, gpa / 25)),
+      gpa <= 6 & gpa > 4.01 ~ pmin(4, gpa * 4 / 5),
+      TRUE ~ gpa
     )
   )
 
 
-# 2. Replace 0 values with NA for SAT, PSAT, and ACT scores using across()
-score_cols <- names(applicants) |>
-  keep(~ str_starts(., "sat_") | str_starts(., "psat_") | str_starts(., "act_"))
-
+# Replace 0 values with NA for SAT, PSAT, and ACT scores using across()
+score_cols <- applicants |>
+  select(starts_with("sat_"), starts_with("psat_"), starts_with("act_")) |>
+  names()
 applicants <- applicants |>
-  mutate(across(all_of(score_cols), ~ na_if(as.integer(.), 0)))
+  mutate(across(
+    all_of(score_cols),
+    ~ suppressWarnings(na_if(as.integer(.), 0L))
+  ))
 
-# 3. Fix anomalous house size entries (set values greater than 11 to NA)
+
+# Fix anomalous house size entries (set values greater than 11 to NA)
 applicants <- applicants |>
   mutate(house_size = if_else(house_size > 11, NA_integer_, house_size))
 
-# 4. Create High School Graduation Year variable
+# Create High School Graduation Year variable
 applicants <- applicants |>
   mutate(hs_grad_year = year + (12 - grade))
 
-# 5. (Optional) Check for duplicate applicants by first name, last name, and year.
+# Check for duplicate applicants by first name, last name, and year.
 applicants |>
   group_by(first_name, last_name, year) |>
   filter(n() > 1) |>
   summarise(n = n(), .groups = "drop")
 
-# 6. Remove manually flagged duplicate records (confirm these removals with your team)
+# Remove manually flagged duplicate records
 remove_duplicates <- tibble(
   first_name = c(
     "amanda",
