@@ -1,18 +1,9 @@
 # =============================================================================
-# Standardized derived variables (required set)
+# Standardized variables
 # =============================================================================
 
 merged_clean <- merged_df |>
   mutate(
-    # --- Gender (already mostly numeric: 1 = M, 0 = F)
-    gender = as.integer(coalesce(gender, NA)),
-
-    # --- Grade: clamp to 9–12, else NA
-    grade = case_when(
-      grade %in% 9:12 ~ as.integer(grade),
-      TRUE ~ NA_integer_
-    ),
-
     # --- GPA: numeric, 0 becomes NA
     gpa = suppressWarnings(as.numeric(gpa)) |> na_if(0),
 
@@ -95,17 +86,23 @@ merged_clean <- merged_df |>
       str_detect(tolower(as.character(american_citizen)), "no|0|false") ~ 0L,
       TRUE ~ NA_integer_
     )
-  ) |>
-  # Keep only necessary variables if you want a clean modeling frame
+  )
+
+merged_clean <- merged_clean |>
   select(
-    everything(), # keep all columns
+    first_name,
+    last_name,
+    year,
+    hs_grad_year,
+    treated_ever:treated_in_year,
+    high_school,
+    state,
     gender,
     grade,
     gpa,
     psat_math,
     stipend,
     house_size,
-    first_gen,
     racially_marginalized,
     bi_multi_racial,
     urban,
@@ -115,5 +112,6 @@ merged_clean <- merged_df |>
     neg_school,
     us_citizen
   )
+
 
 rm(list = setdiff(ls(), c("alum", "applicants", "merged_clean")))
