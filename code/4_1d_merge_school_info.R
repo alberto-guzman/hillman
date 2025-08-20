@@ -1,3 +1,33 @@
+library(dplyr)
+library(stringr)
+library(haven)
+library(here)
+
+# 1) Read crosswalk and pre-rename to avoid .x/.y suffixes on join
+crosswalk <- read_dta(here("data", "high_school_match.dta")) %>%
+  select(hs_name_clean, pa_state_name) %>%
+  distinct(hs_name_clean, pa_state_name) %>%
+  rename(pa_state_name_cw = pa_state_name)
+
+# 2) Normalize names and state in merged_df (keep all rows)
+merged_df <- merged_df %>%
+  mutate(
+    hs_name_clean = str_to_lower(str_trim(high_school)),
+    state_norm    = str_to_lower(str_trim(state))
+  )
+
+# 3) Join on the *cleaned* key and apply crosswalk only for Pennsylvania
+merged_df <- merged_df %>%
+  left_join(crosswalk, by = "hs_name_clean") %>%
+  mutate(
+    final_school_name = case_when(
+      state_norm %in% c("pa", "pennsylvania") & !is.na(pa_state_name_cw) ~ pa_state_name_cw,
+      TRUE ~ high_school
+    )
+  )
+
+
+
 # =============================================================================
 # School-level college enrollment (2-yr post-grad) and merge by school name
 # =============================================================================
