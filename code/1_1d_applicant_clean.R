@@ -663,28 +663,68 @@ applicants <- applicants |>
       str_squish()
   )
 
-
-# Adjust GPA values
+# Standardize GPA to unweighted 4.0 scale
 applicants <- applicants |>
+  # standardize gpa_weight to 1/0/NA first
+  mutate(
+    gpa_weight = case_when(
+      is.na(gpa_weight) ~ NA_real_,
+      tolower(as.character(gpa_weight)) %in% c("1", "yes", "y", "true", "t") ~
+        1,
+      tolower(as.character(gpa_weight)) %in% c("0", "no", "n", "false", "f") ~
+        0,
+      TRUE ~ suppressWarnings(as.numeric(as.character(gpa_weight)))
+    )
+  ) |>
+
+  # keep original and parse numeric GPA
+  mutate(
+    gpa_old = gpa,
+    gpa_num = as.numeric(gpa_old)
+  ) |>
+
+  # compute standardized unweighted GPA (use gpa_weight for 4-6 range)
   mutate(
     gpa = case_when(
-      is.na(gpa) ~ NA_real_,
-      gpa > 10 ~ pmin(4, pmax(0, gpa / 25)),
-      gpa <= 6 & gpa > 4.01 ~ pmin(4, gpa * 4 / 5),
-      TRUE ~ gpa
-    )
-  )
+      is.na(gpa_num) ~ NA_real_,
+      gpa_num < 0 ~ NA_real_, # suspicious negative -> manual review
+      gpa_num > 120 ~ NA_real_, # extremely large -> manual review
 
+      # percentage-like / percentish (including modestly >100 due to extra credit)
+      gpa_num > 10 ~ pmin(4, gpa_num / 25),
 
-# Replace 0 values with NA for SAT, PSAT, and ACT scores using across()
-score_cols <- applicants |>
-  select(starts_with("sat_"), starts_with("psat_"), starts_with("act_")) |>
-  names()
-applicants <- applicants |>
-  mutate(across(
-    all_of(score_cols),
-    ~ suppressWarnings(na_if(as.integer(.), 0L))
-  ))
+      # 0-10 scale (7-10)
+      gpa_num > 6 ~ pmin(4, gpa_num * 4 / 10),
+
+      # 4-6 : use gpa_weight to decide:
+      # - if weighted (1): assume 0-5 weighted -> scale *4/5
+      # - if explicitly not weighted (0): assume the value is reported on a 4.0-ish scale or mis-entry -> cap at 4
+      # - if gpa_weight is NA: conservatively cap at 4 but flag for review
+      gpa_num > 4 & gpa_num <= 6 ~
+        case_when(
+          gpa_weight == 1 ~ pmin(4, gpa_num * 4 / 5),
+          gpa_weight == 0 ~ pmin(4, gpa_num), # cap to 4
+          is.na(gpa_weight) ~ pmin(4, gpa_num) # conservative: cap to 4 (flag created below)
+        ),
+
+      # <=4 : assume already on 4.0 scale
+      TRUE ~ pmin(4, gpa_num)
+    ),
+
+    # flags for QA
+    gpa_over_100_flag = if_else(!is.na(gpa_num) & gpa_num > 100, TRUE, FALSE),
+    gpa_weight_missing_for_4to6 = if_else(
+      is.na(gpa_weight) & gpa_num > 4 & gpa_num <= 6,
+      TRUE,
+      FALSE
+    ),
+
+    # rounding for matching stability
+    gpa = round(gpa, 3)
+  ) |>
+
+  # drop temporary numeric helper
+  select(-gpa_num)
 
 
 # Fix anomalous house size entries (set values greater than 11 to NA)

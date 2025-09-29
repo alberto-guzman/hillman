@@ -1,112 +1,205 @@
 # =============================================================================
-# Merge School Info
+# Merge School Info (with normalization + diagnostics)
 # =============================================================================
-library(tidyverse)
-library(readxl)
-library(janitor)
-library(here)
 
-# --- Start with PA schools
-merged_df_pa <- merged_clean %>%
+# --- School name normalizer
+normalize_hs <- function(x) {
+  x |>
+    stringr::str_to_lower() |>
+    stringr::str_replace_all("[^a-z0-9 ]", " ") |>
+    stringr::str_squish() |>
+    stringr::str_replace_all(
+      "\\b(highschool|high school|hs|shs|senior high)\\b",
+      "hs"
+    ) |>
+    stringr::str_replace_all("\\b(jr|jr\\.|junior)\\b", "j") |>
+    stringr::str_replace_all("\\bsr\\.?\\b", "s") |>
+    stringr::str_replace_all("\\bcharter school\\b", "cs")
+}
+
+# --- Start with PA schools, apply normalization
+merged_df_pa <- merged_clean |>
   mutate(
-    hs_name_clean = str_to_lower(str_trim(high_school)),
+    hs_name_clean = normalize_hs(high_school),
     state = str_to_lower(str_trim(state))
-  ) %>%
-  filter(state %in% c("pa", "pennsylvania", "pa`"))
+  ) |>
+  filter(state %in% c("pa", "pennsylvania"))
 
-# Crosswalk: keep AUN + cleaned school names
-crosswalk <- read_dta(here("data", "high_school_match.dta")) %>%
-  select(hs_name_clean, pa_state_name, aun) %>%
-  distinct(hs_name_clean, pa_state_name, .keep_all = TRUE) %>%
+# --- Crosswalk: normalize school names too
+# aun public and private
+# school number is just public schools
+crosswalk <- read_dta(here("data", "high_school_match.dta")) |>
+  mutate(hs_name_clean = normalize_hs(hs_name_clean)) |>
+  select(hs_name_clean, pa_state_name, aun) |>
+  distinct(hs_name_clean, pa_state_name, .keep_all = TRUE) |>
   rename(pa_state_name_cw = pa_state_name)
 
-# Merge crosswalk onto base
-merged_df_pa <- merged_df_pa %>%
+# --- Merge crosswalk onto base
+merged_df_pa <- merged_df_pa |>
   left_join(crosswalk, by = "hs_name_clean")
 
 # =============================================================================
-# Extract 2-year Postsecondary Enrollment (lagged) from Excel files
+# Extract 2-year Postsecondary Enrollment (lagged) from Excel files (robust)
 # =============================================================================
-
-# Function to grab reported year from filename
 extract_endyear <- function(path) {
   yrs <- stringr::str_extract_all(basename(path), "20\\d{2}")[[1]]
   if (length(yrs)) as.integer(tail(yrs, 1)) else NA_integer_
 }
 
-# Simple percent parser → 0–100
 parse_pct <- function(x) {
-  x <- stringr::str_to_lower(stringr::str_trim(as.character(x)))
-  x <- ifelse(stringr::str_detect(x, "suppress|not apply|n/?a|^-$"), NA, x)
-  out <- readr::parse_number(x)
+  x0 <- stringr::str_to_lower(stringr::str_trim(as.character(x)))
+  # treat many variants as missing
+  missing_pattern <- "^(suppress|suppressed|not apply|not applicable|n/?a|na|^-$|^-+$|\\s*$)"
+  x0[stringr::str_detect(x0, missing_pattern)] <- NA_character_
+  out <- readr::parse_number(x0)
+  # if percentages were given as proportions (<=1), convert to percent
   out <- ifelse(!is.na(out) & out <= 1, out * 100, out)
-  ifelse(!is.na(out) & out >= 0 & out <= 100, out, NA_real_)
+  # keep only 0-100 range
+  out <- ifelse(!is.na(out) & out >= 0 & out <= 100, out, NA_real_)
+  out
 }
 
-# Reader: sheet 3, pull only the 2yr higher ed enrollment (All Students)
 read_sheet3_highered <- function(path) {
-  if (length(readxl::excel_sheets(path)) < 3) {
+  sheets <- readxl::excel_sheets(path)
+  if (length(sheets) < 3) {
+    message("Skipping (less than 3 sheets): ", basename(path))
     return(tibble())
   }
 
-  df <- readxl::read_excel(path, sheet = 3) %>%
-    janitor::clean_names()
+  df <- readxl::read_excel(path, sheet = 3) |> janitor::clean_names()
+  nm <- names(df)
 
-  aun_col <- names(df)[stringr::str_detect(names(df), "\\baun\\b")]
-  target_col <- names(df)[
-    stringr::str_detect(
-      names(df),
-      stringr::regex(
-        "two.*year.*prior.*enrolled.*higher.*education.*all_?student",
-        ignore_case = TRUE
+  # --- AUN column: choose first sensible match
+  aun_candidates <- nm[stringr::str_detect(nm, "\\baun\\b")]
+  if (!length(aun_candidates)) {
+    message("No AUN column found in: ", basename(path))
+    return(tibble())
+  }
+  aun_col <- aun_candidates[1]
+
+  # --- Prioritized patterns to find the most likely enrollment column ---
+  patterns <- c(
+    # first: explicit long-form like 'percentofgraduates...enrolled...higher_education'
+    "percent.*gradu.*two.*year.*enroll.*higher.*education",
+    "percentof.*graduates.*two.*year.*enroll.*higher",
+    "percent.*two.*year.*enroll.*higher.*education",
+    # more generic variations
+    "two[_ ]?year.*enroll.*higher",
+    "enrolled.*in.*institution.*higher",
+    "post.?secondary.*enroll",
+    "percentofgraduates.*enrolled",
+    "percent.*enroll.*higher",
+    # fallback: any 'enroll' + 'higher' / 'institution' combination
+    "enroll.*(higher|institution|post)",
+    "enrolled.*higher"
+  )
+
+  chosen <- NULL
+  matches <- character(0)
+  for (pat in patterns) {
+    m <- nm[stringr::str_detect(nm, stringr::regex(pat, ignore_case = TRUE))]
+    if (length(m) > 0) {
+      matches <- m
+      chosen <- m[1]
+      message(
+        "File: ",
+        basename(path),
+        " -> matched pattern '",
+        pat,
+        "' selecting column '",
+        chosen,
+        "'"
       )
-    )
-  ]
+      break
+    }
+  }
 
-  if (!length(aun_col) || !length(target_col)) {
+  # if nothing matched, give a diagnostic and return empty
+  if (is.null(chosen)) {
+    message(
+      "No enrollment column matched in file: ",
+      basename(path),
+      " — available cols (head): ",
+      paste(head(nm, 20), collapse = ", ")
+    )
     return(tibble())
   }
 
-  year_reported <- extract_endyear(path)
-
-  df %>%
-    dplyr::select(
-      AUN = dplyr::all_of(aun_col),
-      higher_ed_enrollment_2yr = dplyr::all_of(target_col)
-    ) %>%
-    dplyr::mutate(
-      higher_ed_enrollment_2yr = parse_pct(higher_ed_enrollment_2yr),
-      grad_year = year_reported - 2L # TRUE graduation cohort year
-    ) %>%
-    dplyr::filter(
-      !is.na(AUN),
-      !is.na(grad_year),
-      !is.na(higher_ed_enrollment_2yr)
+  # if multiple candidates matched for the chosen pattern, warn and pick first
+  if (length(matches) > 1) {
+    message(
+      "Multiple candidate columns matched in ",
+      basename(path),
+      ". Choosing first: ",
+      chosen,
+      " (candidates: ",
+      paste(matches, collapse = ", "),
+      ")"
     )
+  }
+
+  # safe select / parse / return with tryCatch so a file can't abort the entire map_dfr
+  out <- tryCatch(
+    {
+      df2 <- df |>
+        dplyr::select(
+          AUN = dplyr::all_of(aun_col),
+          higher_ed_enrollment_2yr = dplyr::all_of(chosen)
+        ) |>
+        dplyr::mutate(
+          higher_ed_enrollment_2yr = parse_pct(higher_ed_enrollment_2yr),
+          grad_year = extract_endyear(path) - 2L
+        ) |>
+        dplyr::filter(
+          !is.na(AUN),
+          !is.na(grad_year),
+          !is.na(higher_ed_enrollment_2yr)
+        ) |>
+        dplyr::mutate(AUN = suppressWarnings(as.numeric(AUN))) |>
+        dplyr::select(AUN, grad_year, higher_ed_enrollment_2yr)
+
+      df2
+    },
+    error = function(e) {
+      message(
+        "Failed to parse file: ",
+        basename(path),
+        " -> ",
+        conditionMessage(e)
+      )
+      tibble()
+    }
+  )
+
+  out
 }
 
-# Collect files
+# --- Collect Excel files (same as before)
 files <- list.files(
   here::here("data/pa_stats"),
   pattern = "\\.xlsx$",
   full.names = TRUE
-) %>%
-  discard(~ stringr::str_detect(basename(.x), "^~\\$")) %>%
-  keep(~ file.info(.x)$size > 0)
+) |>
+  purrr::discard(~ stringr::str_detect(basename(.x), "^~\\$")) |>
+  purrr::keep(~ file.info(.x)$size > 0)
 
-# Apply reader → keep only AUN + grad_year + value; unique (AUN, grad_year)
-lagged_vars <- files %>%
-  purrr::map_dfr(read_sheet3_highered) %>%
-  dplyr::mutate(AUN = as.numeric(AUN)) %>%
-  dplyr::filter(!is.na(AUN), !is.na(grad_year)) %>%
-  dplyr::distinct(AUN, grad_year, .keep_all = TRUE) %>%
+# Map and combine; empty tibbles from bad files are fine
+lagged_vars <- files |>
+  purrr::map_dfr(read_sheet3_highered) |>
+  dplyr::mutate(AUN = as.numeric(AUN)) |>
+  dplyr::filter(!is.na(AUN), !is.na(grad_year)) |>
+  dplyr::distinct(AUN, grad_year, .keep_all = TRUE) |>
   dplyr::select(AUN, grad_year, higher_ed_enrollment_2yr)
 
-# =============================================================================
-# Merge lagged covariate into base dataframe
-# =============================================================================
+
 merged_df_pa_covars <- merged_df_pa %>%
-  mutate(aun = as.numeric(aun)) %>%
+  mutate(
+    aun = as.numeric(aun),
+    year = as.integer(year)
+  ) %>%
   left_join(lagged_vars, by = c("aun" = "AUN", "year" = "grad_year"))
 
 rm(list = setdiff(ls(), c("merged_df_pa", "merged_df_pa_covars")))
+
+# Write out CSV 
+write_csv(merged_df_pa_covars, here("data", "merged_df_pa_covars.csv"))

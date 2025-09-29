@@ -91,9 +91,6 @@ plot(m.out, type = "jitter", interactive = FALSE)
 # Extract MatchIt data from m.out
 matched_data <- match.data(m.out)
 
-
-library(dplyr)
-
 school_balance <- matched_data %>%
   group_by(aun) %>%
   summarise(

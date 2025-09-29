@@ -12,9 +12,12 @@ merged_clean <- merged_df |>
 
     # --- Stipend: yes/no → 1/0
     stipend = case_when(
-      str_detect(tolower(as.character(stipend)), "yes|eligible|1|true") ~ 1L,
-      str_detect(tolower(as.character(stipend)), "no|ineligible|0|false") ~ 0L,
-      TRUE ~ NA_integer_
+      str_detect(
+        stipend,
+        regex("\\b(yes|stipend eligible|yes student)\\b", ignore_case = TRUE)
+      ) ~
+        1L,
+      TRUE ~ 0L
     ),
 
     # --- Household size: cap 1–11
@@ -66,16 +69,18 @@ merged_clean <- merged_df |>
 
     # --- Disability: yes/no → 1/0
     disability = case_when(
-      str_detect(tolower(as.character(documented_disability)), "yes|1|true") ~
-        1L,
-      str_detect(tolower(as.character(documented_disability)), "no|0|false") ~
+      str_detect(
+        documented_disability,
+        regex("^\\s*no\\b", ignore_case = TRUE)
+      ) ~
         0L,
+      !is.na(documented_disability) ~ 1L,
       TRUE ~ NA_integer_
     ),
 
     # --- Negative school environment flag
     neg_school = case_when(
-      str_detect(tolower(as.character(school_impact)), "^no$") ~ 0L,
+      str_detect(school_impact, regex("^\\s*no\\b", ignore_case = TRUE)) ~ 0L,
       !is.na(school_impact) ~ 1L,
       TRUE ~ NA_integer_
     ),
