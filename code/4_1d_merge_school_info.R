@@ -201,5 +201,5 @@ merged_df_pa_covars <- merged_df_pa %>%
 
 rm(list = setdiff(ls(), c("merged_df_pa", "merged_df_pa_covars")))
 
-# Write out CSV 
+# Write out CSV
 write_csv(merged_df_pa_covars, here("data", "merged_df_pa_covars.csv"))
