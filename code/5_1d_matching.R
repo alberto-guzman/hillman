@@ -1,4 +1,32 @@
-library(cobalt)
+# =============================================================================
+# Matching students within schools and years
+# =============================================================================
+
+library(dplyr)
+
+schools <- merged_df_pa %>%
+  group_by(pa_state_name_cw, year) %>%
+  summarise(
+    n_treated = sum(treated_ever == 1, na.rm = TRUE),
+    n_comparison = sum(treated_ever == 0, na.rm = TRUE),
+    total = n()
+  )
+
+
+summary_df <- merged_df_pa %>%
+  group_by(aun, year) %>%
+  summarise(
+    n_treated = sum(treated_ever == 1),
+    n_comparison = sum(treated_ever == 0),
+    total = n(),
+    .groups = "drop"
+  )
+
+# Problem cases
+summary_df <- summary_df %>%
+  filter(n_treated == 0 | n_comparison == 0) %>%
+  arrange(desc(total))
+
 
 # List of columns to check and fill missing values
 cols_to_fill <- c(
@@ -38,34 +66,33 @@ merged_df_pa_covars <- merged_df_pa_covars[!is.na(merged_df_pa_covars$aun), ]
 m.out <- matchit(
   treated_in_year ~
     gender +
-      grade +
-      gpa +
-      psat_math +
-      stipend +
-      house_size +
-      racially_marginalized +
-      bi_multi_racial +
-      urban +
-      suburban +
-      rural +
-      disability +
-      neg_school +
-      us_citizen +
-      gpa_miss +
-      psat_math_miss +
-      stipend_miss +
-      house_size_miss +
-      racially_marginalized_miss +
-      disability_miss +
-      neg_school_miss +
-      us_citizen_miss,
+    grade +
+    gpa +
+    psat_math +
+    stipend +
+    house_size +
+    racially_marginalized +
+    bi_multi_racial +
+    urban +
+    suburban +
+    rural +
+    disability +
+    neg_school +
+    us_citizen +
+    gpa_miss +
+    psat_math_miss +
+    stipend_miss +
+    house_size_miss +
+    racially_marginalized_miss +
+    disability_miss +
+    neg_school_miss +
+    us_citizen_miss,
   data = merged_df_pa_covars, # Data source
   method = "nearest", # Matching method
-  exact = ~ year + aun, # Exact matching variables
+  exact = ~year, # Exact matching variables
   distance = "glm", # Distance metric
-  caliper = .25,
-  std.caliper = TRUE, # Caliper settings
-  replace = FALSE # Allow replacement in matching
+  caliper = .5,
+  replace = T # Allow replacement in matching
 )
 
 # Plot a summary of the matched data

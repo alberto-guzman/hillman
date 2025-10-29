@@ -15,6 +15,7 @@ library(MatchIt)
 library(finalfit)
 library(skimr)
 library(haven)
+library(cobalt)
 
 # -----------------------------------------------------------------------------
 here()
