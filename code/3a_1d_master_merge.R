@@ -6,7 +6,18 @@
 merged_df <- applicants |>
   left_join(alum, by = c("first_name", "last_name", "gender")) |>
   mutate(
-    across(c("treated_2017", "treated_2018", "treated_2019", "treated_2020", "treated_2021", "treated_2022", "treated_2023"), ~ ifelse(is.na(.), 0L, as.integer(.)))
+    across(
+      c(
+        "treated_2017",
+        "treated_2018",
+        "treated_2019",
+        "treated_2020",
+        "treated_2021",
+        "treated_2022",
+        "treated_2023"
+      ),
+      ~ ifelse(is.na(.), 0L, as.integer(.))
+    )
   )
 
 # --- Create a treated_in_year variable based on year columns ---
