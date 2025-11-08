@@ -37,44 +37,47 @@ clean_custom_names <- function(df) {
 df_2017 <- read_excel(here("data", "hillman_2017.xlsx")) |>
   clean_custom_names() |>
   select(
-    -c(
-      date_of_birth,
-      email,
-      home_phone,
-      cell_phone,
-      address_1,
-      address_2,
-      parent_guard_full_name,
-      parent_guard_email,
-      parent_guard_add_1,
-      parent_guard_add_2,
-      parent_guard_city,
-      parent_guard_state,
-      parent_guard_zip,
-      science_math_courses,
-      int_cancer_biology,
-      int_tumor_immun,
-      int_computer_science,
-      int_drug_discovery,
-      int_women_cancer,
-      int_cancer_env,
-      prior_research,
-      jkcf_advisor,
-      jkcf_start_date,
-      jkcf_end_date,
-      first_reference_full_name,
-      first_reference_email,
-      sec_reference_full_name,
-      sec_reference_email,
-      computer_proficiency,
-      lab_experimentation,
-      housing,
-      marketing,
-      name,
-      self_agree_statement,
-      ...69,
-      ...70,
-      green_card
+    -any_of(
+      # changed: use any_of() to avoid errors when columns are absent
+      c(
+        date_of_birth,
+        email,
+        home_phone,
+        cell_phone,
+        address_1,
+        address_2,
+        parent_guard_full_name,
+        parent_guard_email,
+        parent_guard_add_1,
+        parent_guard_add_2,
+        parent_guard_city,
+        parent_guard_state,
+        parent_guard_zip,
+        science_math_courses,
+        int_cancer_biology,
+        int_tumor_immun,
+        int_computer_science,
+        int_drug_discovery,
+        int_women_cancer,
+        int_cancer_env,
+        prior_research,
+        jkcf_advisor,
+        jkcf_start_date,
+        jkcf_end_date,
+        first_reference_full_name,
+        first_reference_email,
+        sec_reference_full_name,
+        sec_reference_email,
+        computer_proficiency,
+        lab_experimentation,
+        housing,
+        marketing,
+        name,
+        self_agree_statement,
+        ...69,
+        ...70,
+        green_card
+      )
     )
   ) |>
   rename(
@@ -85,8 +88,9 @@ df_2017 <- read_excel(here("data", "hillman_2017.xlsx")) |>
     gpa_weight = gpa_weighted
   ) |>
   mutate(
-    gender = if_else(tolower(gender) == "male", 1, 0),
-    gpa_weight = if_else(tolower(gpa_weight) == "yes", 1, 0),
+    # changed: wrap in as.character() to avoid errors for non-character/factor inputs
+    gender = if_else(tolower(as.character(gender)) == "male", 1, 0),
+    gpa_weight = if_else(tolower(as.character(gpa_weight)) == "yes", 1, 0),
     high_school_pub_priv = str_to_lower(high_school_pub_priv),
     jkcf = str_to_lower(jkcf),
     zip = as.integer(zip),
@@ -111,41 +115,44 @@ df_2017 <- read_excel(here("data", "hillman_2017.xlsx")) |>
 df_2018 <- read_excel(here("data", "hillman_2018.xlsx")) |>
   clean_custom_names() |>
   select(
-    -c(
-      site,
-      date_of_birth,
-      wet_lab_eligible,
-      alumnus,
-      "absences_(y/n)",
-      "absences_(#_of_days)",
-      "wet_v_dry",
-      "how_would_you_judge_your_sense_of_comfort_in_computer_use_and_applications_choose_one_of_the_following",
-      "how_would_you_judge_your_sense_of_comfort_in_computer_use_and_applications_choose_one_of_the_following_[other]",
-      "list_prior_research_experiences_(if_any),_extracurricular_activities,_honors_and_awards.",
-      "list_science_and_math_courses_with_grades",
-      "essay_written_or_uploaded",
-      "upload_your_essay",
-      "a.",
-      "b.",
-      "one_other_topic_of_your_choice_from_the_list_above.",
-      recommender,
-      do_you_have_permanent_resident_or_green_card_status,
-      submission_date,
-      "if_yes,_please_explain",
-      email,
-      home_phone,
-      cell_phone,
-      address,
-      "1st_choice",
-      "2nd_choice",
-      "3rd",
-      "4th",
-      "5th",
-      "6th",
-      "stage_completion_(%)",
-      "do_you_qualify_based_on_your_family_size_and_income_please_refer_to_the_chart_below_indicating_maximum_thresholds.",
-      "how_do_you_identify_yourself_[other]",
-      "vi._housing"
+    -any_of(
+      # changed
+      c(
+        site,
+        date_of_birth,
+        wet_lab_eligible,
+        alumnus,
+        "absences_(y/n)",
+        "absences_(#_of_days)",
+        "wet_v_dry",
+        "how_would_you_judge_your_sense_of_comfort_in_computer_use_and_applications_choose_one_of_the_following",
+        "how_would_you_judge_your_sense_of_comfort_in_computer_use_and_applications_choose_one_of_the_following_[other]",
+        "list_prior_research_experiences_(if_any),_extracurricular_activities,_honors_and_awards.",
+        "list_science_and_math_courses_with_grades",
+        "essay_written_or_uploaded",
+        "upload_your_essay",
+        "a.",
+        "b.",
+        "one_other_topic_of_your_choice_from_the_list_above.",
+        recommender,
+        do_you_have_permanent_resident_or_green_card_status,
+        submission_date,
+        "if_yes,_please_explain",
+        email,
+        home_phone,
+        cell_phone,
+        address,
+        "1st_choice",
+        "2nd_choice",
+        "3rd",
+        "4th",
+        "5th",
+        "6th",
+        "stage_completion_(%)",
+        "do_you_qualify_based_on_your_family_size_and_income_please_refer_to_the_chart_below_indicating_maximum_thresholds.",
+        "how_do_you_identify_yourself_[other]",
+        "vi._housing"
+      )
     )
   ) |>
   rename(
@@ -171,8 +178,8 @@ df_2018 <- read_excel(here("data", "hillman_2018.xlsx")) |>
     school_impact = "do_you_believe_your_school_environment_negatively_impacts_your_educational_opportunities_related_to_obtaining_a_career_in_science_research"
   ) |>
   mutate(
-    gender = if_else(tolower(gender) == "male", 1, 0),
-    gpa_weight = if_else(tolower(gpa_weight) == "yes", 1, 0),
+    gender = if_else(tolower(as.character(gender)) == "male", 1, 0),
+    gpa_weight = if_else(tolower(as.character(gpa_weight)) == "yes", 1, 0),
     zip = as.integer(zip),
     grade = as.integer(grade),
     gpa = as.numeric(gpa),
@@ -198,56 +205,59 @@ df_2019 <- read_excel(
 ) |>
   clean_custom_names() |>
   select(
-    -c(
-      date_of_birth,
-      email,
-      home_phone,
-      cell_phone,
-      address...10,
-      "parent_or_legal_guardian's_full_name...14",
-      "parent_or_legal_guardian's_email...15",
-      housing,
-      "1st_choice",
-      "2nd",
-      "3rd",
-      "4th",
-      "5th",
-      "6th",
-      expected_absences,
-      "#_of_absences",
-      wet_or_dry_lab_preferred,
-      "how_would_you_judge_your_sense_of_comfort_in_computer_use_and_applications_choose_one_of_the_following",
-      "how_would_you_judge_your_sense_of_comfort_in_computer_use_and_applications_choose_one_of_the_following_[other]",
-      "parent_or_legal_guardian's_full_name...40",
-      "parent_or_legal_guardian's_email...41",
-      "upload_your_essay...50",
-      "a.",
-      "b.",
-      "upload_transcript",
-      "would_you_like_to_upload_your_essay_or_use_the_space_provided",
-      recommender,
-      submission_date,
-      "stage_completion_(%)",
-      "possible_2_year_program__are_you_interested_in_a_new_two-year_program_through_the_hillman_academy_the_hillman_academy_scholars_program_provides_a_paid_($3600/year),_comprehensive,_two-year_experience_focused_on_researc...",
-      "do_you_have_permanent_resident_or_green_card_status",
-      "do_you_have_a_documented_disabilityâ__(e.g.,_auditory,_motor,_visual,_cognitive,_other)_that_substantially_limits_one_or_more_major_life_activites_as_described_by_theâ_americans_with_disabilities_act_of_1990_[other]",
-      "if_yes,_please_explain",
-      "how_do_you_identify_yourself_[caucasian/_white]",
-      "how_do_you_identify_yourself_[african/_african_american/_black]",
-      "how_do_you_identify_yourself_[asian]",
-      "how_do_you_identify_yourself_[hawaiian_or_pacific_islander]",
-      "how_do_you_identify_yourself_[native_american/_alaska_native]",
-      "how_do_you_identify_yourself_[hispanic/_latino]",
-      "how_do_you_identify_yourself_[do_not_wish_to_answer]",
-      "upload_your_essay...79",
-      "address...36",
-      "city...37",
-      "state...38",
-      "zip...39",
-      group,
-      "prior_research_experiences.",
-      list_science_and_math_courses_with_grades,
-      "stipend_eligible"
+    -any_of(
+      # changed
+      c(
+        date_of_birth,
+        email,
+        home_phone,
+        cell_phone,
+        address...10,
+        "parent_or_legal_guardian's_full_name...14",
+        "parent_or_legal_guardian's_email...15",
+        housing,
+        "1st_choice",
+        "2nd",
+        "3rd",
+        "4th",
+        "5th",
+        "6th",
+        expected_absences,
+        "#_of_absences",
+        wet_or_dry_lab_preferred,
+        "how_would_you_judge_your_sense_of_comfort_in_computer_use_and_applications_choose_one_of_the_following",
+        "how_would_you_judge_your_sense_of_comfort_in_computer_use_and_applications_choose_one_of_the_following_[other]",
+        "parent_or_legal_guardian's_full_name...40",
+        "parent_or_legal_guardian's_email...41",
+        "upload_your_essay...50",
+        "a.",
+        "b.",
+        "upload_transcript",
+        "would_you_like_to_upload_your_essay_or_use_the_space_provided",
+        recommender,
+        submission_date,
+        "stage_completion_(%)",
+        "possible_2_year_program__are_you_interested_in_a_new_two-year_program_through_the_hillman_academy_the_hillman_academy_scholars_program_provides_a_paid_($3600/year),_comprehensive,_two-year_experience_focused_on_researc...",
+        "do_you_have_permanent_resident_or_green_card_status",
+        "do_you_have_a_documented_disabilityâ__(e.g.,_auditory,_motor,_visual,_cognitive,_other)_that_substantially_limits_one_or_more_major_life_activites_as_described_by_theâ_americans_with_disabilities_act_of_1990_[other]",
+        "if_yes,_please_explain",
+        "how_do_you_identify_yourself_[caucasian/_white]",
+        "how_do_you_identify_yourself_[african/_african_american/_black]",
+        "how_do_you_identify_yourself_[asian]",
+        "how_do_you_identify_yourself_[hawaiian_or_pacific_islander]",
+        "how_do_you_identify_yourself_[native_american/_alaska_native]",
+        "how_do_you_identify_yourself_[hispanic/_latino]",
+        "how_do_you_identify_yourself_[do_not_wish_to_answer]",
+        "upload_your_essay...79",
+        "address...36",
+        "city...37",
+        "state...38",
+        "zip...39",
+        group,
+        "prior_research_experiences.",
+        list_science_and_math_courses_with_grades,
+        "stipend_eligible"
+      )
     )
   ) |>
   rename(
@@ -278,8 +288,8 @@ df_2019 <- read_excel(
     house_size = household_size
   ) |>
   mutate(
-    gender = as.integer(tolower(gender) == "male"),
-    gpa_weight = as.integer(tolower(gpa_weight) == "yes"),
+    gender = as.integer(tolower(as.character(gender)) == "male"), # changed
+    gpa_weight = as.integer(tolower(as.character(gpa_weight)) == "yes"), # changed
     zip = as.integer(zip),
     grade = as.integer(grade),
     gpa = as.numeric(gpa),
@@ -359,8 +369,8 @@ df_2020 <- read_excel(here("data", "hillman_2020.xlsx")) |>
     stipend = "stipend_eligible...77"
   ) |>
   mutate(
-    gender = if_else(tolower(gender) == "male", 1, 0),
-    gpa_weight = if_else(tolower(gpa_weight) == "yes", 1, 0),
+    gender = if_else(tolower(as.character(gender)) == "male", 1, 0),
+    gpa_weight = if_else(tolower(as.character(gpa_weight)) == "yes", 1, 0),
     zip = as.integer(zip),
     grade = as.integer(grade),
     gpa = as.numeric(gpa),
@@ -430,8 +440,8 @@ df_2021 <- read_excel(here("data", "hillman_2021.xlsx")) |>
     stipend = stipend_eligible
   ) |>
   mutate(
-    gender = if_else(tolower(gender) == "male", 1, 0),
-    gpa_weight = if_else(tolower(gpa_weight) == "yes", 1, 0),
+    gender = if_else(tolower(as.character(gender)) == "male", 1, 0), # changed
+    gpa_weight = if_else(tolower(as.character(gpa_weight)) == "yes", 1, 0), # changed
     zip = as.integer(zip),
     grade = as.integer(grade),
     gpa = as.numeric(gpa),
@@ -504,8 +514,8 @@ df_2022 <- read_excel(here("data", "hillman_2022.xlsx")) |>
     stipend = "stipend_eligible_y_n"
   ) |>
   mutate(
-    gender = if_else(tolower(gender) == "male", 1, 0),
-    gpa_weight = if_else(tolower(gpa_weight) == "yes", 1, 0),
+    gender = if_else(tolower(as.character(gender)) == "male", 1, 0), # changed
+    gpa_weight = if_else(tolower(as.character(gpa_weight)) == "yes", 1, 0), # changed
     zip = as.integer(zip),
     grade = as.integer(grade),
     gpa = as.numeric(gpa),
@@ -577,8 +587,8 @@ df_2023 <- read_csv(here("data", "hillman_2023.csv")) |>
   ) |>
   filter(application_form_hillman_academy_completion_status == "Completed") |>
   mutate(
-    gender = if_else(tolower(gender) == "male", 1, 0),
-    gpa_weight = if_else(tolower(gpa_weight) == "yes", 1, 0),
+    gender = if_else(tolower(as.character(gender)) == "male", 1, 0), # changed
+    gpa_weight = if_else(tolower(as.character(gpa_weight)) == "yes", 1, 0), # changed
     zip = as.integer(zip),
     grade = as.integer(grade),
     gpa = as.numeric(gpa),
@@ -628,16 +638,19 @@ applicants <- bind_rows(
 # Remove columns not needed in the final analysis and clean up names
 applicants <- applicants |>
   select(
-    -c(
-      high_school_pub_priv,
-      school_district,
-      reduced_lunch,
-      offer_ap,
-      `income_eligible_(reduced_lunch)`,
-      alumni,
-      act_verbal,
-      low_income,
-      middle_name
+    -any_of(
+      # changed
+      c(
+        high_school_pub_priv,
+        school_district,
+        reduced_lunch,
+        offer_ap,
+        `income_eligible_(reduced_lunch)`,
+        alumni,
+        act_verbal,
+        low_income,
+        middle_name
+      )
     )
   ) |>
   # Clean first and last names (convert to lower case and remove extra characters)
