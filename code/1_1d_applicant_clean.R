@@ -649,7 +649,7 @@ applicants <- applicants |>
 # -----------------------------------------------------------------------------
 # Additional Data Adjustments ------------------------------------------------
 
-# Clean names
+# Clean names (remove special characters, quotes, parentheses)
 applicants <- applicants |>
   mutate(
     first_name = first_name |>
@@ -665,106 +665,109 @@ applicants <- applicants |>
       str_squish()
   )
 
-# Standardize GPA to unweighted 4.0 scale
+# Standardize GPA to 4.0 scale
 applicants <- applicants |>
-  # standardize gpa_weight to 1/0/NA first
   mutate(
     gpa_weight = case_when(
       is.na(gpa_weight) ~ NA_real_,
-      tolower(as.character(gpa_weight)) %in% c("1", "yes", "y", "true", "t") ~
-        1,
-      tolower(as.character(gpa_weight)) %in% c("0", "no", "n", "false", "f") ~
-        0,
+      tolower(as.character(gpa_weight)) %in% c("1", "yes", "y", "true", "t") ~ 1,
+      tolower(as.character(gpa_weight)) %in% c("0", "no", "n", "false", "f") ~ 0,
       TRUE ~ suppressWarnings(as.numeric(as.character(gpa_weight)))
     )
   ) |>
-
-  # keep original and parse numeric GPA
   mutate(
     gpa_old = gpa,
     gpa_num = as.numeric(gpa_old)
   ) |>
-
-  # compute standardized unweighted GPA (use gpa_weight for 4-6 range)
   mutate(
     gpa = case_when(
       is.na(gpa_num) ~ NA_real_,
-      gpa_num < 0 ~ NA_real_, # suspicious negative -> manual review
-      gpa_num > 120 ~ NA_real_, # extremely large -> manual review
-
-      # percentage-like / percentish (including modestly >100 due to extra credit)
-      gpa_num > 10 ~ pmin(4, gpa_num / 25),
-
-      # 0-10 scale (7-10)
-      gpa_num > 6 ~ pmin(4, gpa_num * 4 / 10),
-
-      # 4-6 : use gpa_weight to decide:
-      # - if weighted (1): assume 0-5 weighted -> scale *4/5
-      # - if explicitly not weighted (0): assume the value is reported on a 4.0-ish scale or mis-entry -> cap at 4
-      # - if gpa_weight is NA: conservatively cap at 4 but flag for review
-      gpa_num > 4 & gpa_num <= 6 ~
-        case_when(
-          gpa_weight == 1 ~ pmin(4, gpa_num * 4 / 5),
-          gpa_weight == 0 ~ pmin(4, gpa_num), # cap to 4
-          is.na(gpa_weight) ~ pmin(4, gpa_num) # conservative: cap to 4 (flag created below)
-        ),
-
-      # <=4 : assume already on 4.0 scale
-      TRUE ~ pmin(4, gpa_num)
+      gpa_num == 0 ~ NA_real_,
+      gpa_num <= 4.0 ~ gpa_num,
+      gpa_num > 4.0 & gpa_num <= 5.0 ~ 
+        if_else(gpa_weight == 1, (gpa_num / 5.0) * 4.0, NA_real_),
+      gpa_num > 5.0 & gpa_num <= 6.0 ~ 
+        if_else(gpa_weight == 1, (gpa_num / 6.0) * 4.0, NA_real_),
+      gpa_num > 6.0 & gpa_num <= 10.0 ~ (gpa_num / 10.0) * 4.0,
+      gpa_num >= 93 ~ 4.0,
+      gpa_num >= 90 ~ 3.7 + (gpa_num - 90) * 0.1,
+      gpa_num >= 87 ~ 3.3 + (gpa_num - 87) * 0.133,
+      gpa_num >= 83 ~ 3.0 + (gpa_num - 83) * 0.075,
+      gpa_num >= 80 ~ 2.7 + (gpa_num - 80) * 0.1,
+      gpa_num >= 77 ~ 2.3 + (gpa_num - 77) * 0.133,
+      gpa_num >= 73 ~ 2.0 + (gpa_num - 73) * 0.075,
+      gpa_num >= 70 ~ 1.7 + (gpa_num - 70) * 0.1,
+      gpa_num >= 65 ~ 1.0 + (gpa_num - 65) * 0.15,
+      gpa_num < 65 ~ NA_real_,
+      TRUE ~ NA_real_
     ),
-
-    # flags for QA
-    gpa_over_100_flag = if_else(!is.na(gpa_num) & gpa_num > 100, TRUE, FALSE),
-    gpa_weight_missing_for_4to6 = if_else(
-      is.na(gpa_weight) & gpa_num > 4 & gpa_num <= 6,
-      TRUE,
-      FALSE
-    ),
-
-    # rounding for matching stability
     gpa = round(gpa, 3)
   ) |>
+  select(-gpa_num, -gpa_old)
 
-  # drop temporary numeric helper
-  select(-gpa_num)
-
-
-# Fix anomalous house size entries (set values greater than 11 to NA)
+# Convert 0 to NA for all test scores and other variables where 0 is invalid
 applicants <- applicants |>
-  mutate(house_size = if_else(house_size > 11, NA_integer_, house_size))
+  mutate(
+    # GPA: convert 0 to NA (double-check in case any slipped through)
+    gpa = if_else(gpa == 0, NA_real_, gpa),
+    
+    # Grade: only keep 9-12
+    grade = if_else(grade < 9 | grade > 12, NA_integer_, grade),
+    
+    # House size: convert 0 to NA, cap at 11
+    house_size = if_else(house_size == 0 | house_size > 11, NA_integer_, house_size),
+    
+    # ZIP codes: valid US ZIPs are 00501-99950
+    zip = if_else(zip < 501 | zip > 99950, NA_integer_, zip),
+    
+    # SAT scores: 0 -> NA, valid range 200-800
+    sat_math = if_else(sat_math == 0, NA_integer_, sat_math),
+    sat_verbal = if_else(sat_verbal == 0, NA_integer_, sat_verbal),
+    sat_writing = if_else(sat_writing == 0 | sat_writing < 200 | sat_writing > 800, 
+                          NA_integer_, sat_writing),
+    sat_reading_writing = if_else(sat_reading_writing == 0, NA_integer_, sat_reading_writing),
+    
+    # PSAT scores: 0 -> NA, cap at 760 (max PSAT score per section)
+    psat_math = if_else(psat_math == 0 | psat_math > 760, NA_integer_, psat_math),
+    psat_verbal = if_else(psat_verbal == 0 | psat_verbal > 760, NA_integer_, psat_verbal),
+    psat_writing = if_else(psat_writing == 0 | psat_writing > 760, NA_integer_, psat_writing),
+    psat_reading_writing = if_else(psat_reading_writing == 0, NA_integer_, psat_reading_writing),
+    
+    # ACT scores: 0 -> NA (valid range is 1-36)
+    act_math = if_else(act_math == 0, NA_integer_, act_math),
+    act_read = if_else(act_read == 0, NA_integer_, act_read),
+    act_science = if_else(act_science == 0, NA_integer_, act_science),
+    act_writing = if_else(act_writing == 0, NA_integer_, act_writing)
+  ) |>
+  
+  # Drop problematic/duplicate columns
+  select(
+    -`act_scores_|__|_verbal`,  # Duplicate/malformed ACT verbal column
+    -date_of_birth,              # Has invalid future dates
+    -application_form_hillman_academy_completion_status  # Not needed
+  )
 
 # Create High School Graduation Year variable
 applicants <- applicants |>
   mutate(hs_grad_year = year + (12 - grade))
 
-# Check for duplicate applicants by first name, last name, and year.
-applicants |>
+# Check for duplicate applicants
+duplicates_check <- applicants |>
   group_by(first_name, last_name, year) |>
   filter(n() > 1) |>
   summarise(n = n(), .groups = "drop")
 
+if (nrow(duplicates_check) > 0) {
+  message("Warning: ", nrow(duplicates_check), " duplicate records found")
+  print(duplicates_check)
+}
+
 # Remove manually flagged duplicate records
 remove_duplicates <- tibble(
-  first_name = c(
-    "amanda",
-    "angela",
-    "arnav",
-    "charles",
-    "daniel",
-    "grace",
-    "imani",
-    "sanyah"
-  ),
-  last_name = c(
-    "lu",
-    "tao",
-    "patel",
-    "mawhinney",
-    "wang",
-    "wang",
-    "smith",
-    "nabi"
-  )
+  first_name = c("amanda", "angela", "arnav", "charles", "daniel", 
+                 "grace", "imani", "sanyah"),
+  last_name = c("lu", "tao", "patel", "mawhinney", "wang", 
+                "wang", "smith", "nabi")
 )
 
 applicants <- applicants |>
@@ -774,10 +777,18 @@ applicants <- applicants |>
 # Final Checks & Summaries ---------------------------------------------------
 
 # Count unique applicants by year
-applicants |>
+year_counts <- applicants |>
   group_by(first_name, last_name, year) |>
   summarise(n = n(), .groups = "drop") |>
   group_by(year) |>
   summarise(total_unique_students = sum(n), .groups = "drop")
 
-rm(list = setdiff(ls(), "applicants")) # Keep only the applicants data frame in memory
+message("\nFinal applicant counts by year:")
+print(year_counts)
+
+message("\nTotal applicants: ", nrow(applicants))
+message("GPA missing: ", sum(is.na(applicants$gpa)), 
+        " (", round(100 * mean(is.na(applicants$gpa)), 1), "%)")
+
+# Clean up workspace
+rm(list = setdiff(ls(), "applicants"))

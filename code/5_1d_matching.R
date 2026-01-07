@@ -17,13 +17,9 @@ library(here)
 # 0. FILTER OUT
 # =============================================================================
 
-# Remove 2020 cohort due to COVID disruptions
+# Remove 2020 (COVID) and 2022 (small sample)
 merged_df_pa_covars <- merged_df_pa_covars |>
-  filter(year != 2020)
-
-# Keep only grades 10-11 (primary program grades)
-merged_df_pa_covars <- merged_df_pa_covars |>
-  filter(grade %in% c(10, 11))
+  filter(year != 2020, year != 2022)
 
 # =============================================================================
 # 1. PRE-MATCHING DIAGNOSTICS

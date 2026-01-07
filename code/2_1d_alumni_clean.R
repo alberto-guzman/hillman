@@ -2,7 +2,7 @@
 # Hillman Summer Alumni
 # =============================================================================
 
-# Loan data
+# Load data
 alum <- readr::read_csv(
   here::here("data", "Alumni Tracker (Updated 9.13.2023 - SJ) with Charts.csv"),
   col_types = readr::cols(...7 = readr::col_skip())
@@ -25,17 +25,6 @@ alum <- alum |>
   ) |>
   select(-First, -Last)
 
-# Clean gender
-alum <- alum |>
-  rename(gender = Gender) |>
-  mutate(
-    gender = if_else(
-      str_to_lower(as.character(gender)) %in% c("m", "male"),
-      1,
-      0
-    )
-  )
-
 # Create max and min participation year
 alum <- alum |>
   mutate(
@@ -53,7 +42,7 @@ alum <- alum |>
 
 # Pivot to long format
 alum_long <- alum |>
-  select(first_name, last_name, year1:year4, gender) |>
+  select(first_name, last_name, year1:year4) |>
   pivot_longer(
     cols = starts_with("year"),
     names_to = "year_col",
@@ -62,27 +51,25 @@ alum_long <- alum |>
   transmute(
     first_name,
     last_name,
-    year = suppressWarnings(as.integer(year)),
-    gender
+    year = suppressWarnings(as.integer(year))
   ) |>
   drop_na(year)
+
+# Remove manually flagged duplicate
+alum_long <- alum_long |>
+  filter(!(first_name == "amanda" & last_name == "lu"))
 
 # De-duplicate
 alum_long <- alum_long |>
   distinct(first_name, last_name, year, .keep_all = TRUE)
 
-# Remove a specifically flagged duplicate row
-alum_long <- alum_long |> filter(!(first_name == "amanda" & last_name == "lu"))
-
 # Create treatment variable
-alum <- alum_long
-alum <- alum |>
+alum <- alum_long |>
   mutate(treatment = 1L)
-
 
 # Pivot the alum dataset to create separate treatment columns for each year
 treated_years <- alum |>
-  select(first_name, last_name, gender, year, treatment) |>
+  select(first_name, last_name, year, treatment) |>
   distinct() |>
   pivot_wider(
     names_from = year,
@@ -91,27 +78,20 @@ treated_years <- alum |>
     values_fill = 0
   )
 
-# Reorder the columns so treated_* are chronological (ID columns first)
+# Reorder the columns so treated_* are chronological
 treated_cols <- grep("^treated_\\d{4}$", names(treated_years), value = TRUE)
 treated_cols <- treated_cols[order(as.integer(str_extract(
   treated_cols,
   "\\d{4}"
 )))]
 treated_years <- treated_years |>
-  select(first_name, last_name, gender, all_of(treated_cols))
+  select(first_name, last_name, all_of(treated_cols))
 
-# Create an "ever treated" variable based on the year-specific treatment columns
+# Create an "ever treated" variable
 treated_years <- treated_years |>
   mutate(
     treated_ever = if_else(
-      (coalesce(treated_2017, 0) +
-        coalesce(treated_2018, 0) +
-        coalesce(treated_2019, 0) +
-        coalesce(treated_2020, 0) +
-        coalesce(treated_2021, 0) +
-        coalesce(treated_2022, 0) +
-        coalesce(treated_2023, 0)) >
-        0,
+      rowSums(select(cur_data(), starts_with("treated_")), na.rm = TRUE) > 0,
       1L,
       0L
     )
@@ -131,31 +111,31 @@ treated_years <- treated_years |>
     )
   )
 
-
 # Subset treated years (keep 2017:2023)
 treated_years <- treated_years |>
   select(
     first_name,
     last_name,
-    gender,
     treated_ever,
     treated_before_2017,
     treated_2017:treated_2023
   )
 
-
+# Summary of treatment by year
+message("\n=== Treatment Summary by Year ===\n")
 treated_years |>
   select(treated_2017:treated_2023) |>
-  pivot_longer(everything(), names_to = "year", values_to = "treated") |>
-  group_by(year, treated) |>
-  summarise(n = n(), .groups = "drop") |>
-  pivot_wider(names_from = treated, values_from = n, values_fill = 0) |>
+  summarise(across(everything(), sum, na.rm = TRUE)) |>
+  pivot_longer(everything(), names_to = "year", values_to = "n_treated") |>
   arrange(year) |>
   print()
 
+message("\nTotal unique alumni: ", nrow(treated_years))
+message("Ever treated: ", sum(treated_years$treated_ever))
+message("Treated before 2017: ", sum(treated_years$treated_before_2017))
 
+# Final alumni dataset
 alum <- treated_years
-
 
 # Keep only alum + applicants in memory
 rm(list = setdiff(ls(), c("alum", "applicants")))
