@@ -100,6 +100,134 @@ merged_clean <- merged_df |>
     )
   )
 
+# =============================================================================
+# MERGE NSC OUTCOME DATA
+# =============================================================================
+
+library(haven)
+
+# Load NSC outcome data
+outcomes <- read_dta(here(
+  "data/files_for_danielle_nsc",
+  "clean_Hillman_PAonly.dta"
+)) |>
+  janitor::clean_names() |>
+  rename(
+    first_name = firstname,
+    last_name = lastname
+  ) |>
+  select(
+    first_name,
+    last_name,
+    seamless_enroll,
+    seamless_enroll_stem,
+    enrolled_ever_nsc,
+    enrolled_ever_stem,
+    degree_ever_nsc,
+    degree_ever_stem_nsc,
+    degree_6years_all_nsc,
+    bachdegree_6years_all_nsc,
+    ste_mbachdegree_6years_all_nsc
+  )
+
+message("Loaded NSC outcome data: ", nrow(outcomes), " records")
+
+# Check for duplicates (without hs_grad_year since we're not using it)
+outcomes_dupes <- outcomes %>%
+  group_by(first_name, last_name) %>%
+  filter(n() > 1) %>%
+  ungroup()
+
+message(
+  "Found ",
+  nrow(outcomes_dupes),
+  " duplicate outcome records (",
+  round(100 * nrow(outcomes_dupes) / nrow(outcomes), 1),
+  "%)"
+)
+
+# Remove duplicates - keep first occurrence
+outcomes <- outcomes %>%
+  group_by(first_name, last_name) %>%
+  slice(1) %>%
+  ungroup()
+
+message("After de-duplication: ", nrow(outcomes), " unique outcome records")
+
+# Merge outcomes with cleaned data (NO hs_grad_year constraint)
+merged_clean <- merged_clean |>
+  left_join(
+    outcomes,
+    by = c("first_name", "last_name")
+  )
+
+# Code NSC non-matches as 0 (assume not enrolled)
+merged_clean <- merged_clean %>%
+  mutate(across(
+    c(
+      seamless_enroll,
+      seamless_enroll_stem,
+      enrolled_ever_nsc,
+      enrolled_ever_stem,
+      degree_ever_nsc,
+      degree_ever_stem_nsc,
+      degree_6years_all_nsc,
+      bachdegree_6years_all_nsc,
+      ste_mbachdegree_6years_all_nsc
+    ),
+    ~ if_else(is.na(.), 0, .)
+  ))
+
+# =============================================================================
+# VALIDATE MERGE
+# =============================================================================
+
+message("\n=== NSC Outcome Merge Validation ===")
+message("Total students: ", nrow(merged_clean))
+
+# Overall match rates
+n_with_nsc <- sum(merged_clean$enrolled_ever_nsc > 0 | 
+                  !is.na(outcomes$first_name[match(
+                    paste(merged_clean$first_name, merged_clean$last_name),
+                    paste(outcomes$first_name, outcomes$last_name)
+                  )]))
+
+message("With NSC data: ", n_with_nsc, " (", 
+        round(100 * n_with_nsc / nrow(merged_clean), 1), "%)")
+message("Coded as non-enrolled: ", nrow(merged_clean) - n_with_nsc, " (",
+        round(100 * (nrow(merged_clean) - n_with_nsc) / nrow(merged_clean), 1), "%)")
+
+# Check balance of non-matches by treatment status (OVERALL)
+message("\n=== NSC Match Rates by Treatment Status (OVERALL) ===")
+merge_check_overall <- merged_clean %>%
+  mutate(has_nsc_data = first_name %in% outcomes$first_name & 
+                        last_name %in% outcomes$last_name) %>%
+  group_by(treated_in_year) %>%
+  summarise(
+    n = n(),
+    with_nsc = sum(has_nsc_data),
+    pct_with_nsc = round(100 * with_nsc / n, 1),
+    .groups = "drop"
+  )
+
+print(merge_check_overall)
+
+# Check balance of non-matches by treatment status and YEAR
+message("\n=== NSC Match Rates by Treatment Status and Year ===")
+merge_check_year <- merged_clean %>%
+  mutate(has_nsc_data = first_name %in% outcomes$first_name & 
+                        last_name %in% outcomes$last_name) %>%
+  group_by(year, treated_in_year) %>%
+  summarise(
+    n = n(),
+    with_nsc = sum(has_nsc_data),
+    pct_with_nsc = round(100 * with_nsc / n, 1),
+    .groups = "drop"
+  )
+
+print(merge_check_year)
+
+# Select final variables (including outcomes)
 merged_clean <- merged_clean |>
   select(
     first_name,
@@ -125,8 +253,20 @@ merged_clean <- merged_clean |>
     disability,
     neg_school,
     us_citizen,
-    first_gen
+    first_gen,
+    # NSC outcomes
+    seamless_enroll,
+    seamless_enroll_stem,
+    enrolled_ever_nsc,
+    enrolled_ever_stem,
+    degree_ever_nsc,
+    degree_ever_stem_nsc,
+    degree_6years_all_nsc,
+    bachdegree_6years_all_nsc,
+    ste_mbachdegree_6years_all_nsc
   )
 
+message("\n=== Cleaning Complete ===")
+message("Dataset includes ", nrow(merged_clean), " students with covariates and outcomes")
 
-rm(list = setdiff(ls(), c("alum", "applicants", "merged_clean")))
+rm(list = setdiff(ls(), c("alum", "applicants", "merged_clean", "outcomes")))

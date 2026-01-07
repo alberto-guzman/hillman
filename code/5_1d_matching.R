@@ -14,16 +14,16 @@ library(cobalt)
 library(here)
 
 # =============================================================================
-# 0. FILTER OUT 2020
+# 0. FILTER OUT
 # =============================================================================
 
 # Remove 2020 cohort due to COVID disruptions
 merged_df_pa_covars <- merged_df_pa_covars |>
   filter(year != 2020)
 
-message("Removed 2020 cohort")
-message("Remaining years: 2017-2019, 2021-2023")
-message("Total observations: ", nrow(merged_df_pa_covars))
+# Keep only grades 10-11 (primary program grades)
+merged_df_pa_covars <- merged_df_pa_covars |>
+  filter(grade %in% c(10, 11))
 
 # =============================================================================
 # 1. PRE-MATCHING DIAGNOSTICS
@@ -128,7 +128,7 @@ m.out_year <- matchit(
     first_gen_miss,
   data = merged_df_pa_covars,
   method = "nearest",
-  exact = ~year, # Match within year ONLY
+  exact = ~year,
   distance = "glm",
   caliper = 1,
   replace = TRUE
@@ -136,29 +136,18 @@ m.out_year <- matchit(
 
 # Summary and balance
 summary(m.out_year)
-bal.tab(m.out_year, un = TRUE, thresholds = c(m = 0.1))
+bal.tab(m.out_year, un = TRUE, thresholds = c(m = 0.2))
+
+# Year-only matching balance by year
+bal.tab(
+  m.out_year,
+  cluster = "year",
+  un = TRUE,
+  thresholds = c(m = 0.2)
+)
 
 # Extract matched data
 matched_data_year <- match.data(m.out_year)
-
-# Filter to schools with both treated and control
-matched_data_year_filtered <- matched_data_year %>%
-  group_by(aun) %>%
-  filter(
-    sum(treated_in_year == 1, na.rm = TRUE) > 0 &
-      sum(treated_in_year == 0, na.rm = TRUE) > 0
-  ) %>%
-  ungroup()
-
-message("\n--- Year-Only Matching Results ---")
-message(
-  "Matched treated students: ",
-  sum(matched_data_year_filtered$treated_in_year == 1)
-)
-message(
-  "Matched control students: ",
-  sum(matched_data_year_filtered$treated_in_year == 0)
-)
 
 # =============================================================================
 # 3B. PROPENSITY SCORE MATCHING: YEAR + SCHOOL (ROBUSTNESS CHECK)
@@ -202,55 +191,19 @@ m.out_year_school <- matchit(
 
 # Summary and balance
 summary(m.out_year_school)
-bal.tab(m.out_year_school, un = TRUE, thresholds = c(m = 0.1))
+bal.tab(m.out_year_school, un = TRUE, thresholds = c(m = 0.2))
+
+# Year-only matching balance by year
+bal.tab(
+  m.out_year_school,
+  cluster = "year",
+  un = TRUE,
+  thresholds = c(m = 0.2)
+)
 
 # Extract matched data
 matched_data_year_school <- match.data(m.out_year_school)
 
-# Filter to schools with both treated and control (already guaranteed by exact matching)
-matched_data_year_school_filtered <- matched_data_year_school %>%
-  group_by(aun) %>%
-  filter(
-    sum(treated_in_year == 1, na.rm = TRUE) > 0 &
-      sum(treated_in_year == 0, na.rm = TRUE) > 0
-  ) %>%
-  ungroup()
-
-message("\n--- Year + School Matching Results ---")
-message(
-  "Matched treated students: ",
-  sum(matched_data_year_school_filtered$treated_in_year == 1)
-)
-message(
-  "Matched control students: ",
-  sum(matched_data_year_school_filtered$treated_in_year == 0)
-)
-
-# =============================================================================
-# 4. COMPARE THE TWO APPROACHES
-# =============================================================================
-
-message("\n=== COMPARISON OF MATCHING APPROACHES ===\n")
-
-# Create comparison summary
-comparison_approaches <- tibble(
-  Approach = c("Year-Only", "Year + School"),
-  Treated = c(
-    sum(matched_data_year_filtered$treated_in_year == 1),
-    sum(matched_data_year_school_filtered$treated_in_year == 1)
-  ),
-  Control = c(
-    sum(matched_data_year_filtered$treated_in_year == 0),
-    sum(matched_data_year_school_filtered$treated_in_year == 0)
-  ),
-  Total = Treated + Control,
-  Retention_Pct = round(
-    100 * Treated / nrow(filter(merged_df_pa_covars, treated_in_year == 1)),
-    1
-  )
-)
-
-print(comparison_approaches)
 
 # =============================================================================
 # 5. SAVE BOTH MATCHED DATASETS
@@ -258,116 +211,30 @@ print(comparison_approaches)
 
 # Save Year-Only matched data (PRIMARY ANALYSIS)
 saveRDS(
-  matched_data_year_filtered,
+  matched_data_year,
   here("data", "matched_pa_students_year_only.rds")
 )
 
-write_csv(
-  matched_data_year_filtered,
-  here("data", "matched_pa_students_year_only.csv")
-)
-
 saveRDS(
-  m.out_year,
-  here("data", "matchit_object_year_only.rds")
+  matched_data_year_school,
+  here("data", "matched_pa_students_year_school")
 )
-
-message("\n=== Year-Only Matched Data Saved ===")
-message("File: data/matched_pa_students_year_only.rds")
-message("Total observations: ", nrow(matched_data_year_filtered))
-
-# Save Year + School matched data (ROBUSTNESS CHECK)
-saveRDS(
-  matched_data_year_school_filtered,
-  here("data", "matched_pa_students_year_school.rds")
-)
-
-write_csv(
-  matched_data_year_school_filtered,
-  here("data", "matched_pa_students_year_school.csv")
-)
-
-saveRDS(
-  m.out_year_school,
-  here("data", "matchit_object_year_school.rds")
-)
-
-message("\n=== Year + School Matched Data Saved ===")
-message("File: data/matched_pa_students_year_school.rds")
-message("Total observations: ", nrow(matched_data_year_school_filtered))
 
 # =============================================================================
-# 6. FINAL ASSESSMENT FOR BOTH APPROACHES
+# 7. CLEAN UP WORKSPACE
 # =============================================================================
 
-# Function to create assessment
-create_assessment <- function(matched_data, approach_name) {
-  cat("\n==============================================\n")
-  cat("ASSESSMENT:", approach_name, "\n")
-  cat("==============================================\n\n")
-
-  pre_match_treated <- merged_df_pa_covars |> filter(treated_in_year == 1)
-  matched_treated <- matched_data |> filter(treated_in_year == 1)
-
-  cat("Pre-matched treated students: ", nrow(pre_match_treated), "\n")
-  cat("Matched treated students:     ", nrow(matched_treated), "\n")
-  cat(
-    "Retention rate:               ",
-    round(100 * nrow(matched_treated) / nrow(pre_match_treated), 1),
-    "%\n\n"
-  )
-
-  # Characteristics
-  pre_stats <- pre_match_treated |>
-    summarise(
-      pct_stipend = mean(stipend == 1, na.rm = TRUE) * 100,
-      pct_racially_marg = mean(racially_marginalized == 1, na.rm = TRUE) * 100,
-      mean_gpa = mean(gpa, na.rm = TRUE),
-      mean_psat = mean(psat_math, na.rm = TRUE)
+rm(
+  list = setdiff(
+    ls(),
+    c(
+      "matched_data_year",
+      "matched_data_year_school",
+      "m.out_year",
+      "m.out_year_school"
     )
-
-  matched_stats <- matched_treated |>
-    summarise(
-      pct_stipend = mean(stipend == 1, na.rm = TRUE) * 100,
-      pct_racially_marg = mean(racially_marginalized == 1, na.rm = TRUE) * 100,
-      mean_gpa = mean(gpa, na.rm = TRUE),
-      mean_psat = mean(psat_math, na.rm = TRUE)
-    )
-
-  cat("Characteristics (Pre-matched → Matched):\n")
-  cat(
-    "  Stipend need:        ",
-    round(pre_stats$pct_stipend, 1),
-    "% → ",
-    round(matched_stats$pct_stipend, 1),
-    "%\n"
   )
-  cat(
-    "  Racially marginalized:",
-    round(pre_stats$pct_racially_marg, 1),
-    "% → ",
-    round(matched_stats$pct_racially_marg, 1),
-    "%\n"
-  )
-  cat(
-    "  Mean GPA:            ",
-    round(pre_stats$mean_gpa, 2),
-    " → ",
-    round(matched_stats$mean_gpa, 2),
-    "\n"
-  )
-  cat(
-    "  Mean PSAT:           ",
-    round(pre_stats$mean_psat, 0),
-    " → ",
-    round(matched_stats$mean_psat, 0),
-    "\n\n"
-  )
-}
-
-# Create assessments for both approaches
-create_assessment(matched_data_year_filtered, "YEAR-ONLY MATCHING")
-create_assessment(matched_data_year_school_filtered, "YEAR + SCHOOL MATCHING")
+)
 
 # =============================================================================
 # END OF SCRIPT
