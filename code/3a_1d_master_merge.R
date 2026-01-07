@@ -1,5 +1,5 @@
 # =============================================================================
-# Merge Applicants and Alumni (One Row per Student for College Enrollment Analysis)
+# Merge Applicants and Alumni
 # =============================================================================
 
 # --- Merge applicant and alumni data ---
@@ -7,20 +7,12 @@ merged_df <- applicants |>
   left_join(alum, by = c("first_name", "last_name", "gender")) |>
   mutate(
     across(
-      c(
-        "treated_2017",
-        "treated_2018",
-        "treated_2019",
-        "treated_2020",
-        "treated_2021",
-        "treated_2022",
-        "treated_2023"
-      ),
+      starts_with("treated_20"),
       ~ ifelse(is.na(.), 0L, as.integer(.))
     )
   )
 
-# --- Create a treated_in_year variable based on year columns ---
+# --- Create treated_in_year for the application year ---
 merged_df <- merged_df |>
   mutate(
     treated_in_year = case_when(
@@ -32,37 +24,29 @@ merged_df <- merged_df |>
       year == 2022 ~ treated_2022,
       year == 2023 ~ treated_2023,
       TRUE ~ NA_real_
-    )
-  )
-
-# --- Create a simplified ever-treated indicator ---
-merged_df <- merged_df |>
-  mutate(
+    ),
+    # Simplified ever-treated indicator
     treated_ever = if_else(
-      (treated_2017 +
-        treated_2018 +
-        treated_2019 +
-        treated_2020 +
-        treated_2021 +
-        treated_2022 +
-        treated_2023) >
-        0,
+      rowSums(pick(starts_with("treated_20")), na.rm = TRUE) > 0,
       1L,
       0L
-    )
+    ),
+    # Count how many years treated
+    years_treated = rowSums(pick(starts_with("treated_20")), na.rm = TRUE)
   )
 
-# --- Keep only the first (earliest) application per student ---
-merged_df <- merged_df |>
-  arrange(first_name, last_name, year) |>
-  group_by(first_name, last_name) |>
-  slice(1) |> # keep earliest appearance
-  ungroup()
-
-# --- Ensure treatment indicator persists for those who participated later ---
-merged_df <- merged_df |>
-  mutate(
-    treated_ever = if_else(is.na(treated_ever), 0L, treated_ever)
+# --- Verify the filtering ---
+merged_df |>
+  group_by(treated_ever, year) |>
+  summarise(
+    n = n(),
+    n_treated_in_year = sum(treated_in_year, na.rm = TRUE),
+    .groups = "drop"
+  ) |>
+  pivot_wider(
+    names_from = treated_ever,
+    values_from = c(n, n_treated_in_year),
+    names_glue = "{.value}_treated_ever_{treated_ever}"
   )
 
 # --- Clean up the environment ---

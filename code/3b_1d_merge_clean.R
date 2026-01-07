@@ -31,6 +31,13 @@ merged_clean <- merged_df |>
       TRUE ~ NA_integer_
     ),
 
+    # Fix 2023 reverse-coded first-gen
+    first_gen = if_else(
+      year == 2023 & !is.na(first_gen),
+      1L - first_gen, # Flip 0→1 and 1→0
+      first_gen
+    ),
+
     # --- Race / identity flags -----------------------------------------------
     racially_marginalized = case_when(
       str_detect(
@@ -99,7 +106,9 @@ merged_clean <- merged_clean |>
     last_name,
     year,
     hs_grad_year,
-    treated_ever:treated_in_year,
+    treated_ever,
+    treated_in_year,
+    years_treated,
     high_school,
     state,
     gender,
@@ -115,7 +124,8 @@ merged_clean <- merged_clean |>
     rural,
     disability,
     neg_school,
-    us_citizen
+    us_citizen,
+    first_gen
   )
 
 

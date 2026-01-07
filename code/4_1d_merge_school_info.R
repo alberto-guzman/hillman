@@ -34,6 +34,21 @@ crosswalk <- read_dta(here("data", "high_school_match.dta")) |>
   distinct(hs_name_clean, pa_state_name, .keep_all = TRUE) |>
   rename(pa_state_name_cw = pa_state_name)
 
+# --- Check for crosswalk duplicates
+crosswalk_dupes <- crosswalk |>
+  group_by(hs_name_clean) |>
+  filter(n() > 1) |>
+  arrange(hs_name_clean)
+
+if (nrow(crosswalk_dupes) > 0) {
+  warning(
+    "Crosswalk has ",
+    nrow(crosswalk_dupes),
+    " duplicate normalized school names"
+  )
+  print(crosswalk_dupes)
+}
+
 # --- Merge crosswalk onto base
 merged_df_pa <- merged_df_pa |>
   left_join(crosswalk, by = "hs_name_clean")
@@ -192,12 +207,63 @@ lagged_vars <- files |>
   dplyr::select(AUN, grad_year, higher_ed_enrollment_2yr)
 
 
-merged_df_pa_covars <- merged_df_pa %>%
+merged_df_pa_covars <- merged_df_pa |>
   mutate(
     aun = as.numeric(aun),
     year = as.integer(year)
-  ) %>%
+  ) |>
   left_join(lagged_vars, by = c("aun" = "AUN", "year" = "grad_year"))
+
+# =============================================================================
+# Validation Diagnostics
+# =============================================================================
+
+# How many PA schools total?
+n_pa_schools <- merged_df_pa |>
+  distinct(hs_name_clean) |>
+  nrow()
+
+# How many matched to crosswalk (got AUN)?
+n_with_aun <- merged_df_pa_covars |>
+  filter(!is.na(aun)) |>
+  distinct(hs_name_clean) |>
+  nrow()
+
+# How many got enrollment data?
+n_with_enrollment <- merged_df_pa_covars |>
+  filter(!is.na(higher_ed_enrollment_2yr)) |>
+  distinct(hs_name_clean) |>
+  nrow()
+
+message("\n=== School Merge Diagnostics ===")
+message("PA Schools: ", n_pa_schools)
+message(
+  "Matched to AUN: ",
+  n_with_aun,
+  " (",
+  round(100 * n_with_aun / n_pa_schools, 1),
+  "%)"
+)
+message(
+  "With enrollment data: ",
+  n_with_enrollment,
+  " (",
+  round(100 * n_with_enrollment / n_pa_schools, 1),
+  "%)"
+)
+
+# Check individual records
+message("\nRecords by enrollment data availability:")
+merged_df_pa_covars |>
+  mutate(has_enrollment = !is.na(higher_ed_enrollment_2yr)) |>
+  group_by(year, has_enrollment) |>
+  summarise(n = n(), .groups = "drop") |>
+  pivot_wider(
+    names_from = has_enrollment,
+    values_from = n,
+    names_prefix = "has_enrollment_"
+  ) |>
+  print()
 
 rm(list = setdiff(ls(), c("merged_df_pa", "merged_df_pa_covars")))
 
