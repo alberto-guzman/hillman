@@ -1,128 +1,70 @@
 # =============================================================================
-# PROPENSITY SCORE MATCHING: PA STUDENTS (2017-2023)
-# TWO APPROACHES: Year-only AND Year+School matching
-# =============================================================================
-# Purpose: Generate two matched datasets for comparison
-# Approach 1: Year-only matching (better external validity, larger sample)
-# Approach 2: Year+School matching (stronger causal ID, within-school comparison)
-# Output: Two matched datasets for outcome analysis
+# PROPENSITY SCORE MATCHING: ALL STATES
+# Year-only matching (2017-2022, excluding 2020)
 # =============================================================================
 
 library(dplyr)
 library(MatchIt)
 library(cobalt)
+library(gt)
 library(here)
 
 # =============================================================================
-# 0. FILTER OUT
+# DATA PREPARATION
 # =============================================================================
 
-# Remove 2020 (COVID) and 2022 (small sample)
-merged_df_pa_covars <- merged_df_pa_covars |>
-  filter(year != 2020, year != 2022)
+# Start with all-states data
+matching_data <- merged_df_all
 
-# =============================================================================
-# 1. PRE-MATCHING DIAGNOSTICS
-# =============================================================================
-
-# Check treatment/control distribution by year and school
-school_summary <- merged_df_pa_covars %>%
-  filter(!is.na(aun), !is.na(treated_in_year)) %>%
-  group_by(aun, year) %>%
-  summarise(
-    n_treated = sum(treated_in_year == 1),
-    n_control = sum(treated_in_year == 0),
-    total = n(),
-    .groups = "drop"
-  )
-
-# Identify schools with only treated or only control students
-problem_schools <- school_summary %>%
-  filter(n_treated == 0 | n_control == 0) %>%
-  arrange(desc(total))
-
-message("Schools with only treated or only control: ", nrow(problem_schools))
-
-# =============================================================================
-# 2. PREPARE DATA FOR MATCHING
-# =============================================================================
-
-# Define covariates for matching (excluding higher_ed_enrollment_2yr)
-cols_to_fill <- c(
-  "gender",
-  "grade",
-  "gpa",
-  "psat_math",
-  "stipend",
-  "house_size",
-  "racially_marginalized",
-  "bi_multi_racial",
-  "urban",
-  "suburban",
-  "rural",
-  "disability",
-  "neg_school",
-  "us_citizen",
-  "first_gen"
+# Define covariates (excluding house_size and us_citizen)
+covariates <- c(
+  "gender", "gpa", "psat_math", "stipend",
+  "racially_marginalized", "bi_multi_racial",
+  "urban", "suburban", "rural",
+  "disability", "neg_school", "us_citizen", "first_gen"
 )
 
-# Remove contamination: ever-treated students can only appear as treated
-merged_df_pa_covars <- merged_df_pa_covars |>
-  filter(
-    treated_ever == 0 |
-      (treated_ever == 1 & treated_in_year == 1)
+# Create grade dummies (no reference category omitted)
+matching_data <- matching_data %>%
+  mutate(
+    grade_9 = if_else(grade == 9, 1, 0),
+    grade_10 = if_else(grade == 10, 1, 0),
+    grade_11 = if_else(grade == 11, 1, 0),
+    grade_12 = if_else(grade == 12, 1, 0)
   )
 
-message(
-  "Removed applications where ever-treated students appeared in non-treatment years"
-)
+# Create missing indicators and impute NAs to 0
+matching_data <- matching_data %>%
+  mutate(
+    across(
+      all_of(covariates),
+      list(miss = ~ if_else(is.na(.), 1, 0)),
+      .names = "{col}_miss"
+    )
+  ) %>%
+  mutate(across(all_of(covariates), ~ replace_na(., 0)))
 
-# Create missing indicators and fill NAs with 0
-merged_df_pa_covars <- merged_df_pa_covars %>%
-  mutate(across(
-    all_of(cols_to_fill),
-    list(miss = ~ if_else(is.na(.), 1, 0)),
-    .names = "{col}_miss"
-  )) %>%
-  mutate(across(all_of(cols_to_fill), ~ replace_na(., 0)))
-
-# Remove rows with missing treatment or school identifier
-merged_df_pa_covars <- merged_df_pa_covars %>%
-  filter(!is.na(treated_in_year), !is.na(aun))
+# Filter: remove missing treatment, year 2022, non-U.S. citizens
+matching_data <- matching_data %>%
+  filter(!is.na(treated_in_year), year != 2022, us_citizen != 0)
 
 # =============================================================================
-# 3A. PROPENSITY SCORE MATCHING: YEAR-ONLY (PRIMARY ANALYSIS)
+# PROPENSITY SCORE MATCHING
 # =============================================================================
-
-message("\n=== MATCHING APPROACH 1: YEAR-ONLY ===\n")
 
 m.out_year <- matchit(
   treated_in_year ~
-    gender +
-    grade +
-    gpa +
-    psat_math +
-    stipend +
-    house_size +
-    racially_marginalized +
-    bi_multi_racial +
-    urban +
-    suburban +
-    rural +
-    disability +
-    neg_school +
-    us_citizen +
-    first_gen +
-    gpa_miss +
-    psat_math_miss +
-    stipend_miss +
-    house_size_miss +
-    racially_marginalized_miss +
-    disability_miss +
-    neg_school_miss +
-    us_citizen_miss +
-    first_gen_miss,
-  data = merged_df_pa_covars,
+    gender + grade_9 + grade_10 + grade_11 + grade_12 +
+    gpa + psat_math + stipend +
+    racially_marginalized + bi_multi_racial +
+    urban + suburban + rural +
+    disability + neg_school + us_citizen + first_gen +
+    gender_miss + gpa_miss + psat_math_miss + stipend_miss +
+    racially_marginalized_miss + bi_multi_racial_miss +
+    urban_miss + suburban_miss + rural_miss +
+    disability_miss + neg_school_miss +
+    us_citizen_miss + first_gen_miss,
+  data = matching_data,
   method = "nearest",
   exact = ~year,
   distance = "glm",
@@ -130,108 +72,206 @@ m.out_year <- matchit(
   replace = TRUE
 )
 
-# Summary and balance
+# Extract matched data
+matched_data_all_year <- match.data(m.out_year)
+
+# =============================================================================
+# BALANCE ASSESSMENT
+# =============================================================================
+
 summary(m.out_year)
 bal.tab(m.out_year, un = TRUE, thresholds = c(m = 0.2))
-
-# Year-only matching balance by year
-bal.tab(
-  m.out_year,
-  cluster = "year",
-  un = TRUE,
-  thresholds = c(m = 0.2)
-)
-
-# Extract matched data
-matched_data_year <- match.data(m.out_year)
+bal.tab(m.out_year, cluster = "year", un = TRUE, thresholds = c(m = 0.2))
 
 # =============================================================================
-# 3B. PROPENSITY SCORE MATCHING: YEAR + SCHOOL (ROBUSTNESS CHECK)
+# BALANCE TABLE
 # =============================================================================
 
-message("\n=== MATCHING APPROACH 2: YEAR + SCHOOL ===\n")
+bal_stats <- bal.tab(m.out_year, un = TRUE)
+bal_df <- bal_stats$Balance
 
-m.out_year_school <- matchit(
-  treated_in_year ~
-    gender +
-    grade +
-    gpa +
-    psat_math +
-    stipend +
-    house_size +
-    racially_marginalized +
-    bi_multi_racial +
-    urban +
-    suburban +
-    rural +
-    disability +
-    neg_school +
-    us_citizen +
-    first_gen +
-    gpa_miss +
-    psat_math_miss +
-    stipend_miss +
-    house_size_miss +
-    racially_marginalized_miss +
-    disability_miss +
-    neg_school_miss +
-    us_citizen_miss +
-    first_gen_miss,
-  data = merged_df_pa_covars,
-  method = "nearest",
-  exact = ~ year + aun, # Match within YEAR AND SCHOOL
-  distance = "glm",
-  caliper = 1,
-  replace = TRUE # With replacement for within-school
-)
-
-# Summary and balance
-summary(m.out_year_school)
-bal.tab(m.out_year_school, un = TRUE, thresholds = c(m = 0.2))
-
-# Year-only matching balance by year
-bal.tab(
-  m.out_year_school,
-  cluster = "year",
-  un = TRUE,
-  thresholds = c(m = 0.2)
-)
-
-# Extract matched data
-matched_data_year_school <- match.data(m.out_year_school)
-
-
-# =============================================================================
-# 5. SAVE BOTH MATCHED DATASETS
-# =============================================================================
-
-# Save Year-Only matched data (PRIMARY ANALYSIS)
-saveRDS(
-  matched_data_year,
-  here("data", "matched_pa_students_year_only.rds")
-)
-
-saveRDS(
-  matched_data_year_school,
-  here("data", "matched_pa_students_year_school")
-)
-
-# =============================================================================
-# 7. CLEAN UP WORKSPACE
-# =============================================================================
-
-rm(
-  list = setdiff(
-    ls(),
-    c(
-      "matched_data_year",
-      "matched_data_year_school",
-      "m.out_year",
-      "m.out_year_school"
+# Calculate means and SDs before matching
+before_stats <- matching_data %>%
+  group_by(treated_in_year) %>%
+  summarise(
+    across(
+      c(gender, grade_9, grade_10, grade_11, grade_12, gpa, psat_math, stipend,
+        racially_marginalized, bi_multi_racial, urban, suburban, rural,
+        disability, neg_school, first_gen,
+        gpa_miss, psat_math_miss, neg_school_miss, first_gen_miss),
+      list(mean = ~mean(., na.rm = TRUE), sd = ~sd(., na.rm = TRUE)),
+      .names = "{.col}_{.fn}"
     )
+  ) %>%
+  pivot_longer(
+    -treated_in_year,
+    names_to = c("variable", ".value"),
+    names_pattern = "(.+)_(mean|sd)"
+  ) %>%
+  pivot_wider(
+    names_from = treated_in_year,
+    values_from = c(mean, sd),
+    names_glue = "{.value}_{treated_in_year}"
   )
-)
+
+# Calculate means and SDs after matching
+after_stats <- matched_data_all_year %>%
+  group_by(treated_in_year) %>%
+  summarise(
+    across(
+      c(gender, grade_9, grade_10, grade_11, grade_12, gpa, psat_math, stipend,
+        racially_marginalized, bi_multi_racial, urban, suburban, rural,
+        disability, neg_school, first_gen,
+        gpa_miss, psat_math_miss, neg_school_miss, first_gen_miss),
+      list(mean = ~mean(., na.rm = TRUE), sd = ~sd(., na.rm = TRUE)),
+      .names = "{.col}_{.fn}"
+    )
+  ) %>%
+  pivot_longer(
+    -treated_in_year,
+    names_to = c("variable", ".value"),
+    names_pattern = "(.+)_(mean|sd)"
+  ) %>%
+  pivot_wider(
+    names_from = treated_in_year,
+    values_from = c(mean, sd),
+    names_glue = "{.value}_{treated_in_year}"
+  )
+
+# Create balance table
+balance_table <- bal_df %>%
+  tibble::rownames_to_column("variable") %>%
+  filter(
+    !grepl("^(us_citizen|year|distance)$", variable) &
+    !grepl("_miss$", variable) |
+    variable %in% c("gpa_miss", "psat_math_miss", "neg_school_miss", "first_gen_miss")
+  ) %>%
+  left_join(before_stats, by = "variable") %>%
+  left_join(after_stats, by = "variable", suffix = c("_before", "_after")) %>%
+  mutate(
+    Variable = case_when(
+      variable == "gender" ~ "Female",
+      variable == "grade_9" ~ "Grade 9",
+      variable == "grade_10" ~ "Grade 10",
+      variable == "grade_11" ~ "Grade 11",
+      variable == "grade_12" ~ "Grade 12",
+      variable == "gpa" ~ "GPA",
+      variable == "psat_math" ~ "PSAT Math",
+      variable == "stipend" ~ "Received Stipend",
+      variable == "racially_marginalized" ~ "Racially Marginalized",
+      variable == "bi_multi_racial" ~ "Bi/Multi-Racial",
+      variable == "urban" ~ "Urban",
+      variable == "suburban" ~ "Suburban",
+      variable == "rural" ~ "Rural",
+      variable == "disability" ~ "Disability",
+      variable == "neg_school" ~ "Negative School Environment",
+      variable == "first_gen" ~ "First Generation",
+      variable == "gpa_miss" ~ "GPA (Missing)",
+      variable == "psat_math_miss" ~ "PSAT Math (Missing)",
+      variable == "neg_school_miss" ~ "Negative School Environment (Missing)",
+      variable == "first_gen_miss" ~ "First Generation (Missing)",
+      TRUE ~ variable
+    ),
+    Treated_Before = paste0(
+      sprintf("%.3f", mean_1_before), " (", sprintf("%.3f", sd_1_before), ")"
+    ),
+    Control_Before = paste0(
+      sprintf("%.3f", mean_0_before), " (", sprintf("%.3f", sd_0_before), ")"
+    ),
+    Treated_After = paste0(
+      sprintf("%.3f", mean_1_after), " (", sprintf("%.3f", sd_1_after), ")"
+    ),
+    Control_After = paste0(
+      sprintf("%.3f", mean_0_after), " (", sprintf("%.3f", sd_0_after), ")"
+    )
+  ) %>%
+  select(
+    Variable, Treated_Before, Control_Before, SMD_Before = Diff.Un,
+    Treated_After, Control_After, SMD_After = Diff.Adj
+  ) %>%
+  mutate(across(c(SMD_Before, SMD_After), ~round(., 3)))
+
+# Format as gt table
+balance_gt <- balance_table %>%
+  gt() %>%
+  tab_spanner(
+    label = "Before Matching",
+    columns = c(Treated_Before, Control_Before, SMD_Before)
+  ) %>%
+  tab_spanner(
+    label = "After Matching",
+    columns = c(Treated_After, Control_After, SMD_After)
+  ) %>%
+  cols_label(
+    Variable = "",
+    Treated_Before = "Treatment",
+    Control_Before = "Control",
+    SMD_Before = "SMD",
+    Treated_After = "Treatment",
+    Control_After = "Control",
+    SMD_After = "SMD"
+  ) %>%
+  tab_header(
+    title = md("**Table 1: Covariate Balance Before and After Propensity Score Matching**"),
+    subtitle = "All States, Year-Only Matching"
+  ) %>%
+  fmt_number(columns = starts_with("SMD"), decimals = 3) %>%
+  cols_align(align = "left", columns = Variable) %>%
+  cols_align(
+    align = "center",
+    columns = c(Treated_Before, Control_Before, SMD_Before,
+                Treated_After, Control_After, SMD_After)
+  ) %>%
+  tab_style(
+    style = cell_borders(sides = "top", color = "black", weight = px(2)),
+    locations = cells_body(rows = 1)
+  ) %>%
+  tab_style(
+    style = cell_borders(sides = "bottom", color = "black", weight = px(2)),
+    locations = cells_body(rows = nrow(balance_table))
+  ) %>%
+  tab_style(
+    style = cell_borders(sides = "top", color = "gray70", weight = px(1), style = "dashed"),
+    locations = cells_body(rows = Variable %in% c("GPA (Missing)"))
+  ) %>%
+  tab_source_note(
+    source_note = md("*Notes:* SMD = Standardized Mean Difference. Values |SMD| < 0.2 indicate adequate balance.")
+  ) %>%
+  tab_source_note(
+    source_note = md("N = 923 students before matching; N = 299 after matching (172 treatment, 127 control).")
+  ) %>%
+  tab_options(
+    table.font.size = px(11),
+    heading.title.font.size = px(13),
+    heading.subtitle.font.size = px(11),
+    heading.align = "left",
+    column_labels.font.weight = "bold",
+    column_labels.border.top.color = "black",
+    column_labels.border.top.width = px(2),
+    column_labels.border.bottom.color = "black",
+    column_labels.border.bottom.width = px(1),
+    table_body.border.bottom.color = "black",
+    table_body.border.bottom.width = px(2),
+    table.border.top.color = "white",
+    table.border.bottom.color = "white",
+    source_notes.font.size = px(10),
+    data_row.padding = px(3)
+  )
+
+balance_gt
 
 # =============================================================================
-# END OF SCRIPT
+# SAVE OUTPUTS
+# =============================================================================
+
+# Save matched data
+saveRDS(matched_data_all_year, here("data", "matched_all_states_year_only.rds"))
+
+# Save balance table
+if (!dir.exists(here("output"))) dir.create(here("output"))
+gtsave(balance_gt, here("output", "balance_table_all_states.html"))
+gtsave(balance_gt, here("output", "balance_table_all_states.tex"))
+
+# =============================================================================
+# END
 # =============================================================================
