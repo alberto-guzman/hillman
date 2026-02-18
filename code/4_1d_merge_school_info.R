@@ -239,3 +239,10 @@ message("    - Non-PA students (AUN = NA): ", sum(is.na(merged_df_all$aun)))
 message("  merged_df_pa: ", nrow(merged_df_pa), " students (PA public schools only)")
 message("    - All have AUN and school covariates")
 message("    - Unique schools: ", n_distinct(merged_df_pa$aun))
+
+rm(
+  list = setdiff(
+    ls(),
+    c("merged_df_all", "merged_df_pa")
+  )
+)
