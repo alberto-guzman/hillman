@@ -145,9 +145,9 @@ outcomes <- read_dta(here(
 message("Loaded NSC outcome data: ", nrow(outcomes), " records")
 
 # Check for duplicates BEFORE removing them
-outcomes_dupes <- outcomes %>%
-  group_by(first_name, last_name, hs_grad_year) %>%
-  filter(n() > 1) %>%
+outcomes_dupes <- outcomes |>
+  group_by(first_name, last_name, hs_grad_year) |>
+  filter(n() > 1) |>
   ungroup()
 
 if (nrow(outcomes_dupes) > 0) {
@@ -160,8 +160,8 @@ if (nrow(outcomes_dupes) > 0) {
   )
 
   # Investigate duplicates - are they truly identical or different?
-  dupes_summary <- outcomes_dupes %>%
-    group_by(first_name, last_name, hs_grad_year) %>%
+  dupes_summary <- outcomes_dupes |>
+    group_by(first_name, last_name, hs_grad_year) |>
     summarise(
       n = n(),
       seamless_enroll_same = length(unique(seamless_enroll)) == 1,
@@ -178,9 +178,9 @@ if (nrow(outcomes_dupes) > 0) {
   )
 
   # Remove duplicates - keep first occurrence
-  outcomes <- outcomes %>%
-    group_by(first_name, last_name, hs_grad_year) %>%
-    slice(1) %>%
+  outcomes <- outcomes |>
+    group_by(first_name, last_name, hs_grad_year) |>
+    slice(1) |>
     ungroup()
 
   message("After de-duplication: ", nrow(outcomes), " unique outcome records")
@@ -198,7 +198,7 @@ merged_clean <- merged_clean |>
   )
 
 # Check merge statistics
-merge_stats <- merged_clean %>%
+merge_stats <- merged_clean |>
   summarise(
     n_total = n(),
     n_matched = sum(!is.na(seamless_enroll)),
@@ -225,8 +225,8 @@ message(
 )
 
 # Check match rates by treatment status
-match_by_treatment <- merged_clean %>%
-  group_by(treated_in_year) %>%
+match_by_treatment <- merged_clean |>
+  group_by(treated_in_year) |>
   summarise(
     n = n(),
     n_matched = sum(!is.na(seamless_enroll)),
@@ -238,7 +238,7 @@ print(match_by_treatment)
 
 # Code NSC non-matches as 0 for ENROLLMENT outcomes only
 # (other outcomes are conditional on enrollment and should remain NA)
-merged_clean <- merged_clean %>%
+merged_clean <- merged_clean |>
   mutate(across(
     c(
       seamless_enroll,
@@ -255,7 +255,7 @@ message("\n=== Filtering to graduation cohorts 2018-2022 ===\n")
 pre_filter_n <- nrow(merged_clean)
 
 # Calculate removal statistics BEFORE filtering
-removal_stats <- merged_clean %>%
+removal_stats <- merged_clean |>
   summarise(
     total = n(),
     missing_grad_year = sum(is.na(hs_grad_year)),
@@ -356,36 +356,36 @@ message(
 
 # Summary by application year
 message("\n=== Sample by Application Year ===")
-merged_clean %>%
-  group_by(year, treated_in_year) %>%
-  summarise(n = n(), .groups = "drop") %>%
+merged_clean |>
+  group_by(year, treated_in_year) |>
+  summarise(n = n(), .groups = "drop") |>
   pivot_wider(
     names_from = treated_in_year,
     values_from = n,
     names_prefix = "treated_",
     values_fill = 0
-  ) %>%
+  ) |>
   mutate(
     total = treated_0 + treated_1,
     pct_treated = round(100 * treated_1 / total, 1)
-  ) %>%
+  ) |>
   print()
 
 # Summary by graduation cohort
 message("\n=== Sample by Graduation Cohort ===")
-merged_clean %>%
-  group_by(hs_grad_year, treated_in_year) %>%
-  summarise(n = n(), .groups = "drop") %>%
+merged_clean |>
+  group_by(hs_grad_year, treated_in_year) |>
+  summarise(n = n(), .groups = "drop") |>
   pivot_wider(
     names_from = treated_in_year,
     values_from = n,
     names_prefix = "treated_",
     values_fill = 0
-  ) %>%
+  ) |>
   mutate(
     total = treated_0 + treated_1,
     pct_treated = round(100 * treated_1 / total, 1)
-  ) %>%
+  ) |>
   print()
 
 rm(
