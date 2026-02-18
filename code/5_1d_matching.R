@@ -1,4 +1,3 @@
-# =============================================================================
 # PROPENSITY SCORE MATCHING: ALL STATES
 # Year-only matching (2017-2022, excluding 2020)
 # =============================================================================
@@ -57,7 +56,12 @@ matching_data <- matching_data |>
 
 # Filter: remove missing treatment, year 2022, non-U.S. citizens
 matching_data <- matching_data |>
-  filter(!is.na(treated_in_year), year != 2022, us_citizen != 0)
+  filter(
+    !is.na(treated_in_year),
+    year != 2022,
+    us_citizen != 0,
+    treated_before_2017 == 0
+  )
 
 # =============================================================================
 # PROPENSITY SCORE MATCHING
@@ -190,7 +194,10 @@ after_stats <- matched_data_all_year |>
         neg_school_miss,
         first_gen_miss
       ),
-      list(mean = ~ mean(., na.rm = TRUE), sd = ~ sd(., na.rm = TRUE)),
+      list(
+        mean = ~ weighted.mean(., w = weights, na.rm = TRUE),
+        sd = ~ sd(., na.rm = TRUE)
+      ),
       .names = "{.col}_{.fn}"
     )
   ) |>
@@ -209,8 +216,8 @@ after_stats <- matched_data_all_year |>
 balance_table <- bal_df |>
   tibble::rownames_to_column("variable") |>
   filter(
-    !grepl("^(us_citizen|year|distance)$", variable) &
-      !grepl("_miss$", variable) |
+    (!grepl("^(us_citizen|year|distance)$", variable) &
+      !grepl("_miss$", variable)) |
       variable %in%
         c("gpa_miss", "psat_math_miss", "neg_school_miss", "first_gen_miss")
   ) |>
@@ -273,10 +280,10 @@ balance_table <- bal_df |>
     Treated_After,
     Control_After,
     SMD_After = Diff.Adj
-  ) |>
-  mutate(across(c(SMD_Before, SMD_After), ~ round(., 3)))
+  )
 
 # Format as gt table
+# ...existing code...
 balance_gt <- balance_table |>
   gt() |>
   tab_spanner(
@@ -334,7 +341,7 @@ balance_gt <- balance_table |>
   ) |>
   tab_source_note(
     source_note = md(
-      "*Notes:* SMD = Standardized Mean Difference. Values |SMD| < 0.2 indicate adequate balance."
+      "*Notes:* SMD = Standardized Mean Difference. Values |SMD| < 0.2 indicate adequate balance. Post-matching means are weighted by matching weights to account for matched units used more than once (matching with replacement)."
     )
   ) |>
   tab_source_note(
