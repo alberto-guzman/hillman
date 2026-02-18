@@ -1,86 +1,84 @@
-# =============================================================================
 # OUTCOME ANALYSIS: Treatment Effects Following MatchIt Best Practices
 # =============================================================================
-# Purpose: Estimate treatment effects using MatchIt recommended approaches
 # Reference: https://kosukeimai.github.io/MatchIt/articles/estimating-effects.html
-# Features: - Proper matching weights (accounts for replacement)
-#           - Cluster-robust SEs by matched pair (subclass)
-#           - G-computation for ATT with doubly robust estimation
-#           - Pooled and year-specific estimates in percentage points
+# Estimand: ATT via linear probability model on matched data
+# Model: lm() with matching weights
+# SE approach: cluster-robust by subclass (matched pair) via avg_slopes()
+#
+# Sample splits:
+#   - Enrollment outcomes: full matched sample (all cohorts)
+#   - Degree outcomes: restricted to students with non-NA outcome (i.e.,
+#     sufficient follow-up time to have completed a degree). NAs in the
+#     degree variables already encode censoring from the data build step.
 # =============================================================================
 
 library(dplyr)
-library(tidyr)
-library(ggplot2)
+library(purrr)
 library(marginaleffects)
 library(sandwich)
 library(lmtest)
-library(scales)
 library(here)
-library(broom)
-library(patchwork)
-library(modelsummary)
 
 # =============================================================================
-# 1. LOAD MATCHED DATASETS
+# 1. LOAD MATCHED DATASET
 # =============================================================================
 
-# Load year-only matched data (PRIMARY)
-matched_year <- readRDS(here("data", "matched_pa_students_year_only.rds"))
-
-message("Year-only matched data loaded: ", nrow(matched_year), " observations")
-message("  Treated: ", sum(matched_year$treated_in_year == 1))
-message("  Control: ", sum(matched_year$treated_in_year == 0))
-
-# Load year+school matched data (ROBUSTNESS)
-matched_year_school <- readRDS(here(
-  "data",
-  "matched_pa_students_year_school.rds"
-))
+matched <- readRDS(here("data", "matched_all_states_year_only.rds"))
 
 message(
-  "\nYear+school matched data loaded: ",
-  nrow(matched_year_school),
-  " observations"
+  "Matched data: ",
+  nrow(matched),
+  " obs | ",
+  sum(matched$treated_in_year == 1),
+  " treated / ",
+  sum(matched$treated_in_year == 0),
+  " control"
 )
-message("  Treated: ", sum(matched_year_school$treated_in_year == 1))
-message("  Control: ", sum(matched_year_school$treated_in_year == 0))
-
 
 # =============================================================================
 # 2. DEFINE OUTCOMES AND COVARIATES
 # =============================================================================
 
-# Outcomes to analyze
-outcomes <- c(
+# Enrollment outcomes: no censoring concern, run on full sample
+enrollment_outcomes <- c(
   "seamless_enroll",
   "seamless_enroll_stem",
   "enrolled_ever_nsc",
-  "enrolled_ever_stem",
-  "degree_ever_nsc",
-  "degree_ever_stem_nsc",
-  "bachdegree_6years_all_nsc"
+  "enrolled_ever_stem"
 )
 
-# Outcome labels
+# Degree outcomes: restricted to students with sufficient follow-up (non-NA)
+degree_outcomes <- c(
+  "degree_ever_nsc",
+  "degree_ever_stem_nsc"
+)
+
 outcome_labels <- c(
   seamless_enroll = "Seamless enrollment (any)",
   seamless_enroll_stem = "Seamless STEM enrollment",
   enrolled_ever_nsc = "Ever enrolled (any)",
   enrolled_ever_stem = "Ever enrolled STEM",
   degree_ever_nsc = "Ever earned degree (any)",
-  degree_ever_stem_nsc = "Ever earned STEM degree",
-  bachdegree_6years_all_nsc = "Bachelor's degree (6 years)"
+  degree_ever_stem_nsc = "Ever earned STEM degree"
 )
 
-# Covariates for doubly robust adjustment
+# Covariates for doubly robust adjustment.
+# Excluded:
+#   - house_size, us_citizen: excluded from PS model for consistency
+#   - first_gen: all zeros in matched data (constant)
+#   - first_gen_miss: all ones in matched data (constant)
+#   - All other _miss indicators that are all-zero in matched data:
+#     gender_miss, stipend_miss, racially_marginalized_miss,
+#     bi_multi_racial_miss, urban_miss, suburban_miss, rural_miss,
+#     disability_miss, us_citizen_miss
+# Retained _miss indicators with actual variation:
+#   gpa_miss, psat_math_miss, neg_school_miss
 covars <- c(
   "gender",
   "grade",
   "gpa",
   "psat_math",
   "stipend",
-  "house_size",
   "racially_marginalized",
   "bi_multi_racial",
   "urban",
@@ -88,77 +86,139 @@ covars <- c(
   "rural",
   "disability",
   "neg_school",
-  "us_citizen",
-  "first_gen"
+  "gpa_miss",
+  "psat_math_miss",
+  "neg_school_miss"
 )
 
-# Missing indicators
-miss_indicators <- paste0(covars, "_miss")
-
-# All predictors
-all_predictors <- c(covars, miss_indicators)
-
-# Pitt colors
-pitt_royal <- "#003594"
-pitt_gold <- "#FFB81C"
 
 # =============================================================================
-# 3. ESTIMATE POOLED ATT (ACROSS ALL YEARS) - SIMPLE LOOP
+# 3. HELPER: FIT LPM + EXTRACT ATT VIA avg_slopes()
 # =============================================================================
 
-message("\n=== Estimating Pooled Treatment Effects ===\n")
+# Linear probability model (lm) with matching weights.
+# MatchIt recommendation for 1:m matching with replacement:
+#   - Use weights from matched data
+#   - avg_slopes() with vcov = ~subclass gives cluster-robust SEs by matched
+#     pair and correctly targets the ATT for the treated subsample
 
-# Year-only matching results
-message("\n########## YEAR-ONLY MATCHING ##########\n")
-
-for (outcome_var in outcomes) {
-  message("\n========================================")
-  message("Outcome: ", outcome_var)
-  message("========================================\n")
-
-  # Build formula
+fit_att <- function(data, outcome_var, predictors) {
   formula_str <- paste0(
     outcome_var,
     " ~ treated_in_year + ",
-    paste(all_predictors, collapse = " + "),
-    " + factor(hs_grad_year)"
+    paste(predictors, collapse = " + "),
+    " + factor(year)" # cohort FE; matches exact = ~year from matchit
   )
 
-  # Fit GLM
-  fit <- glm(
+  fit <- lm(
     as.formula(formula_str),
-    data = matched_year,
-    weights = weights,
-    family = logit() # Use gaussian, not binomial
+    data = data,
+    weights = weights
   )
 
-  # Print summary
-  print(summary(fit))
+  # avg_slopes: ATT restricted to treated units, cluster-robust SE by subclass
+  treated_data <- subset(data, treated_in_year == 1)
 
-  # Calculate control and treatment means
-  control_mean <- mean(
-    matched_year[[outcome_var]][matched_year$treated_in_year == 0],
-    na.rm = TRUE
+  att <- avg_slopes(
+    fit,
+    variables = "treated_in_year",
+    vcov = sandwich::vcovCL(fit, cluster = data$subclass),
+    newdata = treated_data,
+    wts = "weights"
   )
-  treatment_mean <- mean(
-    matched_year[[outcome_var]][matched_year$treated_in_year == 1],
-    na.rm = TRUE
-  )
-  diff_means <- treatment_mean - control_mean
 
-  # Display results
-  message("\n--- Summary Statistics ---")
-  message(
-    "Control Mean:    ",
-    sprintf("%.3f (%.1f%%)", control_mean, control_mean * 100)
+  # Weighted means
+  wt_mean <- function(x, w) weighted.mean(x, w, na.rm = TRUE)
+
+  ctrl_mean <- wt_mean(
+    data[[outcome_var]][data$treated_in_year == 0],
+    data$weights[data$treated_in_year == 0]
   )
-  message(
-    "Treatment Mean:  ",
-    sprintf("%.3f (%.1f%%)", treatment_mean, treatment_mean * 100)
+  trt_mean <- wt_mean(
+    data[[outcome_var]][data$treated_in_year == 1],
+    data$weights[data$treated_in_year == 1]
   )
-  message(
-    "Difference:      ",
-    sprintf("%.3f (%.1f pp)", diff_means, diff_means * 100)
+
+  tibble(
+    outcome = outcome_var,
+    label = outcome_labels[outcome_var],
+    sample = "full",
+    n_obs = nrow(data),
+    n_treated = sum(data$treated_in_year == 1),
+    n_control = sum(data$treated_in_year == 0),
+    ctrl_mean = ctrl_mean,
+    trt_mean = trt_mean,
+    raw_diff_pp = (trt_mean - ctrl_mean) * 100,
+    att_pp = att$estimate * 100,
+    se_pp = att$std.error * 100,
+    pval = att$p.value,
+    conf_lo_pp = att$conf.low * 100,
+    conf_hi_pp = att$conf.high * 100
   )
-  message("\n")
 }
+
+# =============================================================================
+# 4. ATT ESTIMATES
+# =============================================================================
+
+# --- Enrollment: full matched sample -----------------------------------------
+message("\n--- Enrollment outcomes (full sample) ---")
+
+results_enrollment <- map(enrollment_outcomes, \(out) {
+  message("  Fitting: ", out)
+  fit_att(matched, out, covars)
+}) |>
+  list_rbind()
+
+# --- Degree: restrict to students with sufficient follow-up ------------------
+# NAs in degree variables encode censoring (not enough time to earn a degree).
+# We subset to non-NA for each outcome separately so each model uses as many
+# observations as possible.
+message("\n--- Degree outcomes (non-censored subsample) ---")
+
+results_degree <- map(degree_outcomes, \(out) {
+  message("  Fitting: ", out)
+  data_sub <- matched |> filter(!is.na(.data[[out]]))
+  message(
+    "    Sample after removing censored: ",
+    nrow(data_sub),
+    " obs (",
+    sum(data_sub$treated_in_year == 1),
+    " treated / ",
+    sum(data_sub$treated_in_year == 0),
+    " control)"
+  )
+  fit_att(data_sub, out, covars) |>
+    mutate(sample = "degree_eligible")
+}) |>
+  list_rbind()
+
+# --- Combine -----------------------------------------------------------------
+results <- bind_rows(results_enrollment, results_degree)
+
+# =============================================================================
+# 5. INSPECT RESULTS
+# =============================================================================
+
+results |>
+  select(
+    label,
+    sample,
+    n_treated,
+    n_control,
+    ctrl_mean,
+    trt_mean,
+    att_pp,
+    se_pp,
+    pval
+  )
+
+# =============================================================================
+# 6. SAVE
+# =============================================================================
+
+if (!dir.exists(here("output"))) {
+  dir.create(here("output"))
+}
+
+saveRDS(results, here("output", "att_results_all_states_year_only.rds"))
