@@ -12,8 +12,7 @@
 #     degree variables already encode censoring from the data build step.
 # =============================================================================
 
-library(dplyr)
-library(purrr)
+library(tidyverse)
 library(marginaleffects)
 library(sandwich)
 library(lmtest)
@@ -164,10 +163,11 @@ fit_att <- function(data, outcome_var, predictors) {
 # --- Enrollment: full matched sample -----------------------------------------
 message("\n--- Enrollment outcomes (full sample) ---")
 
-results_enrollment <- map(enrollment_outcomes, \(out) {
-  message("  Fitting: ", out)
-  fit_att(matched, out, covars)
-}) |>
+results_enrollment <- enrollment_outcomes |>
+  map(\(out) {
+    message("  Fitting: ", out)
+    fit_att(matched, out, covars)
+  }) |>
   list_rbind()
 
 # --- Degree: restrict to students with sufficient follow-up ------------------
@@ -176,21 +176,22 @@ results_enrollment <- map(enrollment_outcomes, \(out) {
 # observations as possible.
 message("\n--- Degree outcomes (non-censored subsample) ---")
 
-results_degree <- map(degree_outcomes, \(out) {
-  message("  Fitting: ", out)
-  data_sub <- matched |> filter(!is.na(.data[[out]]))
-  message(
-    "    Sample after removing censored: ",
-    nrow(data_sub),
-    " obs (",
-    sum(data_sub$treated_in_year == 1),
-    " treated / ",
-    sum(data_sub$treated_in_year == 0),
-    " control)"
-  )
-  fit_att(data_sub, out, covars) |>
-    mutate(sample = "degree_eligible")
-}) |>
+results_degree <- degree_outcomes |>
+  map(\(out) {
+    message("  Fitting: ", out)
+    data_sub <- matched |> filter(!is.na(.data[[out]]))
+    message(
+      "    Sample after removing censored: ",
+      nrow(data_sub),
+      " obs (",
+      sum(data_sub$treated_in_year == 1),
+      " treated / ",
+      sum(data_sub$treated_in_year == 0),
+      " control)"
+    )
+    fit_att(data_sub, out, covars) |>
+      mutate(sample = "degree_eligible")
+  }) |>
   list_rbind()
 
 # --- Combine -----------------------------------------------------------------

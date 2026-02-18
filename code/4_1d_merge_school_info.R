@@ -2,6 +2,12 @@
 # Merge School Info - Add normalized school names and AUN
 # =============================================================================
 
+library(tidyverse)
+library(haven)
+library(here)
+library(readxl)
+library(janitor)
+
 # --- School name normalizer
 normalize_hs <- function(x) {
   x |>

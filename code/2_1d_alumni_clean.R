@@ -2,10 +2,14 @@
 # Hillman Summer Alumni
 # =============================================================================
 
+# Load packages
+library(tidyverse)
+library(here)
+
 # Load data
-alum <- readr::read_csv(
-  here::here("data", "Alumni Tracker (Updated 9.13.2023 - SJ) with Charts.csv"),
-  col_types = readr::cols(...7 = readr::col_skip())
+alum <- read_csv(
+  here("data", "Alumni Tracker (Updated 9.13.2023 - SJ) with Charts.csv"),
+  col_types = cols(...7 = col_skip())
 )
 
 # Clean names
