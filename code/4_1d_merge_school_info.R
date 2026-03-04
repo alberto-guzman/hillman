@@ -1,8 +1,23 @@
 # =============================================================================
-# Merge School Info - Add normalized school names and AUN
+# 4_1d_merge_school_info.R
+#
+# Purpose: Normalize high school names, link students to PA school AUN codes
+#          via a name crosswalk, and merge school-level covariates for the
+#          PA public school subsample.
+#
+# Input:   `merged_clean` — analysis-ready student data (from script 3b)
+#          data/high_school_match.dta — HS name → AUN crosswalk
+#          data/SchoolFastFacts_20242025.xlsx — PA school-level covariates
+# Output:  `merged_df_all` — all-states dataset with normalized school names
+#                             and AUN where matched
+#          `merged_df_pa`  — PA public school students with school covariates
+#          data/merged_all_states.csv
+#          data/merged_df_pa_public.csv
 # =============================================================================
 
-# --- School name normalizer
+# --- School name normalizer --------------------------------------------------
+# Strips punctuation, lowercases, and standardizes common suffixes
+# (e.g. "High School" → "hs") to improve fuzzy matching with the crosswalk.
 normalize_hs <- function(x) {
   x |>
     stringr::str_to_lower() |>
@@ -18,8 +33,10 @@ normalize_hs <- function(x) {
 }
 
 # =============================================================================
-# Create OVERALL file (all states) with normalized school names
+# BUILD ALL-STATES DATASET
 # =============================================================================
+# Apply name normalization to the full dataset. Non-PA students will receive
+# NA for AUN after the crosswalk merge below.
 
 message("\n=== Creating Overall Dataset (All States) ===\n")
 
@@ -35,19 +52,19 @@ message(
   n_distinct(merged_df_all$hs_name_clean, na.rm = TRUE)
 )
 
-# State distribution
 message("\nStudents by state:")
 merged_df_all |>
   count(state, sort = TRUE) |>
   print(n = 20)
 
 # =============================================================================
-# Load crosswalk and merge with ALL students
+# MERGE SCHOOL → AUN CROSSWALK
 # =============================================================================
+# Join the HS name crosswalk to add AUN codes. Duplicate crosswalk entries
+# are resolved (one known manual fix for Pine Richland HS).
 
 message("\n=== Loading Crosswalk and Adding AUN ===\n")
 
-# Load crosswalk
 crosswalk <- read_dta(here("data", "high_school_match.dta")) |>
   mutate(hs_name_clean = normalize_hs(hs_name_clean)) |>
   select(hs_name_clean, pa_state_name, aun) |>
@@ -56,13 +73,11 @@ crosswalk <- read_dta(here("data", "high_school_match.dta")) |>
 
 message("Crosswalk loaded: ", nrow(crosswalk), " schools")
 
-# Remove the Richland HS duplicate
 crosswalk <- crosswalk |>
   filter(
     !(hs_name_clean == "pine richland hs" & pa_state_name_cw == "Richland HS")
   )
 
-# Check for crosswalk duplicates
 crosswalk_dupes <- crosswalk |>
   group_by(hs_name_clean) |>
   filter(n() > 1) |>
@@ -79,8 +94,6 @@ if (nrow(crosswalk_dupes) > 0) {
   message("No duplicate school names in crosswalk")
 }
 
-# Merge crosswalk onto ALL students (not just PA)
-# Non-PA students will have NA for aun (which is correct)
 merged_df_all <- merged_df_all |>
   left_join(crosswalk, by = "hs_name_clean")
 
@@ -89,12 +102,14 @@ message("  Students with AUN: ", sum(!is.na(merged_df_all$aun)))
 message("  Students without AUN: ", sum(is.na(merged_df_all$aun)))
 
 # =============================================================================
-# Create PA-only file (now already has AUN from merged_df_all)
+# BUILD PA PUBLIC SCHOOL DATASET
 # =============================================================================
+# Filter to PA students, then merge PA school-level covariates from the
+# School Fast Facts file. Retain only students matched to a public school
+# (i.e., with a valid AUN and non-missing enrollment data).
 
 message("\n=== Creating PA-Only Dataset ===\n")
 
-# Filter to PA schools
 merged_df_pa <- merged_df_all |>
   filter(state %in% c("pa", "pennsylvania"))
 
@@ -104,13 +119,9 @@ message(
   n_distinct(merged_df_pa$hs_name_clean, na.rm = TRUE)
 )
 
-# =============================================================================
-# Merge PA School Level Vars
-# =============================================================================
-
+# --- Load PA school-level covariates -----------------------------------------
 message("\n=== Loading and Merging School-Level Data ===\n")
 
-# Load school-level data
 school_facts <- readxl::read_excel(
   "/Users/albertoguzman-alvarez/Projects/inProgress/2020_hillman/data/SchoolFastFacts_20242025.xlsx"
 ) |>
@@ -127,37 +138,36 @@ school_facts <- readxl::read_excel(
     school_pct_special_ed = special_education,
     school_pct_white = white
   ) |>
-  # De-duplicate: keep only first row per AUN
   group_by(aun) |>
   slice(1) |>
   ungroup()
 
-message("School Fast Facts loaded and de-duplicated: ", 
-        nrow(school_facts), " unique schools")
+message(
+  "School Fast Facts loaded and de-duplicated: ",
+  nrow(school_facts),
+  " unique schools"
+)
 
-# Merge school facts onto PA students and filter to public schools only
 merged_df_pa <- merged_df_pa |>
   left_join(school_facts, by = "aun") |>
-  filter(!is.na(aun)) |>  # Keep only students with AUN
-  filter(!is.na(school_enrollment))  # Keep only public schools with school data
+  filter(!is.na(aun)) |>
+  filter(!is.na(school_enrollment))
 
-message("\nPA public school students with school covariates: ", nrow(merged_df_pa))
+message(
+  "\nPA public school students with school covariates: ",
+  nrow(merged_df_pa)
+)
 message("  Treated: ", sum(merged_df_pa$treated_in_year == 1))
 message("  Control: ", sum(merged_df_pa$treated_in_year == 0))
 message("  Unique schools: ", n_distinct(merged_df_pa$aun))
 
 # =============================================================================
-# Validation Diagnostics
+# VALIDATION DIAGNOSTICS
 # =============================================================================
 
 message("\n=== PA School Merge Diagnostics ===")
 
-# How many PA schools total?
-n_pa_schools <- merged_df_pa |>
-  distinct(hs_name_clean) |>
-  nrow()
-
-# How many matched to crosswalk (got AUN)?
+n_pa_schools <- merged_df_pa |> distinct(hs_name_clean) |> nrow()
 n_with_aun <- merged_df_pa |>
   filter(!is.na(aun)) |>
   distinct(hs_name_clean) |>
@@ -172,12 +182,13 @@ message(
   "%)"
 )
 
-# Check student-level matches
 message("\nStudent-level match (public schools only):")
 message("  All students have AUN: ", sum(!is.na(merged_df_pa$aun)))
-message("  All students have school data: ", sum(!is.na(merged_df_pa$school_enrollment)))
+message(
+  "  All students have school data: ",
+  sum(!is.na(merged_df_pa$school_enrollment))
+)
 
-# By year
 message("\nPA public school students by application year:")
 merged_df_pa |>
   group_by(year) |>
@@ -189,13 +200,18 @@ merged_df_pa |>
   ) |>
   print()
 
-# School characteristics summary
 message("\nSchool characteristics (averages):")
 merged_df_pa |>
   summarise(
     avg_enrollment = round(mean(school_enrollment, na.rm = TRUE)),
-    avg_pct_econ_disadv = round(mean(school_pct_econ_disadvantaged, na.rm = TRUE), 1),
-    avg_pct_english_learner = round(mean(school_pct_english_learner, na.rm = TRUE), 1),
+    avg_pct_econ_disadv = round(
+      mean(school_pct_econ_disadvantaged, na.rm = TRUE),
+      1
+    ),
+    avg_pct_english_learner = round(
+      mean(school_pct_english_learner, na.rm = TRUE),
+      1
+    ),
     avg_pct_special_ed = round(mean(school_pct_special_ed, na.rm = TRUE), 1),
     avg_pct_white = round(mean(school_pct_white, na.rm = TRUE), 1),
     n_title_i = sum(school_title_i == "Yes", na.rm = TRUE)
@@ -203,12 +219,11 @@ merged_df_pa |>
   glimpse()
 
 # =============================================================================
-# Save datasets
+# SAVE OUTPUTS
 # =============================================================================
 
 message("\n=== Saving Datasets ===\n")
 
-# Save overall file (all states) - includes aun
 write_csv(merged_df_all, here("data", "merged_all_states.csv"))
 message(
   "Saved: data/merged_all_states.csv (",
@@ -216,14 +231,20 @@ message(
   " students)"
 )
 
-# Save PA public schools file (with school covariates)
 write_csv(merged_df_pa, here("data", "merged_df_pa_public.csv"))
-message("Saved: data/merged_df_pa_public.csv (", 
-        nrow(merged_df_pa), 
-        " students - public schools only)")
+message(
+  "Saved: data/merged_df_pa_public.csv (",
+  nrow(merged_df_pa),
+  " students - public schools only)"
+)
 
-# Clean up
-rm(list = setdiff(ls(), c("merged_df_all", "merged_df_pa", "crosswalk", "school_facts")))
+# --- Final summary and clean up ----------------------------------------------
+rm(
+  list = setdiff(
+    ls(),
+    c("merged_df_all", "merged_df_pa", "crosswalk", "school_facts")
+  )
+)
 
 message("\n=== School Merge Complete ===")
 message("Final datasets in memory:")
@@ -236,7 +257,11 @@ message(
   )
 )
 message("    - Non-PA students (AUN = NA): ", sum(is.na(merged_df_all$aun)))
-message("  merged_df_pa: ", nrow(merged_df_pa), " students (PA public schools only)")
+message(
+  "  merged_df_pa: ",
+  nrow(merged_df_pa),
+  " students (PA public schools only)"
+)
 message("    - All have AUN and school covariates")
 message("    - Unique schools: ", n_distinct(merged_df_pa$aun))
 

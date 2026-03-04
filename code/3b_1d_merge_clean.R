@@ -1,16 +1,34 @@
 # =============================================================================
-# Standardized variables
+# 3b_1d_merge_clean.R
+#
+# Purpose: Standardize covariates in the merged applicant/alumni dataset,
+#          merge NSC college outcome data, and restrict to the analytic sample
+#          (graduation cohorts 2018–2022).
+#
+# Input:   `merged_df` — one row per student (from script 3a)
+#          data/files_for_danielle_nsc/clean_Hillman_2017_2025.dta — NSC data
+# Output:  `merged_clean` — analysis-ready dataset with standardized
+#          covariates and NSC outcomes attached
 # =============================================================================
+
+# =============================================================================
+# STANDARDIZE COVARIATES
+# =============================================================================
+# Recode raw applicant fields to consistent numeric indicators:
+#   - GPA / PSAT: convert 0s to NA (already cleaned, double-check)
+#   - Stipend, first-gen, US citizenship, disability, negative school
+#     environment: free-text → 0/1
+#   - Race: derive racially_marginalized and bi_multi_racial flags from
+#     self_identity string
+#   - Geography: derive urban/suburban/rural flags from geographic_location
+#   - Note: 2023 first-gen responses were reverse-coded in the source data
+#     and are flipped here.
 
 merged_clean <- merged_df |>
   mutate(
-    # --- GPA: convert any remaining 0s to NA (already standardized in applicants)
     gpa = na_if(gpa, 0),
-
-    # --- PSAT Math: convert any remaining 0s to NA (already cleaned)
     psat_math = na_if(psat_math, 0),
 
-    # --- Stipend: yes/no → 1/0
     stipend = case_when(
       str_detect(
         stipend,
@@ -20,11 +38,9 @@ merged_clean <- merged_df |>
       TRUE ~ 0L
     ),
 
-    # --- Household size: already cleaned, but double-check range
     house_size = suppressWarnings(as.integer(house_size)),
     house_size = if_else(between(house_size, 1L, 11L), house_size, NA_integer_),
 
-    # --- First-gen: yes/no → 1/0
     first_gen = case_when(
       str_detect(tolower(as.character(first_gen)), "yes|1|true") ~ 1L,
       str_detect(tolower(as.character(first_gen)), "no|0|false") ~ 0L,
@@ -34,11 +50,10 @@ merged_clean <- merged_df |>
     # Fix 2023 reverse-coded first-gen
     first_gen = if_else(
       year == 2023 & !is.na(first_gen),
-      1L - first_gen, # Flip 0→1 and 1→0
+      1L - first_gen,
       first_gen
     ),
 
-    # --- Race / identity flags -----------------------------------------------
     racially_marginalized = case_when(
       str_detect(
         tolower(self_identity),
@@ -54,7 +69,6 @@ merged_clean <- merged_df |>
       TRUE ~ 0L
     ),
 
-    # --- Geography flags ------------------------------------------------------
     urban = if_else(
       str_detect(tolower(geographic_location), "urban"),
       1L,
@@ -74,25 +88,21 @@ merged_clean <- merged_df |>
       missing = NA_integer_
     ),
 
-    # --- Disability: yes/no → 1/0
     disability = case_when(
       str_detect(
         documented_disability,
         regex("^\\s*no\\b", ignore_case = TRUE)
-      ) ~
-        0L,
+      ) ~ 0L,
       !is.na(documented_disability) ~ 1L,
       TRUE ~ NA_integer_
     ),
 
-    # --- Negative school environment flag
     neg_school = case_when(
       str_detect(school_impact, regex("^\\s*no\\b", ignore_case = TRUE)) ~ 0L,
       !is.na(school_impact) ~ 1L,
       TRUE ~ NA_integer_
     ),
 
-    # --- Citizenship: yes/no → 1/0
     us_citizen = case_when(
       str_detect(tolower(as.character(american_citizen)), "yes|1|true") ~ 1L,
       str_detect(tolower(as.character(american_citizen)), "no|0|false") ~ 0L,
@@ -103,10 +113,14 @@ merged_clean <- merged_df |>
 # =============================================================================
 # MERGE NSC OUTCOME DATA
 # =============================================================================
+# Load the NSC file, de-duplicate on (first_name, last_name, hs_grad_year),
+# then left-join onto the cleaned applicant data.
+# Enrollment outcomes (seamless_enroll, enrolled_ever_*) are coded 0 for
+# non-matches; degree/persistence outcomes remain NA for non-matched students
+# because they are conditional on enrollment.
 
 library(haven)
 
-# Load NSC outcome data
 outcomes <- read_dta(here(
   "data/files_for_danielle_nsc",
   "clean_Hillman_2017_2025.dta"
@@ -144,7 +158,7 @@ outcomes <- read_dta(here(
 
 message("Loaded NSC outcome data: ", nrow(outcomes), " records")
 
-# Check for duplicates BEFORE removing them
+# De-duplicate NSC records
 outcomes_dupes <- outcomes |>
   group_by(first_name, last_name, hs_grad_year) |>
   filter(n() > 1) |>
@@ -159,7 +173,6 @@ if (nrow(outcomes_dupes) > 0) {
     "%)"
   )
 
-  # Investigate duplicates - are they truly identical or different?
   dupes_summary <- outcomes_dupes |>
     group_by(first_name, last_name, hs_grad_year) |>
     summarise(
@@ -177,7 +190,6 @@ if (nrow(outcomes_dupes) > 0) {
     sum(!dupes_summary$seamless_enroll_same)
   )
 
-  # Remove duplicates - keep first occurrence
   outcomes <- outcomes |>
     group_by(first_name, last_name, hs_grad_year) |>
     slice(1) |>
@@ -188,16 +200,12 @@ if (nrow(outcomes_dupes) > 0) {
   message("No duplicate outcome records found")
 }
 
-# Merge outcomes with cleaned data
 message("\n=== Merging NSC outcomes with applicant data ===\n")
 
 merged_clean <- merged_clean |>
-  left_join(
-    outcomes,
-    by = c("first_name", "last_name", "hs_grad_year")
-  )
+  left_join(outcomes, by = c("first_name", "last_name", "hs_grad_year"))
 
-# Check merge statistics
+# Merge diagnostics
 merge_stats <- merged_clean |>
   summarise(
     n_total = n(),
@@ -236,8 +244,7 @@ match_by_treatment <- merged_clean |>
 message("\nMatch rates by treatment status:")
 print(match_by_treatment)
 
-# Code NSC non-matches as 0 for ENROLLMENT outcomes only
-# (other outcomes are conditional on enrollment and should remain NA)
+# Code NSC non-matches as 0 for enrollment outcomes only
 merged_clean <- merged_clean |>
   mutate(across(
     c(
@@ -249,7 +256,13 @@ merged_clean <- merged_clean |>
     ~ if_else(is.na(.), 0, .)
   ))
 
-# Filter to keep cohorts 2018-2022 with valid data
+# =============================================================================
+# FILTER TO ANALYTIC SAMPLE (graduation cohorts 2018–2022)
+# =============================================================================
+# Restrict to students with valid hs_grad_year (2018–2022), valid grade
+# (9–12), and non-missing graduation year. Earlier cohorts have incomplete
+# NSC follow-up; later cohorts are too recent for 6-year degree outcomes.
+
 message("\n=== Filtering to graduation cohorts 2018-2022 ===\n")
 
 pre_filter_n <- nrow(merged_clean)
@@ -290,7 +303,10 @@ message("  Invalid grade (not 9-12): ", removal_stats$invalid_grade)
 message("  hs_grad_year outside 2018-2022: ", removal_stats$outside_range)
 message("Remaining: ", post_filter_n, " observations")
 
-# Select final variables (including outcomes)
+# =============================================================================
+# SELECT FINAL VARIABLE SET
+# =============================================================================
+
 merged_clean <- merged_clean |>
   select(
     first_name,
@@ -319,17 +335,17 @@ merged_clean <- merged_clean |>
     neg_school,
     us_citizen,
     first_gen,
-    # NSC outcomes - enrollment
+    # NSC enrollment outcomes (non-matches coded 0)
     seamless_enroll,
     seamless_enroll_stem,
     enrolled_ever_nsc,
     enrolled_ever_stem,
-    # NSC outcomes - degrees (conditional on enrollment)
+    # NSC degree outcomes (conditional on enrollment — NAs = censored)
     degree_ever_nsc,
     degree_ever_stem_nsc,
     degree_6years_all_nsc,
     bachdegree_6years_all_nsc,
-    # Additional NSC outcomes (conditional on enrollment)
+    # NSC retention / persistence outcomes
     reten_fall_enter,
     reten_fall_enter_stem,
     reten_fall_enter2,
@@ -344,7 +360,7 @@ merged_clean <- merged_clean |>
     firsttime_fulltime
   )
 
-# Final summary
+# --- Final diagnostics -------------------------------------------------------
 message("\n=== Cleaning Complete ===")
 message("Dataset includes ", nrow(merged_clean), " students")
 message("  Treated: ", sum(merged_clean$treated_in_year == 1))
@@ -354,7 +370,6 @@ message(
   paste(sort(unique(merged_clean$hs_grad_year)), collapse = ", ")
 )
 
-# Summary by application year
 message("\n=== Sample by Application Year ===")
 merged_clean |>
   group_by(year, treated_in_year) |>
@@ -371,7 +386,6 @@ merged_clean |>
   ) |>
   print()
 
-# Summary by graduation cohort
 message("\n=== Sample by Graduation Cohort ===")
 merged_clean |>
   group_by(hs_grad_year, treated_in_year) |>

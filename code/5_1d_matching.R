@@ -1,5 +1,17 @@
-# PROPENSITY SCORE MATCHING: ALL STATES
-# Year-only matching (2017-2022, excluding 2020)
+# =============================================================================
+# 5_1d_matching.R
+#
+# Purpose: Propensity score matching (PSM) on the all-states sample.
+#          Estimates the ATT by matching treated students to controls with
+#          similar pre-treatment characteristics, exact matching on year.
+#
+# Method:  Nearest-neighbor matching with replacement (caliper = 0.5 SD),
+#          logistic propensity score, exact match on application year.
+#          Missing covariates are mean-imputed; missing indicators are added.
+#
+# Input:   `merged_df_all` — all-states cleaned dataset (from script 4)
+# Output:  data/matched_all_states_year_only.rds — matched dataset with weights
+#          output/balance_table_all_states.html/.tex — covariate balance table
 # =============================================================================
 
 library(dplyr)
@@ -11,13 +23,15 @@ library(marginaleffects)
 library(purrr)
 
 # =============================================================================
-# DATA PREPARATION
+# 1. DATA PREPARATION
 # =============================================================================
+# Start from the all-states dataset. Create grade dummies, add missing
+# indicators for each covariate, and impute NAs to 0.
+# Exclusions: year 2022 (insufficient follow-up), non-citizens,
+# students treated before 2017 (would confound the control group).
 
-# Start with all-states data
 matching_data <- merged_df_all
 
-# Define covariates (excluding house_size and us_citizen)
 covariates <- c(
   "gender",
   "gpa",
@@ -34,7 +48,6 @@ covariates <- c(
   "first_gen"
 )
 
-# Create grade dummies (no reference category omitted)
 matching_data <- matching_data |>
   mutate(
     grade_9 = if_else(grade == 9, 1, 0),
@@ -43,7 +56,6 @@ matching_data <- matching_data |>
     grade_12 = if_else(grade == 12, 1, 0)
   )
 
-# Create missing indicators and impute NAs to 0
 matching_data <- matching_data |>
   mutate(
     across(
@@ -54,7 +66,6 @@ matching_data <- matching_data |>
   ) |>
   mutate(across(all_of(covariates), ~ replace_na(., 0)))
 
-# Filter: remove missing treatment, year 2022, non-U.S. citizens
 matching_data <- matching_data |>
   filter(
     !is.na(treated_in_year),
@@ -64,8 +75,11 @@ matching_data <- matching_data |>
   )
 
 # =============================================================================
-# PROPENSITY SCORE MATCHING
+# 2. PROPENSITY SCORE MATCHING
 # =============================================================================
+# Nearest-neighbor 1:m matching with replacement. Exact match on year
+# ensures within-cohort comparisons. Caliper of 0.5 SD on the logit
+# of the propensity score prevents poor matches.
 
 m.out_year <- matchit(
   treated_in_year ~
@@ -108,24 +122,27 @@ m.out_year <- matchit(
 )
 
 # =============================================================================
-# BALANCE ASSESSMENT
+# 3. BALANCE ASSESSMENT
 # =============================================================================
+# Inspect overall and within-year balance. The cobalt bal.tab() output
+# shows standardized mean differences (SMD) before and after matching.
 
 summary(m.out_year)
 bal.tab(m.out_year, un = TRUE, thresholds = c(m = 0.2))
 bal.tab(m.out_year, cluster = "year", un = TRUE, thresholds = c(m = 0.2))
 
-# Extract matched data
 matched_data_all_year <- match.data(m.out_year)
 
 # =============================================================================
-# BALANCE TABLE
+# 4. BALANCE TABLE (gt)
 # =============================================================================
+# Compute weighted means and SDs before and after matching for each covariate,
+# then format as a publication-ready gt table with SMD columns.
 
 bal_stats <- bal.tab(m.out_year, un = TRUE)
 bal_df <- bal_stats$Balance
 
-# Calculate means and SDs before matching
+# Means and SDs before matching
 before_stats <- matching_data |>
   group_by(treated_in_year) |>
   summarise(
@@ -167,7 +184,7 @@ before_stats <- matching_data |>
     names_glue = "{.value}_{treated_in_year}"
   )
 
-# Calculate means and SDs after matching
+# Weighted means and SDs after matching
 after_stats <- matched_data_all_year |>
   group_by(treated_in_year) |>
   summarise(
@@ -212,7 +229,7 @@ after_stats <- matched_data_all_year |>
     names_glue = "{.value}_{treated_in_year}"
   )
 
-# Create balance table
+# Combine and label
 balance_table <- bal_df |>
   tibble::rownames_to_column("variable") |>
   filter(
@@ -283,7 +300,6 @@ balance_table <- bal_df |>
   )
 
 # Format as gt table
-# ...existing code...
 balance_gt <- balance_table |>
   gt() |>
   tab_spanner(
@@ -378,19 +394,14 @@ balance_gt <- balance_table |>
 balance_gt
 
 # =============================================================================
-# SAVE OUTPUTS
+# 5. SAVE OUTPUTS
 # =============================================================================
 
-# Save matched data
 saveRDS(matched_data_all_year, here("data", "matched_all_states_year_only.rds"))
 
-# Save balance table
 if (!dir.exists(here("output"))) {
   dir.create(here("output"))
 }
 gtsave(balance_gt, here("output", "balance_table_all_states.html"))
 gtsave(balance_gt, here("output", "balance_table_all_states.tex"))
-
-# =============================================================================
-# END
 # =============================================================================

@@ -1,31 +1,40 @@
 # =============================================================================
-# Hillman Summer Alumni
+# 2_1d_alumni_clean.R
+#
+# Purpose: Clean the Hillman alumni tracker and build a wide treatment
+#          indicator dataset (one row per student, one column per program year).
+#
+# Input:   data/Alumni Tracker (...).csv
+# Output:  `alum` — wide data frame with treated_2017:2023, treated_ever,
+#          and treated_before_2017 indicators
 # =============================================================================
 
-# Load data
+# --- Load raw alumni tracker -------------------------------------------------
 alum <- readr::read_csv(
   here::here("data", "Alumni Tracker (Updated 9.13.2023 - SJ) with Charts.csv"),
   col_types = readr::cols(...7 = readr::col_skip())
 )
 
-# Clean names
+# --- Standardize name fields -------------------------------------------------
+# Lowercase, strip nicknames/parentheticals, and collapse whitespace so names
+# join cleanly with the applicant data.
 alum <- alum |>
   mutate(
     first_name = First |>
       str_to_lower() |>
-      str_replace_all('"(.*?)"|\\((.*?)\\)', " ") |>
+      str_replace_all('"(.*?)"|\\.\\((.*?)\\)', " ") |>
       str_replace_all("[^a-z]", " ") |>
       str_squish(),
 
     last_name = Last |>
       str_to_lower() |>
-      str_replace_all('"(.*?)"|\\((.*?)\\)', " ") |>
+      str_replace_all('"(.*?)"|\\.\\((.*?)\\)', " ") |>
       str_replace_all("[^a-z]", " ") |>
       str_squish()
   ) |>
   select(-First, -Last)
 
-# Create max and min participation year
+# --- Derive participation year range per student -----------------------------
 alum <- alum |>
   mutate(
     year_max = if_else(
@@ -40,7 +49,9 @@ alum <- alum |>
     )
   )
 
-# Pivot to long format
+# --- Reshape to long format and de-duplicate ---------------------------------
+# Pivot year1:year4 to long, remove a manually flagged duplicate entry,
+# then drop any remaining exact duplicates.
 alum_long <- alum |>
   select(first_name, last_name, year1:year4) |>
   pivot_longer(
@@ -55,19 +66,18 @@ alum_long <- alum |>
   ) |>
   drop_na(year)
 
-# Remove manually flagged duplicate
 alum_long <- alum_long |>
   filter(!(first_name == "amanda" & last_name == "lu"))
 
-# De-duplicate
 alum_long <- alum_long |>
   distinct(first_name, last_name, year, .keep_all = TRUE)
 
-# Create treatment variable
+# --- Build wide treatment indicators (one column per year) ------------------
+# Add a treatment flag, pivot to wide so each year becomes treated_YYYY,
+# then reorder columns chronologically.
 alum <- alum_long |>
   mutate(treatment = 1L)
 
-# Pivot the alum dataset to create separate treatment columns for each year
 treated_years <- alum |>
   select(first_name, last_name, year, treatment) |>
   distinct() |>
@@ -78,7 +88,6 @@ treated_years <- alum |>
     values_fill = 0
   )
 
-# Reorder the columns so treated_* are chronological
 treated_cols <- grep("^treated_\\d{4}$", names(treated_years), value = TRUE)
 treated_cols <- treated_cols[order(as.integer(str_extract(
   treated_cols,
@@ -87,7 +96,9 @@ treated_cols <- treated_cols[order(as.integer(str_extract(
 treated_years <- treated_years |>
   select(first_name, last_name, all_of(treated_cols))
 
-# Create an "ever treated" variable
+# --- Add summary treatment flags --------------------------------------------
+# treated_ever: participated in any year
+# treated_before_2017: participated before the analytic window (excluded later)
 treated_years <- treated_years |>
   mutate(
     treated_ever = if_else(
@@ -97,7 +108,6 @@ treated_years <- treated_years |>
     )
   )
 
-# Create a "treated before 2017" variable
 treated_years <- treated_years |>
   mutate(
     treated_before_2017 = if_else(
@@ -111,7 +121,7 @@ treated_years <- treated_years |>
     )
   )
 
-# Subset treated years (keep 2017:2023)
+# --- Subset to analytic window (2017–2023) -----------------------------------
 treated_years <- treated_years |>
   select(
     first_name,
@@ -121,7 +131,7 @@ treated_years <- treated_years |>
     treated_2017:treated_2023
   )
 
-# Summary of treatment by year
+# --- Diagnostic summary ------------------------------------------------------
 message("\n=== Treatment Summary by Year ===\n")
 treated_years |>
   select(treated_2017:treated_2023) |>
@@ -134,8 +144,7 @@ message("\nTotal unique alumni: ", nrow(treated_years))
 message("Ever treated: ", sum(treated_years$treated_ever))
 message("Treated before 2017: ", sum(treated_years$treated_before_2017))
 
-# Final alumni dataset
+# --- Finalize and clean up ---------------------------------------------------
 alum <- treated_years
 
-# Keep only alum + applicants in memory
 rm(list = setdiff(ls(), c("alum", "applicants")))

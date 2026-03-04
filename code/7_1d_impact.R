@@ -1,15 +1,23 @@
-# OUTCOME ANALYSIS: Treatment Effects Following MatchIt Best Practices
 # =============================================================================
+# 7_1d_impact.R
+#
+# Purpose: Estimate ATT (average treatment effect on the treated) of the
+#          Hillman summer program on college outcomes. Follows MatchIt best
+#          practices using doubly robust linear probability models with
+#          matching weights and cluster-robust standard errors.
+#
 # Reference: https://kosukeimai.github.io/MatchIt/articles/estimating-effects.html
-# Estimand: ATT via linear probability model on matched data
-# Model: lm() with matching weights
-# SE approach: cluster-robust by subclass (matched pair) via avg_slopes()
+#
+# Estimand: ATT via lm() with matching weights; avg_slopes() with SEs
+#           clustered by matched subclass (pair).
 #
 # Sample splits:
 #   - Enrollment outcomes: full matched sample (all cohorts)
-#   - Degree outcomes: restricted to students with non-NA outcome (i.e.,
-#     sufficient follow-up time to have completed a degree). NAs in the
-#     degree variables already encode censoring from the data build step.
+#   - Degree / retention outcomes: restricted to non-censored students
+#     (NAs in outcome variables encode insufficient follow-up time)
+#
+# Input:   data/matched_all_states_year_only.rds
+# Output:  output/att_results_all_states_year_only.rds
 # =============================================================================
 
 library(dplyr)
@@ -39,7 +47,10 @@ message(
 # 2. DEFINE OUTCOMES AND COVARIATES
 # =============================================================================
 
-# Enrollment outcomes: no censoring concern, run on full sample
+# Enrollment outcomes have no censoring and are run on the full matched sample.
+# Degree and persistence outcomes require sufficient follow-up; each is subset
+# to non-NA observations independently to maximize sample size.
+
 enrollment_outcomes <- c(
   "seamless_enroll",
   "seamless_enroll_stem",
@@ -50,8 +61,6 @@ enrollment_outcomes <- c(
   "firsttime_fulltime"
 )
 
-# Degree/persistence outcomes: restricted to students with sufficient
-# follow-up (non-NA). NAs encode censoring from the data build step.
 degree_outcomes <- c(
   "degree_ever_nsc",
   "degree_ever_stem_nsc",
@@ -69,7 +78,6 @@ degree_outcomes <- c(
 )
 
 outcome_labels <- c(
-  # Enrollment
   seamless_enroll = "Seamless enrollment (any)",
   seamless_enroll_stem = "Seamless STEM enrollment",
   enrolled_ever_nsc = "Ever enrolled (any)",
@@ -77,14 +85,12 @@ outcome_labels <- c(
   public4yr_initial = "Initial enrollment: public 4-year",
   x4yr_initial = "Initial enrollment: any 4-year",
   firsttime_fulltime = "First-time full-time enrollment",
-  # Degrees
   degree_ever_nsc = "Ever earned degree (any)",
   degree_ever_stem_nsc = "Ever earned STEM degree",
   degree_6years_all_nsc = "Any degree within 6 years",
   bachdegree_6years_all_nsc = "Bachelor's degree within 6 years",
   degree_in6_grad = "Graduated within 6 years",
   ste_mdegree_in6_grad = "STEM degree within 6 years",
-  # Retention & persistence
   reten_fall_enter = "Retained fall of entry year",
   reten_fall_enter_stem = "Retained fall of entry year (STEM)",
   reten_fall_enter2 = "Retained fall of 2nd year",
@@ -94,18 +100,10 @@ outcome_labels <- c(
   pers_fall_enter3 = "Persisted fall of 3rd year"
 )
 
-# Covariates for doubly robust adjustment.
-# Excluded:
-#   - house_size: excluded from PS model for consistency
-#   - us_citizen: constant post-filter (all students are U.S. citizens)
-#   - us_citizen_miss: constant post-filter
-#   - grade dummies (grade_9 through grade_12): collinear with grade (continuous)
-#   - _miss indicators that are all-zero in matched data (no variation):
-#     gender_miss, stipend_miss
-# Retained _miss indicators with actual variation:
-#   gpa_miss, psat_math_miss, neg_school_miss, first_gen_miss,
-#   racially_marginalized_miss, bi_multi_racial_miss, urban_miss,
-#   suburban_miss, rural_miss, disability_miss
+# Adjustment covariates for doubly robust estimation.
+# Excluded from the outcome model (vs. the PS model):
+#   - house_size, us_citizen (constant post-filter), grade dummies
+#     (collinear with continuous grade), _miss flags with zero variation.
 covars <- c(
   "gender",
   "grade",
@@ -136,16 +134,12 @@ covars <- c(
 # =============================================================================
 # 3. HELPER: FIT LPM + EXTRACT ATT VIA avg_slopes()
 # =============================================================================
-
-# Linear probability model (lm) with matching weights.
-# MatchIt recommendation for 1:m matching with replacement:
-#   - Use weights from matched data
-#   - avg_slopes() targets the ATT for the treated subsample
-#   - vcovCL clusters SEs by subclass (matched pair)
+# For each outcome, fit a weighted LPM with cohort FEs, then use avg_slopes()
+# to estimate the ATT restricted to treated units with cluster-robust SEs.
+# Constant _miss predictors in a given subsample are dropped automatically.
 
 fit_att <- function(data, outcome_var, predictors) {
   # Drop any _miss predictors that are constant in this subsample
-  # (e.g. degree-eligible subset may have different variation than full sample)
   predictors <- predictors[sapply(predictors, \(p) {
     col <- data[[p]]
     !is.null(col) && length(unique(col[!is.na(col)])) > 1
@@ -155,16 +149,11 @@ fit_att <- function(data, outcome_var, predictors) {
     outcome_var,
     " ~ treated_in_year + ",
     paste(predictors, collapse = " + "),
-    " + factor(year)" # cohort FE; matches exact = ~year from matchit
+    " + factor(year)"
   )
 
-  fit <- lm(
-    as.formula(formula_str),
-    data = data,
-    weights = weights
-  )
+  fit <- lm(as.formula(formula_str), data = data, weights = weights)
 
-  # avg_slopes: ATT restricted to treated units, cluster-robust SE by subclass
   treated_data <- subset(data, treated_in_year == 1)
 
   att <- avg_slopes(
@@ -175,7 +164,6 @@ fit_att <- function(data, outcome_var, predictors) {
     wts = "weights"
   )
 
-  # Weighted means
   wt_mean <- function(x, w) weighted.mean(x, w, na.rm = TRUE)
 
   ctrl_mean <- wt_mean(
@@ -209,7 +197,7 @@ fit_att <- function(data, outcome_var, predictors) {
 # 4. ATT ESTIMATES
 # =============================================================================
 
-# --- Enrollment: full matched sample -----------------------------------------
+# Enrollment outcomes: full matched sample
 message("\n--- Enrollment outcomes (full sample) ---")
 
 results_enrollment <- map(enrollment_outcomes, \(out) {
@@ -218,10 +206,7 @@ results_enrollment <- map(enrollment_outcomes, \(out) {
 }) |>
   list_rbind()
 
-# --- Degree: restrict to students with sufficient follow-up ------------------
-# NAs in degree variables encode censoring (not enough time to earn a degree).
-# We subset to non-NA for each outcome separately so each model uses as many
-# observations as possible.
+# Degree / persistence outcomes: non-censored subsample per outcome
 message("\n--- Degree outcomes (non-censored subsample) ---")
 
 results_degree <- map(degree_outcomes, \(out) {
@@ -241,7 +226,6 @@ results_degree <- map(degree_outcomes, \(out) {
 }) |>
   list_rbind()
 
-# --- Combine -----------------------------------------------------------------
 results <- bind_rows(results_enrollment, results_degree)
 
 # =============================================================================
@@ -277,10 +261,10 @@ saveRDS(results, here("output", "att_results_all_states_year_only.rds"))
 # =============================================================================
 # 7. HETEROGENEITY BY GPA BIN
 # =============================================================================
-
-# Run fit_att() separately for each GPA bin and outcome
-# Uses the same LPM + avg_slopes() approach as the pooled model
-# Note: small cell sizes mean wide CIs — interpret patterns cautiously
+# Re-run fit_att() separately within each GPA tertile for two focal outcomes:
+# seamless STEM enrollment and 2nd-year retention. Small within-bin samples
+# produce wide CIs; patterns should be interpreted cautiously.
+# Results are visualized with a faceted dot-and-whisker plot.
 
 gpa_bin_levels <- c("3.0 – 3.4", "3.5 – 3.9", "4.0+")
 
@@ -309,7 +293,6 @@ results_gpa_het <- expand.grid(
       ) |>
       filter(gpa_bin == !!gpa_bin)
 
-    # Skip if insufficient treated units
     if (sum(data_sub$treated_in_year == 1) < 5) {
       return(NULL)
     }
@@ -324,7 +307,7 @@ results_gpa_het <- expand.grid(
     outcome_label = het_labels[outcome]
   )
 
-# Plot ATT + 95% CI by GPA bin
+# Dot-and-whisker plot of ATT ± 95% CI by GPA bin
 results_gpa_het |>
   mutate(
     outcome_label = factor(
@@ -387,7 +370,7 @@ results_gpa_het |>
     plot.margin = margin(10, 15, 10, 15)
   )
 
-#need to add bin by 3 top 3.0
-#rerun matching for historically marignalized and stiped
-#dosage effect
-#run for PA sample
+# TODO: add bin for GPA < 3.0
+# TODO: rerun matching for racially marginalized and stipend subgroups
+# TODO: estimate dosage effects (total_times_treated)
+# TODO: run analysis on PA public school sample (merged_df_pa)
