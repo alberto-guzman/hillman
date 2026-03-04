@@ -1,0 +1,40 @@
+\begin{table}[t]
+\caption*{
+{\fontsize{10}{12}\selectfont  \textbf{Appendix Table A1: Analytic Sample and Matching Balance}\fontsize{8}{10}\selectfont } \\ 
+{\fontsize{8}{10}\selectfont  PA Public Schools - Propensity Score Matched Sample\fontsize{8}{10}\selectfont }
+} 
+\fontsize{8.0pt}{10.0pt}\selectfont
+\begin{tabular*}{\linewidth}{@{\extracolsep{\fill}}l|cccccc}
+\toprule
+ & \multicolumn{3}{c}{Before Matching} & \multicolumn{3}{c}{After Matching} \\ 
+\cmidrule(lr){2-4} \cmidrule(lr){5-7}
+ & Control & Treated & SMD & Control & Treated & SMD \\ 
+\midrule\addlinespace[2.5pt]
+Female & {0.368} & {0.505} & {0.137} & {0.524} & {0.505} & {-0.019} \\ 
+Grade & 10.829 & 10.771 & — & 10.829 & 10.771 & — \\ 
+High School GPA & 3.549 & 3.526 & -0.032 & 3.464 & 3.526 & 0.083 \\ 
+PSAT Math Score & 506.011 & 485.390 & -0.066 & 533.905 & 485.390 & -0.155 \\ 
+Stipend Eligible & 0.140 & 0.381 & 0.241 & 0.371 & 0.381 & 0.010 \\ 
+Racially Marginalized & 0.066 & 0.162 & 0.096 & 0.124 & 0.162 & 0.038 \\ 
+Bi/Multi-Racial & 0.020 & 0.029 & 0.009 & 0.048 & 0.029 & -0.019 \\ 
+Urban & 0.906 & 0.914 & 0.008 & 0.914 & 0.914 & 0.000 \\ 
+Suburban & 0.769 & 0.714 & -0.055 & 0.724 & 0.714 & -0.010 \\ 
+Rural & 0.060 & 0.048 & -0.012 & 0.048 & 0.048 & 0.000 \\ 
+Documented Disability & 0.043 & 0.086 & 0.043 & 0.086 & 0.086 & 0.000 \\ 
+Negative School Environment & 0.083 & 0.105 & 0.022 & 0.086 & 0.105 & 0.019 \\ 
+First-Generation College Student & 0.017 & 0.067 & 0.050 & 0.038 & 0.067 & 0.029 \\ 
+U.S. Citizen & 0.989 & 1.000 & 0.011 & 1.000 & 1.000 & 0.000 \\ 
+School Enrollment & 597.575 & 593.571 & -0.016 & 638.333 & 593.571 & -0.174 \\ 
+School \% Economically Disadvantaged & 26.795 & 33.422 & 0.222 & 34.588 & 33.422 & -0.039 \\ 
+School \% English Learner & 2.536 & 2.228 & -0.152 & 2.187 & 2.228 & 0.020 \\ 
+School \% Special Education & 17.308 & 18.033 & 0.109 & 17.644 & 18.033 & 0.059 \\ 
+School \% White & {66.777} & {58.539} & {-0.253} & {60.557} & {58.539} & {-0.062} \\ 
+\bottomrule
+\end{tabular*}
+\begin{minipage}{\linewidth}
+\vspace{.05em}
+\emph{Notes:} SMD = standardized mean difference. \textbar{}SMD\textbar{} \textless{} 0.1 indicates good balance. N before: 456 (105 treated, 351 control). N after: 182 (105 treated, 77 control). Post-match means weighted by matching weights.\\
++p\textless{}0.10, *p\textless{}0.05, **p\textless{}0.01, ***p\textless{}0.001\\
+\end{minipage}
+\end{table}
+

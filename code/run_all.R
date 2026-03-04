@@ -1,22 +1,14 @@
-# =============================================================================
-# run_all.R
-#
-# Purpose: Master script — runs the full Hillman impact analysis pipeline
-#          in sequence. Source this file from the project root to reproduce
-#          all results end-to-end.
-#
-# Pipeline:
-#   1_1d_applicant_clean.R     — clean raw applicant data
-#                                → `applicants`
-#
-#   2_1d_alumni_clean.R        — clean alumni tracker; build per-year treatment
-#                                indicators and ever-treated flags
-#                                → `alum`
-#
-#   3a_1d_master_merge.R       — join applicants + alumni; deduplicate to one
-#                                row per student (first treatment year for
-#                                treated, last application year for controls);
-#                                drop 2020 (COVID)
+#   7_1d_impact_subgroup.R      — subgroup ATT estimates by stipend,
+#                                 racially marginalized, urban, suburban, rural,
+#                                 disability, neg. school environment, first-gen.
+#                                 Subgroups with < 20 treated are suppressed.
+#                                 Sources 7_1d_impact.R internally to inherit
+#                                 shared objects (fit_att, matched data, etc.).
+#                                 → `results_subgroup_all`, `results_subgroup_pa`
+#                                 → output/att_subgroup_all_states.rds
+#                                 → output/att_subgroup_pa.rds
+#                                 → output/att_subgroup_table_all_states.html/.tex
+#                                 → output/att_subgroup_table_pa.html/.tex                            drop 2020 (COVID)
 #                                → `merged_df`
 #
 #   3b_1d_merge_clean.R        — standardize covariates; merge NSC college
@@ -60,13 +52,28 @@
 #                                racially marginalized, urban, suburban, rural,
 #                                disability, neg. school environment, first-gen.
 #                                Subgroups with < 20 treated are suppressed.
-#                                Sources 7_1d_impact.R internally to inherit
-#                                shared objects (fit_att, matched data, etc.).
-#                                → `results_subgroup_all`, `results_subgroup_pa`
-#                                → output/att_subgroup_all_states.rds
-#                                → output/att_subgroup_pa.rds
-#                                → output/att_subgroup_table_all_states.html/.tex
-#                                → output/att_subgroup_table_pa.html/.tex
+#                                 Sources 7_1d_impact.R internally to inherit
+#                                 shared objects (fit_att, matched data, etc.).
+#                                 → `results_subgroup_all`, `results_subgroup_pa`
+#                                 → output/att_subgroup_all_states.rds
+#                                 → output/att_subgroup_pa.rds
+#                                 → output/att_subgroup_table_all_states.html/.tex
+#                                 → output/att_subgroup_table_pa.html/.tex
+#
+#   8_1d_tables_figures.R       — publication-ready tables and figures
+#                                 formatted to Meyer et al. (2024) conventions:
+#                                 control mean | ATT | SE | N, panels A/B/C,
+#                                 horizontal coefficient plots for subgroups
+#                                 and GPA heterogeneity.
+#                                 → output/table_1_balance.html/.tex
+#                                 → output/table_2_att_all_states.html/.tex
+#                                 → output/table_3_att_pa.html/.tex
+#                                 → output/appendix_table_a1_balance_pa.html/.tex
+#                                 → output/appendix_table_a2_sample_by_cohort.html/.tex
+#                                 → output/figure_1_subgroup_enrollment.pdf/.png
+#                                 → output/figure_2_subgroup_stem.pdf/.png
+#                                 → output/figure_3_subgroup_retention.pdf/.png
+#                                 → output/figure_4_gpa_heterogeneity.pdf/.png
 #
 # Notes:
 #   - Requires the `here` package; project root is set by the .Rproj file.
@@ -90,7 +97,8 @@ scripts <- c(
   "4_1d_merge_school_info.R",
   "5_1d_matching.R",
   "7_1d_impact.R",
-  "7_1d_impact_subgroup.R"
+  "7_1d_impact_subgroup.R",
+  "8_1d_tables_figures.R"
 )
 
 for (script in scripts) {
@@ -114,3 +122,6 @@ for (script in scripts) {
 message("\n", strrep("=", 70))
 message("Pipeline complete. All outputs saved to data/ and output/.")
 message(strrep("=", 70))
+
+# To do: dosage effect
+#

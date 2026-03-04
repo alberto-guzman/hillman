@@ -1,0 +1,35 @@
+\begin{table}[t]
+\caption*{
+{\fontsize{10}{12}\selectfont  \textbf{Table 1: Analytic Sample and Matching Balance}\fontsize{8}{10}\selectfont } \\ 
+{\fontsize{8}{10}\selectfont  All States - Propensity Score Matched Sample\fontsize{8}{10}\selectfont }
+} 
+\fontsize{8.0pt}{10.0pt}\selectfont
+\begin{tabular*}{\linewidth}{@{\extracolsep{\fill}}l|cccccc}
+\toprule
+ & \multicolumn{3}{c}{Before Matching} & \multicolumn{3}{c}{After Matching} \\ 
+\cmidrule(lr){2-4} \cmidrule(lr){5-7}
+ & Control & Treated & SMD & Control & Treated & SMD \\ 
+\midrule\addlinespace[2.5pt]
+Female & {0.381} & {0.452} & {0.071} & {0.352} & {0.451} & {0.099} \\ 
+Grade & 10.823 & 10.771 & — & 10.741 & 10.772 & — \\ 
+High School GPA & 3.497 & 3.499 & 0.003 & 3.528 & 3.513 & -0.017 \\ 
+PSAT Math Score & 488.725 & 494.976 & 0.020 & 490.290 & 493.556 & 0.010 \\ 
+Stipend Eligible & 0.147 & 0.434 & 0.287 & 0.414 & 0.420 & 0.006 \\ 
+Racially Marginalized & 0.087 & 0.187 & 0.100 & 0.179 & 0.191 & 0.012 \\ 
+Bi/Multi-Racial & 0.009 & 0.060 & 0.051 & 0.019 & 0.043 & 0.025 \\ 
+Urban & 0.898 & 0.892 & -0.006 & 0.920 & 0.889 & -0.031 \\ 
+Suburban & 0.760 & 0.669 & -0.091 & 0.679 & 0.679 & 0.000 \\ 
+Rural & 0.062 & 0.066 & 0.005 & 0.025 & 0.068 & 0.043 \\ 
+Documented Disability & 0.046 & 0.114 & 0.068 & 0.148 & 0.105 & -0.043 \\ 
+Negative School Environment & 0.092 & 0.102 & 0.010 & 0.056 & 0.099 & 0.043 \\ 
+First-Generation College Student & 0.021 & 0.048 & 0.027 & 0.056 & 0.049 & -0.006 \\ 
+U.S. Citizen & {0.988} & {1.000} & {0.012} & {1.000} & {1.000} & {0.000} \\ 
+\bottomrule
+\end{tabular*}
+\begin{minipage}{\linewidth}
+\vspace{.05em}
+\emph{Notes:} SMD = standardized mean difference. \textbar{}SMD\textbar{} \textless{} 0.1 indicates good balance. N before: 927 (166 treated, 761 control). N after: 278 (162 treated, 116 control). Post-match means weighted by matching weights.\\
++p\textless{}0.10, *p\textless{}0.05, **p\textless{}0.01, ***p\textless{}0.001\\
+\end{minipage}
+\end{table}
+

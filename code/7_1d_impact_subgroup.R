@@ -53,14 +53,14 @@ source(here("code", "7_1d_impact.R"))
 # =============================================================================
 
 subgroups <- list(
-  list(var = "stipend",             label = "Stipend Eligible"),
-  list(var = "racially_marginalized",label = "Racially Marginalized"),
-  list(var = "urban",               label = "Urban"),
-  list(var = "suburban",            label = "Suburban"),
-  list(var = "rural",               label = "Rural"),
-  list(var = "disability",          label = "Documented Disability"),
-  list(var = "neg_school",          label = "Negative School Environment"),
-  list(var = "first_gen",           label = "First-Generation")
+  list(var = "stipend", label = "Stipend Eligible"),
+  list(var = "racially_marginalized", label = "Racially Marginalized"),
+  list(var = "urban", label = "Urban"),
+  list(var = "suburban", label = "Suburban"),
+  list(var = "rural", label = "Rural"),
+  list(var = "disability", label = "Documented Disability"),
+  list(var = "neg_school", label = "Negative School Environment"),
+  list(var = "first_gen", label = "First-Generation")
 )
 
 # Minimum treated count to attempt inference. Groups below this threshold
@@ -75,46 +75,52 @@ MIN_TREATED <- 20
 # to avoid rank-deficient models.
 
 run_subgroup <- function(matched, covars, sg_var, sg_label, sample_label) {
-
   data_sg <- matched |>
     filter(!is.na(.data[[sg_var]]), .data[[sg_var]] == 1)
 
   n_trt <- sum(data_sg$treated_in_year == 1)
   n_ctl <- sum(data_sg$treated_in_year == 0)
 
-  message("\n  ", sg_label, " (", sample_label, "): ",
-          n_trt, " treated / ", n_ctl, " control")
+  message(
+    "\n  ",
+    sg_label,
+    " (",
+    sample_label,
+    "): ",
+    n_trt,
+    " treated / ",
+    n_ctl,
+    " control"
+  )
 
   # Return sample size row only if below threshold
   if (n_trt < MIN_TREATED) {
-    message("    -> below minimum threshold (", MIN_TREATED,
-            " treated) — skipping inference")
+    message(
+      "    -> below minimum threshold (",
+      MIN_TREATED,
+      " treated) — skipping inference"
+    )
     return(tibble(
-      subgroup   = sg_label,
-      subsample  = sample_label,
-      outcome    = NA_character_,
-      label      = NA_character_,
-      sample     = NA_character_,
-      n_obs      = nrow(data_sg),
-      n_treated  = n_trt,
-      n_control  = n_ctl,
-      ctrl_mean  = NA_real_, trt_mean  = NA_real_,
-      att_pp     = NA_real_, se_pp     = NA_real_,
-      pval       = NA_real_,
-      conf_lo_pp = NA_real_, conf_hi_pp = NA_real_,
+      subgroup = sg_label,
+      subsample = sample_label,
+      outcome = NA_character_,
+      label = NA_character_,
+      sample = NA_character_,
+      n_obs = nrow(data_sg),
+      n_treated = n_trt,
+      n_control = n_ctl,
+      ctrl_mean = NA_real_,
+      trt_mean = NA_real_,
+      att_pp = NA_real_,
+      se_pp = NA_real_,
+      pval = NA_real_,
+      conf_lo_pp = NA_real_,
+      conf_hi_pp = NA_real_,
       suppressed = TRUE
     ))
   }
 
-  # NSC flag for enrollment robustness check
-  data_sg <- data_sg |>
-    mutate(
-      nsc_matched = if_else(
-        rowSums(across(all_of(degree_outcomes), ~ !is.na(.))) > 0 |
-          enrolled_ever_nsc == 1 | seamless_enroll == 1,
-        TRUE, FALSE
-      )
-    )
+  # nsc_matched flag already added by add_nsc_flag() in 7_1d_impact.R
 
   # (a) Enrollment — full subgroup sample
   res_enroll <- map(enrollment_outcomes, \(out) {
@@ -134,7 +140,9 @@ run_subgroup <- function(matched, covars, sg_var, sg_label, sample_label) {
   # (c) Degree / persistence — non-censored subsample
   res_degree <- map(degree_outcomes, \(out) {
     data_sub <- data_sg |> filter(!is.na(.data[[out]]))
-    if (sum(data_sub$treated_in_year == 1) < MIN_TREATED) return(NULL)
+    if (sum(data_sub$treated_in_year == 1) < MIN_TREATED) {
+      return(NULL)
+    }
     fit_att(data_sub, out, covars) |> mutate(sample = "degree_eligible")
   }) |>
     compact() |>
@@ -164,10 +172,12 @@ results_subgroup_pa <- map_dfr(subgroups, \(sg) {
 # 5. SAVE RESULTS
 # =============================================================================
 
-if (!dir.exists(here("output"))) dir.create(here("output"))
+if (!dir.exists(here("output"))) {
+  dir.create(here("output"))
+}
 
 saveRDS(results_subgroup_all, here("output", "att_subgroup_all_states.rds"))
-saveRDS(results_subgroup_pa,  here("output", "att_subgroup_pa.rds"))
+saveRDS(results_subgroup_pa, here("output", "att_subgroup_pa.rds"))
 
 message("\nSaved: att_subgroup_all_states.rds")
 message("Saved: att_subgroup_pa.rds")
@@ -183,27 +193,29 @@ message("Saved: att_subgroup_pa.rds")
 #   within each panel rows are grouped by subgroup.
 
 make_subgroup_table <- function(results, title_subtitle) {
-
   sig_stars <- function(p) {
     case_when(
       p < 0.01 ~ "***",
       p < 0.05 ~ "**",
-      p < 0.1  ~ "*",
-      TRUE     ~ ""
+      p < 0.1 ~ "*",
+      TRUE ~ ""
     )
   }
 
   fmt_pval <- function(p) {
     case_when(
-      is.na(p)   ~ "—",
-      p < 0.001  ~ "<0.001",
-      TRUE       ~ sprintf("%.3f", p)
+      is.na(p) ~ "—",
+      p < 0.001 ~ "<0.001",
+      TRUE ~ sprintf("%.3f", p)
     )
   }
 
   fmt_ci <- function(lo, hi) {
-    if_else(is.na(lo) | is.na(hi), "—",
-            paste0("[", sprintf("%.3f", lo), ", ", sprintf("%.3f", hi), "]"))
+    if_else(
+      is.na(lo) | is.na(hi),
+      "—",
+      paste0("[", sprintf("%.3f", lo), ", ", sprintf("%.3f", hi), "]")
+    )
   }
 
   # Suppressed subgroups: one row per subgroup with n only
@@ -211,33 +223,65 @@ make_subgroup_table <- function(results, title_subtitle) {
     filter(suppressed) |>
     distinct(subgroup, subsample, n_treated, n_control) |>
     mutate(
-      label         = paste0(subgroup,
-                             " (n_treated = ", n_treated,
-                             "; insufficient sample for inference)"),
-      sample        = "full",
-      n_obs         = n_treated + n_control,
-      ctrl_mean_fmt = "—", trt_mean_fmt = "—",
-      att_fmt       = "—", se_fmt = "—",
-      ci_fmt        = "—", pval_fmt = "—",
-      panel         = "suppressed"
+      label = paste0(
+        subgroup,
+        " (n_treated = ",
+        n_treated,
+        "; insufficient sample for inference)"
+      ),
+      sample = "full",
+      n_obs = n_treated + n_control,
+      ctrl_mean_fmt = "—",
+      trt_mean_fmt = "—",
+      att_fmt = "—",
+      se_fmt = "—",
+      ci_fmt = "—",
+      pval_fmt = "—",
+      panel = "suppressed"
     ) |>
-    select(subgroup, label, sample, n_obs, n_treated, n_control,
-           ctrl_mean_fmt, trt_mean_fmt, att_fmt, se_fmt, ci_fmt, pval_fmt, panel)
+    select(
+      subgroup,
+      label,
+      sample,
+      n_obs,
+      n_treated,
+      n_control,
+      ctrl_mean_fmt,
+      trt_mean_fmt,
+      att_fmt,
+      se_fmt,
+      ci_fmt,
+      pval_fmt,
+      panel
+    )
 
   # Estimable subgroups
   estimable <- results |>
     filter(!suppressed, !is.na(outcome)) |>
     mutate(
       ctrl_mean_fmt = sprintf("%.3f", ctrl_mean),
-      trt_mean_fmt  = sprintf("%.3f", trt_mean),
-      att_fmt       = paste0(sprintf("%.3f", att_pp / 100), sig_stars(pval)),
-      se_fmt        = paste0("(", sprintf("%.3f", se_pp / 100), ")"),
-      ci_fmt        = fmt_ci(conf_lo_pp / 100, conf_hi_pp / 100),
-      pval_fmt      = fmt_pval(pval),
-      panel         = sample
+      trt_mean_fmt = sprintf("%.3f", trt_mean),
+      att_fmt = paste0(sprintf("%.3f", att_pp / 100), sig_stars(pval)),
+      se_fmt = paste0("(", sprintf("%.3f", se_pp / 100), ")"),
+      ci_fmt = fmt_ci(conf_lo_pp / 100, conf_hi_pp / 100),
+      pval_fmt = fmt_pval(pval),
+      panel = sample
     ) |>
-    select(subgroup, label, sample, n_obs, n_treated, n_control,
-           ctrl_mean_fmt, trt_mean_fmt, att_fmt, se_fmt, ci_fmt, pval_fmt, panel)
+    select(
+      subgroup,
+      label,
+      sample,
+      n_obs,
+      n_treated,
+      n_control,
+      ctrl_mean_fmt,
+      trt_mean_fmt,
+      att_fmt,
+      se_fmt,
+      ci_fmt,
+      pval_fmt,
+      panel
+    )
 
   panel_order <- c("full", "nsc_matched", "degree_eligible", "suppressed")
 
@@ -250,103 +294,137 @@ make_subgroup_table <- function(results, title_subtitle) {
   tbl |>
     gt(rowname_col = "label", groupname_col = "subgroup") |>
     tab_header(
-      title    = md(paste0("**", title_subtitle[1], "**")),
+      title = md(paste0("**", title_subtitle[1], "**")),
       subtitle = title_subtitle[2]
     ) |>
     tab_row_group(
-      label = md("**Suppressed Subgroups** *(n < 20 treated — insufficient for inference)*"),
-      rows  = panel == "suppressed"
+      label = md(
+        "**Suppressed Subgroups** *(n < 20 treated — insufficient for inference)*"
+      ),
+      rows = panel == "suppressed"
     ) |>
     tab_row_group(
-      label = md("**Panel C: Degree and Persistence Outcomes** *(non-censored subsample)*"),
-      rows  = panel == "degree_eligible"
+      label = md(
+        "**Panel C: Degree and Persistence Outcomes** *(non-censored subsample)*"
+      ),
+      rows = panel == "degree_eligible"
     ) |>
     tab_row_group(
-      label = md("**Panel B: Enrollment Outcomes** *(NSC-matched students only)*"),
-      rows  = panel == "nsc_matched"
+      label = md(
+        "**Panel B: Enrollment Outcomes** *(NSC-matched students only)*"
+      ),
+      rows = panel == "nsc_matched"
     ) |>
     tab_row_group(
-      label = md("**Panel A: Enrollment Outcomes** *(full matched subgroup sample)*"),
-      rows  = panel == "full"
+      label = md(
+        "**Panel A: Enrollment Outcomes** *(full matched subgroup sample)*"
+      ),
+      rows = panel == "full"
     ) |>
     cols_hide(c(panel, sample)) |>
     cols_label(
-      n_obs         = "N",
-      n_treated     = "Treated",
-      n_control     = "Control",
+      n_obs = "N",
+      n_treated = "Treated",
+      n_control = "Control",
       ctrl_mean_fmt = "Control",
-      trt_mean_fmt  = "Treated",
-      att_fmt       = "ATT",
-      se_fmt        = "(SE)",
-      ci_fmt        = "95% CI",
-      pval_fmt      = "p-value"
+      trt_mean_fmt = "Treated",
+      att_fmt = "ATT",
+      se_fmt = "(SE)",
+      ci_fmt = "95% CI",
+      pval_fmt = "p-value"
     ) |>
-    tab_spanner(label = "Sample Size",     columns = c(n_obs, n_treated, n_control)) |>
-    tab_spanner(label = "Mean Outcome",    columns = c(ctrl_mean_fmt, trt_mean_fmt)) |>
-    tab_spanner(label = "Treatment Effect",columns = c(att_fmt, se_fmt, ci_fmt, pval_fmt)) |>
-    cols_align(align = "left",   columns = label) |>
-    cols_align(align = "center", columns = c(n_obs, n_treated, n_control,
-                                              ctrl_mean_fmt, trt_mean_fmt,
-                                              att_fmt, se_fmt, ci_fmt, pval_fmt)) |>
+    tab_spanner(
+      label = "Sample Size",
+      columns = c(n_obs, n_treated, n_control)
+    ) |>
+    tab_spanner(
+      label = "Mean Outcome",
+      columns = c(ctrl_mean_fmt, trt_mean_fmt)
+    ) |>
+    tab_spanner(
+      label = "Treatment Effect",
+      columns = c(att_fmt, se_fmt, ci_fmt, pval_fmt)
+    ) |>
+    cols_align(align = "left", columns = label) |>
+    cols_align(
+      align = "center",
+      columns = c(
+        n_obs,
+        n_treated,
+        n_control,
+        ctrl_mean_fmt,
+        trt_mean_fmt,
+        att_fmt,
+        se_fmt,
+        ci_fmt,
+        pval_fmt
+      )
+    ) |>
     tab_style(
-      style     = cell_borders(sides = "top",    color = "black", weight = px(2)),
+      style = cell_borders(sides = "top", color = "black", weight = px(2)),
       locations = cells_body(rows = 1)
     ) |>
     tab_style(
-      style     = cell_borders(sides = "bottom", color = "black", weight = px(2)),
+      style = cell_borders(sides = "bottom", color = "black", weight = px(2)),
       locations = cells_body(rows = n_rows)
     ) |>
     tab_style(
-      style     = cell_text(style = "italic"),
+      style = cell_text(style = "italic"),
       locations = cells_row_groups()
     ) |>
     tab_style(
-      style     = cell_text(style = "italic", color = "gray50"),
+      style = cell_text(style = "italic", color = "gray50"),
       locations = cells_body(rows = panel == "suppressed")
     ) |>
-    tab_source_note(source_note = md(paste0(
-      "*Notes:* ATT = average treatment effect on the treated estimated via a ",
-      "linear probability model (LPM) with matching weights and cohort fixed effects. ",
-      "Standard errors (in parentheses) are clustered by matched subclass. ",
-      "95% confidence intervals are reported in brackets. ",
-      "All outcomes are binary (0/1); ATT and means are reported as proportions. ",
-      "\\* p < 0.10, \\*\\* p < 0.05, \\*\\*\\* p < 0.01."
-    ))) |>
-    tab_source_note(source_note = md(paste0(
-      "Subgroup analyses use subsets of the already-matched dataset — no re-matching ",
-      "is performed. Subgroups are defined by a value of 1 on the indicated indicator ",
-      "variable. Panel A codes non-NSC-matched students as not enrolled; Panel B ",
-      "restricts to NSC-matched students; Panel C restricts to students with ",
-      "sufficient follow-up (non-missing outcome). ",
-      "Subgroups with fewer than 20 treated students are reported in the suppressed ",
-      "panel with sample sizes only."
-    ))) |>
-    tab_source_note(source_note = md(paste0(
-      "Propensity scores estimated via logistic regression with nearest-neighbor ",
-      "matching with replacement, caliper = 0.5 SD, exact match on application year. ",
-      "Year 2020 (COVID disruption) and year 2022 (insufficient follow-up) excluded."
-    ))) |>
+    tab_source_note(
+      source_note = md(paste0(
+        "*Notes:* ATT = average treatment effect on the treated estimated via a ",
+        "linear probability model (LPM) with matching weights and cohort fixed effects. ",
+        "Standard errors (in parentheses) are clustered by matched subclass. ",
+        "95% confidence intervals are reported in brackets. ",
+        "All outcomes are binary (0/1); ATT and means are reported as proportions. ",
+        "\\* p < 0.10, \\*\\* p < 0.05, \\*\\*\\* p < 0.01."
+      ))
+    ) |>
+    tab_source_note(
+      source_note = md(paste0(
+        "Subgroup analyses use subsets of the already-matched dataset — no re-matching ",
+        "is performed. Subgroups are defined by a value of 1 on the indicated indicator ",
+        "variable. Panel A codes non-NSC-matched students as not enrolled; Panel B ",
+        "restricts to NSC-matched students; Panel C restricts to students with ",
+        "sufficient follow-up (non-missing outcome). ",
+        "Subgroups with fewer than 20 treated students are reported in the suppressed ",
+        "panel with sample sizes only."
+      ))
+    ) |>
+    tab_source_note(
+      source_note = md(paste0(
+        "Propensity scores estimated via logistic regression with nearest-neighbor ",
+        "matching with replacement, caliper = 0.5 SD, exact match on application year. ",
+        "Year 2020 (COVID disruption) and year 2022 (insufficient follow-up) excluded."
+      ))
+    ) |>
     tab_options(
-      table.font.size                   = px(11),
-      heading.title.font.size           = px(13),
-      heading.subtitle.font.size        = px(11),
-      heading.align                     = "left",
-      column_labels.font.weight         = "bold",
-      column_labels.border.top.color    = "black",
-      column_labels.border.top.width    = px(2),
+      table.font.size = px(11),
+      heading.title.font.size = px(13),
+      heading.subtitle.font.size = px(11),
+      heading.align = "left",
+      column_labels.font.weight = "bold",
+      column_labels.border.top.color = "black",
+      column_labels.border.top.width = px(2),
       column_labels.border.bottom.color = "black",
       column_labels.border.bottom.width = px(1),
-      table_body.border.bottom.color    = "black",
-      table_body.border.bottom.width    = px(2),
-      row_group.border.top.color        = "black",
-      row_group.border.top.width        = px(1),
-      row_group.border.bottom.color     = "gray80",
-      row_group.border.bottom.width     = px(1),
-      row_group.background.color        = "gray97",
-      table.border.top.color            = "white",
-      table.border.bottom.color         = "white",
-      source_notes.font.size            = px(10),
-      data_row.padding                  = px(3)
+      table_body.border.bottom.color = "black",
+      table_body.border.bottom.width = px(2),
+      row_group.border.top.color = "black",
+      row_group.border.top.width = px(1),
+      row_group.border.bottom.color = "gray80",
+      row_group.border.bottom.width = px(1),
+      row_group.background.color = "gray97",
+      table.border.top.color = "white",
+      table.border.bottom.color = "white",
+      source_notes.font.size = px(10),
+      data_row.padding = px(3)
     )
 }
 
@@ -356,23 +434,30 @@ make_subgroup_table <- function(results, title_subtitle) {
 
 att_subgroup_gt_all <- make_subgroup_table(
   results_subgroup_all,
-  c("Subgroup Treatment Effects: Hillman Summer Program on College Outcomes",
-    "All States — Propensity Score Matched Sample")
+  c(
+    "Subgroup Treatment Effects: Hillman Summer Program on College Outcomes",
+    "All States — Propensity Score Matched Sample"
+  )
 )
 
 att_subgroup_gt_pa <- make_subgroup_table(
   results_subgroup_pa,
-  c("Subgroup Treatment Effects: Hillman Summer Program on College Outcomes",
-    "PA Public Schools — Propensity Score Matched Sample")
+  c(
+    "Subgroup Treatment Effects: Hillman Summer Program on College Outcomes",
+    "PA Public Schools — Propensity Score Matched Sample"
+  )
 )
 
 att_subgroup_gt_all
 att_subgroup_gt_pa
 
-gtsave(att_subgroup_gt_all, here("output", "att_subgroup_table_all_states.html"))
+gtsave(
+  att_subgroup_gt_all,
+  here("output", "att_subgroup_table_all_states.html")
+)
 gtsave(att_subgroup_gt_all, here("output", "att_subgroup_table_all_states.tex"))
-gtsave(att_subgroup_gt_pa,  here("output", "att_subgroup_table_pa.html"))
-gtsave(att_subgroup_gt_pa,  here("output", "att_subgroup_table_pa.tex"))
+gtsave(att_subgroup_gt_pa, here("output", "att_subgroup_table_pa.html"))
+gtsave(att_subgroup_gt_pa, here("output", "att_subgroup_table_pa.tex"))
 
 message("Saved: att_subgroup_table_all_states.html/.tex")
 message("Saved: att_subgroup_table_pa.html/.tex")
