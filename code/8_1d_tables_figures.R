@@ -14,6 +14,24 @@ if (!dir.exists(here('output'))) {
   dir.create(here('output'))
 }
 
+focal_outcomes <- c(
+  "seamless_enroll",
+  "seamless_enroll_stem",
+  "x4yr_initial",
+  "public4yr_initial",
+  "reten_fall_enter2",
+  "degree_6years_all_nsc"
+)
+
+focal_labels <- c(
+  seamless_enroll = "Seamless enrollment (any)",
+  seamless_enroll_stem = "Seamless STEM enrollment",
+  x4yr_initial = "Initial enrollment: any 4-year",
+  public4yr_initial = "Initial enrollment: public 4-year",
+  reten_fall_enter2 = "Retained into 2nd year",
+  degree_6years_all_nsc = "Any degree within 6 years"
+)
+
 sig_stars <- function(p) {
   dplyr::case_when(
     p < 0.001 ~ '***',

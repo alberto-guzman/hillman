@@ -67,6 +67,10 @@ subgroups <- list(
 # are included in the sample size summary but excluded from the ATT table.
 MIN_TREATED <- 20
 
+# Outcome vectors (enrollment_outcomes, degree_outcomes, outcome_labels)
+# are inherited from 7_1d_impact.R via source() above.
+# Any changes to the trimmed outcome set should be made there only.
+
 # =============================================================================
 # 3. HELPER: RUN OUTCOMES FOR ONE SUBGROUP × ONE SAMPLE
 # =============================================================================

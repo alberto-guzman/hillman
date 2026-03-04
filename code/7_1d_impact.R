@@ -76,24 +76,15 @@ enrollment_outcomes <- c(
   "seamless_enroll_stem",
   "enrolled_ever_nsc",
   "enrolled_ever_stem",
-  "public4yr_initial",
   "x4yr_initial",
+  "public4yr_initial",
   "firsttime_fulltime"
 )
 
 degree_outcomes <- c(
-  "degree_ever_nsc",
-  "degree_ever_stem_nsc",
+  "reten_fall_enter2",
   "degree_6years_all_nsc",
   "bachdegree_6years_all_nsc",
-  "reten_fall_enter",
-  "reten_fall_enter_stem",
-  "reten_fall_enter2",
-  "reten_fall_enter_stem2",
-  "pers_fall_enter",
-  "pers_fall_enter_stem",
-  "pers_fall_enter3",
-  "degree_in6_grad",
   "ste_mdegree_in6_grad"
 )
 
@@ -102,22 +93,13 @@ outcome_labels <- c(
   seamless_enroll_stem = "Seamless STEM enrollment",
   enrolled_ever_nsc = "Ever enrolled (any)",
   enrolled_ever_stem = "Ever enrolled STEM",
-  public4yr_initial = "Initial enrollment: public 4-year",
   x4yr_initial = "Initial enrollment: any 4-year",
+  public4yr_initial = "Initial enrollment: public 4-year",
   firsttime_fulltime = "First-time full-time enrollment",
-  degree_ever_nsc = "Ever earned degree (any)",
-  degree_ever_stem_nsc = "Ever earned STEM degree",
+  reten_fall_enter2 = "Retained into 2nd year",
   degree_6years_all_nsc = "Any degree within 6 years",
   bachdegree_6years_all_nsc = "Bachelor's degree within 6 years",
-  degree_in6_grad = "Graduated within 6 years",
-  ste_mdegree_in6_grad = "STEM degree within 6 years",
-  reten_fall_enter = "Retained fall of entry year",
-  reten_fall_enter_stem = "Retained fall of entry year (STEM)",
-  reten_fall_enter2 = "Retained fall of 2nd year",
-  reten_fall_enter_stem2 = "Retained fall of 2nd year (STEM)",
-  pers_fall_enter = "Persisted fall of entry year",
-  pers_fall_enter_stem = "Persisted fall of entry year (STEM)",
-  pers_fall_enter3 = "Persisted fall of 3rd year"
+  ste_mdegree_in6_grad = "STEM degree within 6 years"
 )
 
 # Base adjustment covariates (all-states outcome model).
