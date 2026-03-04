@@ -393,7 +393,15 @@ results_pa |>
   )
 
 # =============================================================================
-# 7. TREATMENT EFFECT TABLES
+# 7. ENSURE OUTPUT DIRECTORY EXISTS
+# =============================================================================
+
+if (!dir.exists(here("output"))) {
+  dir.create(here("output"))
+}
+
+# =============================================================================
+# 8. TREATMENT EFFECT TABLES
 # =============================================================================
 # Publication-ready gt tables formatted to match the balance tables.
 # Each table has three panels:
@@ -630,7 +638,7 @@ att_gt_all
 att_gt_pa
 
 # =============================================================================
-# 8. DESCRIPTIVE TABLES BY COHORT
+# 9. DESCRIPTIVE TABLES BY COHORT
 # =============================================================================
 # Weighted means by year and treatment status for six focal outcomes.
 # No inference — purely descriptive. Censored cells (both groups = 0 due to
@@ -796,7 +804,7 @@ gtsave(desc_gt_pa, here("output", "desc_by_year_pa.html"))
 gtsave(desc_gt_pa, here("output", "desc_by_year_pa.tex"))
 
 # =============================================================================
-# 9. SAVE ALL TABLES
+# 10. SAVE ALL TABLES
 # =============================================================================
 
 gtsave(att_gt_all, here("output", "att_table_all_states.html"))
@@ -808,18 +816,14 @@ message("Saved: att_table_all_states.html/.tex")
 message("Saved: att_table_pa.html/.tex")
 
 # =============================================================================
-# 10. SAVE
-
-if (!dir.exists(here("output"))) {
-  dir.create(here("output"))
-}
+# 11. SAVE RESULTS RDS
+# =============================================================================
 
 saveRDS(results_all, here("output", "att_results_all_states_year_only.rds"))
 saveRDS(results_pa, here("output", "att_results_pa_year_only.rds"))
 
 message("\nSaved: att_results_all_states_year_only.rds")
 message("Saved: att_results_pa_year_only.rds")
-
 
 # =============================================================================
 # 11. HETEROGENEITY BY GPA BIN
