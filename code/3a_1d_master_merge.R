@@ -113,8 +113,17 @@ message("Remaining: ", post_year_filter, " observations")
 # =============================================================================
 # FILTER TO ONE OBSERVATION PER STUDENT
 # =============================================================================
-# Treated students: keep the row for their first treatment year.
-# Control students: keep the row for their most recent application year.
+# Treated students: keep the row for their FIRST treatment year.
+# Control students: keep the row for their MOST RECENT application year.
+#
+# NOTE — timing asymmetry: treated covariates are measured at the year of
+# first treatment (earlier on average), while control covariates are measured
+# at the last application year (later on average). This means a control who
+# applied in 2017 and again in 2021 is represented by their 2021 application.
+# The propensity score model (script 5) exact-matches on year, which partially
+# addresses this; however, if grade or other covariates drift meaningfully
+# across application years, the asymmetry could induce residual imbalance.
+# Verify covariate balance by year in script 5 (bal.tab cluster = "year").
 
 message("\n=== FILTERING TO ONE OBSERVATION PER STUDENT ===\n")
 

@@ -192,6 +192,14 @@ if (nrow(outcomes_dupes) > 0) {
 
   outcomes <- outcomes |>
     group_by(first_name, last_name, hs_grad_year) |>
+    # Sort so the record with the most non-missing outcome values comes first,
+    # rather than taking an arbitrary row. For records with identical non-missing
+    # counts, ties are broken by seamless_enroll descending (prefer enrolled=1).
+    arrange(
+      desc(rowSums(!is.na(across(everything())))),
+      desc(seamless_enroll),
+      .by_group = TRUE
+    ) |>
     slice(1) |>
     ungroup()
 
@@ -244,7 +252,13 @@ match_by_treatment <- merged_clean |>
 message("\nMatch rates by treatment status:")
 print(match_by_treatment)
 
-# Code NSC non-matches as 0 for enrollment outcomes only
+# Code NSC non-matches as 0 for enrollment outcomes only.
+# ASSUMPTION: students not found in NSC are assumed not enrolled.
+# This is standard practice when using NSC as the universe of enrollment
+# records, but it will bias estimates downward if non-match rates differ
+# by treatment status (see match_by_treatment diagnostic above).
+# Robustness check: re-run main models restricting to NSC-matched students
+# only (i.e., drop non-matches rather than coding as 0) and compare ATT.
 merged_clean <- merged_clean |>
   mutate(across(
     c(
@@ -255,7 +269,6 @@ merged_clean <- merged_clean |>
     ),
     ~ if_else(is.na(.), 0, .)
   ))
-
 # =============================================================================
 # FILTER TO ANALYTIC SAMPLE (graduation cohorts 2018–2022)
 # =============================================================================

@@ -159,7 +159,7 @@ fit_att <- function(data, outcome_var, predictors) {
   att <- avg_slopes(
     fit,
     variables = "treated_in_year",
-    vcov = sandwich::vcovCL(fit, cluster = data$subclass),
+    vcov = sandwich::vcovCL(fit, cluster = ~subclass),
     newdata = treated_data,
     wts = "weights"
   )
@@ -256,8 +256,6 @@ if (!dir.exists(here("output"))) {
 saveRDS(results, here("output", "att_results_all_states_year_only.rds"))
 
 
-# ...existing code...
-
 # =============================================================================
 # 7. HETEROGENEITY BY GPA BIN
 # =============================================================================
@@ -284,7 +282,7 @@ results_gpa_het <- expand.grid(
     data_sub <- matched |>
       mutate(
         gpa_bin = case_when(
-          gpa == 0 ~ NA_character_,
+          is.na(gpa) ~ NA_character_,
           gpa < 3.0 ~ "Below 3.0",
           gpa >= 3.0 & gpa < 3.5 ~ "3.0 – 3.4",
           gpa >= 3.5 & gpa < 4.0 ~ "3.5 – 3.9",

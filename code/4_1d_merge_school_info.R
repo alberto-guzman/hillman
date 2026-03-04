@@ -123,7 +123,7 @@ message(
 message("\n=== Loading and Merging School-Level Data ===\n")
 
 school_facts <- readxl::read_excel(
-  "/Users/albertoguzman-alvarez/Projects/inProgress/2020_hillman/data/SchoolFastFacts_20242025.xlsx"
+  here("data", "SchoolFastFacts_20242025.xlsx")
 ) |>
   janitor::clean_names() |>
   # Ensure AUN is numeric to match merged_df_pa

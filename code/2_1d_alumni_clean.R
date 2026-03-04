@@ -102,7 +102,7 @@ treated_years <- treated_years |>
 treated_years <- treated_years |>
   mutate(
     treated_ever = if_else(
-      rowSums(select(cur_data(), starts_with("treated_")), na.rm = TRUE) > 0,
+      rowSums(pick(starts_with("treated_")), na.rm = TRUE) > 0,
       1L,
       0L
     )
@@ -112,7 +112,7 @@ treated_years <- treated_years |>
   mutate(
     treated_before_2017 = if_else(
       rowSums(
-        select(cur_data(), matches("^treated_200[0-9]$|^treated_201[0-6]$")),
+        pick(matches("^treated_200[0-9]$|^treated_201[0-6]$")),
         na.rm = TRUE
       ) >
         0,

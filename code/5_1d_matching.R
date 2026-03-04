@@ -27,8 +27,18 @@ library(purrr)
 # =============================================================================
 # Start from the all-states dataset. Create grade dummies, add missing
 # indicators for each covariate, and impute NAs to 0.
-# Exclusions: year 2022 (insufficient follow-up), non-citizens,
-# students treated before 2017 (would confound the control group).
+#
+# Exclusions applied BEFORE imputation so they are based on true values:
+#   - treated_before_2017 == 1: these students would contaminate the control
+#     group (applied again post-2017 but already treated earlier)
+#   - us_citizen == 0 (confirmed non-citizens): citizenship status is not
+#     comparable to the treated group; NA citizenship is retained and handled
+#     via the us_citizen_miss indicator in the PS model
+#   - year == 2022: these students would be graduating in 2022–2023, giving
+#     them insufficient follow-up time for most outcomes. They are excluded
+#     entirely rather than kept only for enrollment outcomes to maintain a
+#     single consistent matched sample.
+#   - missing treated_in_year: data anomaly, cannot be classified
 
 matching_data <- merged_df_all
 
@@ -56,6 +66,19 @@ matching_data <- matching_data |>
     grade_12 = if_else(grade == 12, 1, 0)
   )
 
+# Apply exclusion filters BEFORE imputation to avoid conflating true 0s with
+# imputed 0s. Specifically, us_citizen == 0 (confirmed non-citizen) is
+# excluded here; students with us_citizen = NA are retained and their
+# missingness is captured by the us_citizen_miss indicator below.
+matching_data <- matching_data |>
+  filter(
+    !is.na(treated_in_year),
+    year != 2022,
+    us_citizen != 0 | is.na(us_citizen),
+    treated_before_2017 == 0
+  )
+
+# Add missing indicators then impute remaining NAs to 0
 matching_data <- matching_data |>
   mutate(
     across(
@@ -65,14 +88,6 @@ matching_data <- matching_data |>
     )
   ) |>
   mutate(across(all_of(covariates), ~ replace_na(., 0)))
-
-matching_data <- matching_data |>
-  filter(
-    !is.na(treated_in_year),
-    year != 2022,
-    us_citizen != 0,
-    treated_before_2017 == 0
-  )
 
 # =============================================================================
 # 2. PROPENSITY SCORE MATCHING
@@ -185,6 +200,9 @@ before_stats <- matching_data |>
   )
 
 # Weighted means and SDs after matching
+# Note: both mean and SD are weighted to correctly represent the effective
+# sample under matching with replacement (controls reused multiple times
+# receive higher weight and should contribute less variance).
 after_stats <- matched_data_all_year |>
   group_by(treated_in_year) |>
   summarise(
@@ -213,7 +231,7 @@ after_stats <- matched_data_all_year |>
       ),
       list(
         mean = ~ weighted.mean(., w = weights, na.rm = TRUE),
-        sd = ~ sd(., na.rm = TRUE)
+        sd = ~ sqrt(Hmisc::wtd.var(., weights = weights, na.rm = TRUE))
       ),
       .names = "{.col}_{.fn}"
     )
