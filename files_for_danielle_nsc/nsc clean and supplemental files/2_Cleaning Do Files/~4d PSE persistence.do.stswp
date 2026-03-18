@@ -1,0 +1,243 @@
+****NSC Persistence Outcomes****
+
+clear
+set more off
+
+*Import file
+	use "3_Clean Data Files\MEGA_enrollments_by semester.dta"
+	
+*simple enrollment variable
+	gen enrolled_=1
+	drop if year==.
+	drop in_promise_only degree_NSC seq_NSC
+	reshape wide enrolled_  institution IPEDS_UNIT_ID promise_have NSC_have ipeds_have degree_attain in_state seq inst_sector_simple, i(lrdc) j(year_semester)
+	recode enrolled_* (.=0)
+	save "3_Clean Data Files\MEGA_simple_enroll",replace
+	
+	clear 
+	
+*Import file
+	use "3_Clean Data Files\MEGA_enrollment.dta"
+	duplicates drop lrdc, force
+
+*merge in enrollment
+	
+	merge 1:1 lrdc using "3_Clean Data Files\MEGA_simple_enroll.dta"
+	drop _merge
+
+*merge in degree
+	merge 1:1 lrdc using "3_Clean Data Files\MEGA_degree_outcomes.dta"
+	drop _merge
+	
+*****promise usage variables
+	*in portal
+	gen in_portal_yr1=.
+	gen in_portal_yr2=.
+	
+	foreach i of numlist 1978 1981 1991/2002 2004/2023 {
+	
+	local Y = `i'+1
+	local Z = `i'+2
+	
+	quietly capture recode in_portal_yr1 (.=1) if gradyear==`i' & (in_portal`i'1==1 | in_portal`Y'3==1 | in_portal`Y'4==1)
+
+	
+	quietly capture recode in_portal_yr2 (.=1) if gradyear==`i' & (in_portal`i'1==1 | in_portal`Y'3==1 | in_portal`Y'4==1 | in_portal`Y'1==1 | in_portal`Z'3==1 | in_portal`Z'4==1)
+	
+	}
+	
+
+
+*Persistence or Degree for NSC comparison	
+	gen fall_enter_cohort=.
+	foreach i of numlist 1978 1981 1991/2002 2004/2023 {
+	local Y = `i'-1
+	recode fall_enter (.=`Y') if first_term==`i'1
+	}
+	
+	gen reten_fall_enter=.
+	foreach i of numlist 1978 1981 1991/2002 2004/2023 {
+	local Y = `i'+1
+	capture noisily: recode reten_fall_enter (.=1) if first_term==`i'1 & institution`i'1==institution`Y'1
+	capture noisily: recode reten_fall_enter (.=1) if first_term==`i'1 & (degree_attain`i'3~=.|degree_attain`i'4~=.|degree_attain`Y'1~=.)
+	capture noisily: recode reten_fall_enter (.=0) if first_term==`i'1 & institution`i'1~=institution`Y'1
+	}
+	
+	gen reten_fall_enter2=.
+	foreach i of numlist 1978 1981 1991/2002 2004/2023 {
+	local Y = `i'+1
+	local Z = `i'+2
+	quietly capture recode reten_fall_enter2 (.=1) if first_term==`i'1 & institution`i'1==institution`Y'1 & institution`i'1==institution`Z'1
+	quietly capture recode reten_fall_enter2 (.=1) if first_term==`i'1 & (degree_attain`i'3~=.|degree_attain`i'4~=.|degree_attain`Y'1~=. | degree_attain`Y'3~=. | degree_attain`Y'4~=. | degree_attain`Z'1~=.)
+	quietly capture recode reten_fall_enter2 (.=0) if first_term==`i'1 & (institution`i'1~=institution`Y'1 | institution`i'1~=institution`Z'1)
+	}
+	
+	gen reten_fall_enter3=.
+	foreach i of numlist 1978 1981 1991/2002 2004/2023 {
+	local Y = `i'+1
+	local Z = `i'+2
+	local X = `i'+3
+	quietly capture recode reten_fall_enter3 (.=1) if first_term==`i'1 & institution`i'1==institution`Y'1 & institution`i'1==institution`Z'1 & institution`i'1==institution`X'1
+	quietly capture recode reten_fall_enter3 (.=1) if first_term==`i'1 & (degree_attain`i'3~=.|degree_attain`i'4~=.|degree_attain`Y'1~=. | degree_attain`Y'3~=. | degree_attain`Y'4~=. | degree_attain`Z'1~=. | degree_attain`Z'3~=.|degree_attain`Z'4~=.|degree_attain`X'1~=.)
+	quietly capture recode reten_fall_enter3 (.=0) if first_term==`i'1 & (institution`i'1~=institution`Y'1 | institution`i'1~=institution`Z'1 | institution`i'1~=institution`X'1)
+	}
+	
+	gen reten_fall_enter4=.
+	foreach i of numlist 1978 1981 1991/2002 2004/2023 {
+	local Y = `i'+1
+	local Z = `i'+2
+	local X = `i'+3
+	local Q = `i'+4
+	quietly capture recode reten_fall_enter4 (.=1) if first_term==`i'1 & institution`i'1==institution`Y'1 & institution`i'1==institution`Z'1 & institution`i'1==institution`X'1 & institution`i'1==institution`Q'1
+	quietly capture recode reten_fall_enter4 (.=1) if first_term==`i'1 & (degree_attain`i'3~=.|degree_attain`i'4~=.|degree_attain`Y'1~=. | degree_attain`Y'3~=. | degree_attain`Y'4~=. | degree_attain`Z'1~=. | degree_attain`Z'3~=.|degree_attain`Z'4~=.|degree_attain`X'1~=. | degree_attain`X'3~=.|degree_attain`X'4~=.|degree_attain`Q'1~=.)
+	quietly capture recode reten_fall_enter4 (.=0) if first_term==`i'1 & (institution`i'1~=institution`Y'1 | institution`i'1~=institution`Z'1 | institution`i'1~=institution`X'1 | institution`i'1~=institution`Q'1)
+	}
+	
+	gen pers_fall_enter=.
+	foreach i of numlist 1978 1981 1991/2002 2004/2023 {
+	local Y = `i'+1
+	capture noisily: recode pers_fall_enter (.=1) if first_term==`i'1 & enrolled_`Y'1==1
+	capture noisily: recode pers_fall_enter (.=1) if first_term==`i'1 & (degree_attain`i'3~=.|degree_attain`i'4~=.|degree_attain`Y'1~=.)
+	capture noisily: recode pers_fall_enter (.=0) if first_term==`i'1 & enrolled_`Y'1==0
+	}
+	
+	gen pers_fall_enter2=.
+	foreach i of numlist 1978 1981 1991/2002 2004/2023 {
+	local Y = `i'+1
+	local X = `i'+2
+	quietly capture recode pers_fall_enter2 (.=1) if first_term==`i'1 & enrolled_`Y'1==1 & enrolled_`X'1==1
+	quietly capture recode pers_fall_enter2 (.=1) if first_term==`i'1 & (degree_attain`i'3~=.|degree_attain`i'4~=.|degree_attain`Y'1~=.| degree_attain`Y'3~=. | degree_attain`Y'4~=. | degree_attain`X'1~=.)
+	quietly capture recode pers_fall_enter2 (.=0) if first_term==`i'1 & enrolled_`Y'1==0 & enrolled_`X'1==0
+	}
+	
+	gen pers_fall_enter3=.
+	foreach i of numlist 1978 1981 1991/2002 2004/2023 {
+	local Y = `i'+1
+	local X = `i'+2
+	local Z = `i'+3
+	quietly capture recode pers_fall_enter3 (.=1) if first_term==`i'1 & enrolled_`Y'1==1 & enrolled_`X'1==1 & enrolled_`Z'1==1
+	quietly capture recode pers_fall_enter3 (.=1) if first_term==`i'1 & (degree_attain`i'3~=.|degree_attain`i'4~=.|degree_attain`Y'1~=.| degree_attain`Y'3~=. | degree_attain`Y'4~=. | degree_attain`X'1~=. |degree_attain`X'3~=.|degree_attain`X'4~=.| degree_attain`Z'1~=.)
+	quietly capture recode pers_fall_enter3 (.=0) if first_term==`i'1 & enrolled_`Y'1==0 & enrolled_`X'1==0 & enrolled_`Z'1==0
+	}
+	
+	gen pers_fall_enter4=.
+	foreach i of numlist 1978 1981 1991/2002 2004/2023 {
+	local Y = `i'+1
+	local X = `i'+2
+	local Z = `i'+3
+	local Q = `i'+4
+	quietly capture recode pers_fall_enter4 (.=1) if first_term==`i'1 & enrolled_`Y'1==1 & enrolled_`X'1==1 & enrolled_`Z'1==1 & enrolled_`Q'1==1
+	quietly capture recode pers_fall_enter4 (.=1) if first_term==`i'1 & (degree_attain`i'3~=.|degree_attain`i'4~=.|degree_attain`Y'1~=.| degree_attain`Y'3~=. | degree_attain`Y'4~=. | degree_attain`X'1~=. |degree_attain`X'3~=.|degree_attain`X'4~=.| degree_attain`Z'1~=. |degree_attain`Z'3~=.|degree_attain`Z'4~=.| degree_attain`Q'1~=.)
+	quietly capture recode pers_fall_enter4 (.=0) if first_term==`i'1 & enrolled_`Y'1==0 & enrolled_`X'1==0 & enrolled_`Z'1==0 & enrolled_`Q'1==0
+	}
+	
+	gen pers_cohort=.
+	foreach i of numlist 1978 1981 1991/2002 2004/2023 {
+	local Y = `i'+2
+	local B = `i'+1
+	quietly capture recode pers_cohort (.=1) if cohort==`i' & enrolled_`Y'1==1
+	quietly capture recode pers_cohort (.=1) if cohort==`i' & (degree_attain`B'3~=.|degree_attain`B'4~=.|degree_attain`Y'1~=.)
+	quietly capture recode pers_cohort (.=0) if cohort==`i' & enrolled_`Y'1==0
+	}
+	
+**Any Degree in 6years after first fall enrollment
+**Fall 2006
+	gen degree_attainin6_firstfall=.
+	foreach i of numlist 1978 1981 1991/2002 2004/2023 {
+	local first = `i'+1
+	local second = `i'+2
+	local third = `i'+3
+	local fourth = `i'+4
+	local fifth =`i'+5
+	local sixth = `i'+6
+	foreach x of numlist 1 3 4 {
+	quietly capture recode degree_attainin6_firstfall (.=1) if fall_e==`i' & degree_attain`first'`x'~=.
+	quietly capture recode degree_attainin6_firstfall (.=1) if fall_e==`i' & degree_attain`second'`x'~=.
+	quietly capture recode degree_attainin6_firstfall (.=1) if fall_e==`i' & degree_attain`third'`x'~=.
+	quietly capture recode degree_attainin6_firstfall (.=1) if fall_e==`i' & degree_attain`fourth'`x'~=.
+	quietly capture recode degree_attainin6_firstfall (.=1) if fall_e==`i' & degree_attain`fifth'`x'~=.
+	quietly capture recode degree_attainin6_firstfall (.=1) if fall_e==`i' & degree_attain`sixth'`x'~=.
+	}
+	}
+
+	
+	gen degree_in6_grad=.
+	foreach i of numlist 1978 1981 1991/2002 2004/2023 {
+	local first = `i'+1
+	local second = `i'+2
+	local third = `i'+3
+	local fourth = `i'+4
+	local fifth =`i'+5
+	local sixth = `i'+6
+	foreach x of numlist 1 3 4 {
+	quietly capture recode degree_in6_grad (.=1) if gradyear==`i' & degree_attain`first'`x'~=.
+	quietly capture recode degree_in6_grad (.=1) if gradyear==`i' & degree_attain`second'`x'~=.
+	quietly capture recode degree_in6_grad (.=1) if gradyear==`i' & degree_attain`third'`x'~=.
+	quietly capture recode degree_in6_grad (.=1) if gradyear==`i' & degree_attain`fourth'`x'~=.
+	quietly capture recode degree_in6_grad (.=1) if gradyear==`i' & degree_attain`fifth'`x'~=.
+	quietly capture recode degree_in6_grad (.=1) if gradyear==`i' & degree_attain`sixth'`x'~=.
+	}
+	}
+	
+	gen degree_in6_cohort=.
+	foreach i of numlist 1978 1981 1991/2002 2004/2023 {
+	local first = `i'+1
+	local second = `i'+2
+	local third = `i'+3
+	local fourth = `i'+4
+	local fifth =`i'+5
+	local sixth = `i'+6
+	foreach x of numlist 1 3 4 {
+	quietly capture  recode degree_in6_cohort (.=1) if cohort==`i' & degree_attain`first'`x'~=.
+	quietly capture  recode degree_in6_cohort (.=1) if cohort==`i' & degree_attain`second'`x'~=.
+	quietly capture recode degree_in6_cohort (.=1) if cohort==`i' & degree_attain`third'`x'~=.
+	quietly capture recode degree_in6_cohort (.=1) if cohort==`i' & degree_attain`fourth'`x'~=.
+	quietly capture recode degree_in6_cohort (.=1) if cohort==`i' & degree_attain`fifth'`x'~=.
+	quietly capture recode degree_in6_cohort (.=1) if cohort==`i' & degree_attain`sixth'`x'~=.
+	}
+	}
+
+**Currently enrolled
+	gen enrolled_current=.
+	
+	recode enrolled_current (.=1) if enrolled_20231==1 | enrolled_20233==1 | enrolled_20224==1
+	
+	****enrolled 6 years later
+	gen enrolled_in6_cohort=.
+	foreach i of numlist 1978 1981 1991/2002 2004/2023 {
+	local sixth = `i'+6
+	foreach x of numlist 1 3 4 {
+	quietly capture recode enrolled_in6_cohort (.=1) if cohort==`i' & enrolled_`sixth'`x'==1
+	}
+	}
+	
+	
+*desired
+	gen desired_outcome=.
+	replace desired_outcome=2 if enrolled_in6_cohort==1
+	replace desired_outcome=1 if degree_in6_cohort==1
+	
+	
+	la define vDesired 1 "Degree" 2 "Still Enrolled"
+	label values desired_outcome vDesired
+	drop enrolled_2* degree_attain2*
+
+merge 1:1 lrdc using "3_Clean Data Files\NSC persistence outcomes.dta"
+drop _merge
+	
+*Merge in non PSE enrolled students
+
+	merge 1:1 lrdc using "3_Clean Data Files\cleandemo.dta", update
+	drop _merge
+
+	
+	drop IPEDS_UNIT_ID2* promise_have2* NSC_have2* ipeds_have2* institution2* in_state2* seq2* inst_sector_simple2* 
+	drop degree_nsc_2*
+	drop seq_NSC2*
+	drop enrolled_in6_cohort
+
+*Save
+	save "3_Clean Data Files\MEGA_alloutcomes.dta",replace
+
+
+
