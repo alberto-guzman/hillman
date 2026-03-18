@@ -1,0 +1,55 @@
+\begin{table}[t]
+\caption*{
+{\fontsize{10}{12}\selectfont  \textbf{Table 3: Effects of the Hillman Summer Program on College Outcomes}\fontsize{8}{10}\selectfont } \\ 
+{\fontsize{8}{10}\selectfont  PA Public Schools — Propensity Score Matched Sample\fontsize{8}{10}\selectfont }
+} 
+\fontsize{8.0pt}{10.0pt}\selectfont
+\begin{tabular*}{\linewidth}{@{\extracolsep{\fill}}l|cccccccc}
+\toprule
+ & \multicolumn{2}{c}{Sample Size} & \multicolumn{2}{c}{Mean Outcome} & \multicolumn{4}{c}{Treatment Effect} \\ 
+\cmidrule(lr){2-3} \cmidrule(lr){4-5} \cmidrule(lr){6-9}
+ & N & Treated & Control & Treated & ATT & (SE) & 95\% CI & p-value \\ 
+\midrule\addlinespace[2.5pt]
+\multicolumn{9}{l}{{\itshape \textbf{Panel A: ITT Enrollment Outcomes} \emph{(full matched sample; non-NSC-matches coded 0)}}} \\[2.5pt] 
+\midrule\addlinespace[2.5pt]
+Seamless enrollment (ITT) & {194} & {113} & {0.823} & {0.752} & {-0.070} & {(0.059)} & {[-0.185, 0.046]} & {0.236} \\ 
+Ever enrolled (ITT) & 194 & 113 & 0.823 & 0.770 & -0.053 & (0.058) & [-0.168, 0.061] & 0.361 \\ 
+\midrule\addlinespace[2.5pt]
+\multicolumn{9}{l}{{\itshape \textbf{Panel B: NSC-Conditional Enrollment and Institution Outcomes} \emph{(NSC-matched students only)}}} \\[2.5pt] 
+\midrule\addlinespace[2.5pt]
+Seamless enrollment & 182 & 102 & 0.830 & 0.833 & -0.007 & (0.054) & [-0.114, 0.100] & 0.902 \\ 
+Ever enrolled & 182 & 102 & 0.830 & 0.853 & 0.011 & (0.053) & [-0.093, 0.116] & 0.829 \\ 
+First-time full-time enrollment & 182 & 102 & 0.804 & 0.833 & 0.022 & (0.060) & [-0.096, 0.140] & 0.714 \\ 
+Initial enrollment: any 4-year & 182 & 102 & 0.830 & 0.853 & 0.011 & (0.053) & [-0.093, 0.116] & 0.829 \\ 
+Initial enrollment: public 4-year & 182 & 102 & 0.437 & 0.392 & -0.090 & (0.077) & [-0.243, 0.063] & 0.248 \\ 
+Initial enrollment: private 4-year & 182 & 102 & 0.393 & 0.461 & 0.101 & (0.079) & [-0.055, 0.257] & 0.202 \\ 
+Initial enrollment: in-state & 182 & 102 & 0.455 & 0.500 & 0.032 & (0.078) & [-0.122, 0.187] & 0.680 \\ 
+Delayed enrollment & 182 & 102 & 0.000 & 0.023 & 0.021 & (0.016) & [-0.011, 0.053] & 0.193 \\ 
+\midrule\addlinespace[2.5pt]
+\multicolumn{9}{l}{{\itshape \textbf{Panel C: Persistence and Degree Outcomes} \emph{(enrolled students; cohort restrictions apply)}}} \\[2.5pt] 
+\midrule\addlinespace[2.5pt]
+Retained into 2nd year & 136 & 74 & 0.976 & 0.932 & -0.024 & (0.037) & [-0.098, 0.049] & 0.512 \\ 
+Persisted to 2nd year (any inst.) & 136 & 74 & 0.976 & 0.946 & -0.016 & (NaN) & [NaN, NaN] & NaN \\ 
+Any degree ever & 156 & 87 & 0.194 & 0.218 & -0.047 & (0.053) & [-0.153, 0.058] & 0.379 \\ 
+Bachelor's degree ever & 156 & 87 & 0.172 & 0.207 & -0.025 & (0.057) & [-0.138, 0.089] & 0.670 \\ 
+Any degree within 6 years & 156 & 87 & 0.194 & 0.218 & -0.047 & (0.053) & [-0.153, 0.058] & 0.379 \\ 
+Bachelor's degree within 4 years & 156 & 87 & 0.172 & 0.207 & -0.025 & (0.057) & [-0.138, 0.089] & 0.670 \\ 
+Bachelor's degree within 6 years & 156 & 87 & 0.172 & 0.207 & -0.025 & (0.057) & [-0.138, 0.089] & 0.670 \\ 
+\midrule\addlinespace[2.5pt]
+\multicolumn{9}{l}{{\itshape \textbf{Panel D: STEM Outcomes}}} \\[2.5pt] 
+\midrule\addlinespace[2.5pt]
+Seamless STEM enrollment (ITT) & 194 & 113 & 0.372 & 0.416 & 0.009 & (0.076) & [-0.141, 0.159] & 0.907 \\ 
+Ever enrolled STEM (ITT) & 194 & 113 & 0.398 & 0.442 & 0.004 & (0.075) & [-0.145, 0.153] & 0.961 \\ 
+Seamless STEM enrollment & 182 & 102 & 0.375 & 0.461 & 0.047 & (0.078) & [-0.107, 0.200] & 0.551 \\ 
+Ever enrolled STEM & 182 & 102 & 0.402 & 0.490 & 0.039 & (0.077) & [-0.113, 0.192] & 0.610 \\ 
+Persisted in STEM to 2nd year & {136} & {74} & {0.345} & {0.446} & {0.026} & {(NaN)} & {[NaN, NaN]} & {NaN} \\ 
+\bottomrule
+\end{tabular*}
+\begin{minipage}{\linewidth}
+\vspace{.05em}
+\emph{Notes:} ATT = average treatment effect on the treated, estimated via a linear probability model (LPM) with matching weights, cohort fixed effects, and HC2 heteroskedasticity-robust standard errors. All outcomes are binary (0/1); ATT and means are reported as proportions. * p \textless{} 0.10, ** p \textless{} 0.05, *** p \textless{} 0.01.\\
+Panel A uses all matched students with non-NSC-matched students coded as non-enrolled (ITT estimand). Panel B restricts to NSC-matched students. Panel C restricts to enrolled students (enroll\_ever == 1); reten\_1y and pers\_1y further restricted to cohorts 2018--2021 (2022 excluded --- no fall 2023 follow-up in NSC file). Degree outcomes restricted to cohorts 2018--2022. Panel D STEM enrollment uses ITT (full sample) or NSC-conditional sample; pers\_1y\_stem restricted to enrolled students, cohorts 2018--2021.\\
+Propensity scores estimated via logistic regression with nearest-neighbor matching with replacement, caliper = 0.5 SD, exact match on application year. Year 2022 excluded from matching (insufficient follow-up for retention outcomes). Year 2023 excluded from PA matching (only 1 treated student).\\
+\end{minipage}
+\end{table}
+
