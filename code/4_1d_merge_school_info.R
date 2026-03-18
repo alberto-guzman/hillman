@@ -175,6 +175,9 @@ school_facts <- readxl::read_excel(here(
     school_pct_special_ed = special_education,
     school_pct_white = white
   ) |>
+  mutate(
+    school_title_i = as.integer(school_title_i == "Yes")
+  ) |>
   group_by(aun) |>
   slice(1) |>
   ungroup()
