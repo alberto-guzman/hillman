@@ -1,23 +1,28 @@
-# =============================================================================
-# 4_1d_merge_school_info.R
-#
-# Purpose: Normalize high school names, link students to PA school AUN codes
+#          `merged_df_all`   — all-states dataset with normalized school names
+#                              and AUN where matchedigh school names, link students to PA school AUN codes
 #          via a name crosswalk, and merge school-level covariates for the
 #          PA public school subsample.
 #
 # Input:   `merged_clean` — analysis-ready student data (from script 3b)
 #          data/high_school_match.dta — HS name → AUN crosswalk
 #          data/SchoolFastFacts_20242025.xlsx — PA school-level covariates
-# Output:  `merged_df_all` — all-states dataset with normalized school names
-#                             and AUN where matched
-#          `merged_df_pa`  — PA public school students with school covariates
+# Output:  `merged_df_all`   — all-states dataset with normalized school names
+#                               and AUN where matched
+#          `merged_df_pa`    — PA public school students with school covariates
+#          `merged_df_all_n` — applicant and alumni counts by year (all states)
+#          `merged_df_pa_n`  — applicant and alumni counts by year (PA public)
 #          data/merged_all_states.csv
 #          data/merged_df_pa_public.csv
+#          output/n_merged_all_by_year.csv
+#          output/n_merged_pa_by_year.csv
 # =============================================================================
 
-# --- School name normalizer --------------------------------------------------
+# =============================================================================
+# HELPER FUNCTION
+# =============================================================================
 # Strips punctuation, lowercases, and standardizes common suffixes
-# (e.g. "High School" → "hs") to improve fuzzy matching with the crosswalk.
+# (e.g., "High School" → "hs") to improve matching with the crosswalk.
+
 normalize_hs <- function(x) {
   x |>
     stringr::str_to_lower() |>
@@ -35,35 +40,78 @@ normalize_hs <- function(x) {
 # =============================================================================
 # BUILD ALL-STATES DATASET
 # =============================================================================
-# Apply name normalization to the full dataset. Non-PA students will receive
-# NA for AUN after the crosswalk merge below.
-
-message("\n=== Creating Overall Dataset (All States) ===\n")
 
 merged_df_all <- merged_clean |>
   mutate(
     hs_name_clean = normalize_hs(high_school),
-    state = str_to_lower(str_trim(state))
+    state = str_to_lower(str_trim(state)),
+    # Normalize state abbreviations to full lowercase names
+    state = case_match(
+      state,
+      "al" ~ "alabama",
+      "ak" ~ "alaska",
+      "az" ~ "arizona",
+      "ar" ~ "arkansas",
+      "ca" ~ "california",
+      "co" ~ "colorado",
+      "ct" ~ "connecticut",
+      "de" ~ "delaware",
+      "fl" ~ "florida",
+      "ga" ~ "georgia",
+      "hi" ~ "hawaii",
+      "id" ~ "idaho",
+      "il" ~ "illinois",
+      "in" ~ "indiana",
+      "ia" ~ "iowa",
+      "ks" ~ "kansas",
+      "ky" ~ "kentucky",
+      "la" ~ "louisiana",
+      "me" ~ "maine",
+      "md" ~ "maryland",
+      "ma" ~ "massachusetts",
+      "mi" ~ "michigan",
+      "mn" ~ "minnesota",
+      "ms" ~ "mississippi",
+      "mo" ~ "missouri",
+      "mt" ~ "montana",
+      "ne" ~ "nebraska",
+      "nv" ~ "nevada",
+      "nh" ~ "new hampshire",
+      "nj" ~ "new jersey",
+      "nm" ~ "new mexico",
+      "ny" ~ "new york",
+      "nc" ~ "north carolina",
+      "nd" ~ "north dakota",
+      "oh" ~ "ohio",
+      "ok" ~ "oklahoma",
+      "or" ~ "oregon",
+      "pa" ~ "pennsylvania",
+      "ri" ~ "rhode island",
+      "sc" ~ "south carolina",
+      "sd" ~ "south dakota",
+      "tn" ~ "tennessee",
+      "tx" ~ "texas",
+      "ut" ~ "utah",
+      "vt" ~ "vermont",
+      "va" ~ "virginia",
+      "wa" ~ "washington",
+      "wv" ~ "west virginia",
+      "wi" ~ "wisconsin",
+      "wy" ~ "wyoming",
+      "dc" ~ "district of columbia",
+      .default = state
+    )
   )
 
 message("Total students (all states): ", nrow(merged_df_all))
 message(
-  "Total unique schools (all states): ",
+  "Unique schools (all states): ",
   n_distinct(merged_df_all$hs_name_clean, na.rm = TRUE)
 )
-
-message("\nStudents by state:")
-merged_df_all |>
-  count(state, sort = TRUE) |>
-  print(n = 20)
 
 # =============================================================================
 # MERGE SCHOOL → AUN CROSSWALK
 # =============================================================================
-# Join the HS name crosswalk to add AUN codes. Duplicate crosswalk entries
-# are resolved (one known manual fix for Pine Richland HS).
-
-message("\n=== Loading Crosswalk and Adding AUN ===\n")
 
 crosswalk <- read_dta(here("data", "high_school_match.dta")) |>
   mutate(hs_name_clean = normalize_hs(hs_name_clean)) |>
@@ -73,6 +121,7 @@ crosswalk <- read_dta(here("data", "high_school_match.dta")) |>
 
 message("Crosswalk loaded: ", nrow(crosswalk), " schools")
 
+# Manually verified: pine richland hs maps to two crosswalk entries; drop the wrong one
 crosswalk <- crosswalk |>
   filter(
     !(hs_name_clean == "pine richland hs" & pa_state_name_cw == "Richland HS")
@@ -97,38 +146,26 @@ if (nrow(crosswalk_dupes) > 0) {
 merged_df_all <- merged_df_all |>
   left_join(crosswalk, by = "hs_name_clean")
 
-message("\nAUN added to overall dataset")
-message("  Students with AUN: ", sum(!is.na(merged_df_all$aun)))
-message("  Students without AUN: ", sum(is.na(merged_df_all$aun)))
+message("Students with AUN: ", sum(!is.na(merged_df_all$aun)))
+message("Students without AUN: ", sum(is.na(merged_df_all$aun)))
 
 # =============================================================================
 # BUILD PA PUBLIC SCHOOL DATASET
 # =============================================================================
-# Filter to PA students, then merge PA school-level covariates from the
-# School Fast Facts file. Retain only students matched to a public school
-# (i.e., with a valid AUN and non-missing enrollment data).
-
-message("\n=== Creating PA-Only Dataset ===\n")
+# Filter to PA students, merge school-level covariates, then retain only
+# students matched to a public school (valid AUN + non-missing enrollment).
 
 merged_df_pa <- merged_df_all |>
-  filter(state %in% c("pa", "pennsylvania"))
+  filter(state == "pennsylvania")
 
 message("PA students: ", nrow(merged_df_pa))
-message(
-  "PA unique schools: ",
-  n_distinct(merged_df_pa$hs_name_clean, na.rm = TRUE)
-)
 
-# --- Load PA school-level covariates -----------------------------------------
-message("\n=== Loading and Merging School-Level Data ===\n")
-
-school_facts <- readxl::read_excel(
-  here("data", "SchoolFastFacts_20242025.xlsx")
-) |>
+school_facts <- readxl::read_excel(here(
+  "data",
+  "SchoolFastFacts_20242025.xlsx"
+)) |>
   janitor::clean_names() |>
-  # Ensure AUN is numeric to match merged_df_pa
   mutate(aun = as.numeric(aun)) |>
-  # Keep only desired variables and rename
   select(
     aun,
     school_title_i = title_i_school,
@@ -142,132 +179,99 @@ school_facts <- readxl::read_excel(
   slice(1) |>
   ungroup()
 
-message(
-  "School Fast Facts loaded and de-duplicated: ",
-  nrow(school_facts),
-  " unique schools"
-)
+message("School Fast Facts loaded: ", nrow(school_facts), " unique schools")
 
 merged_df_pa <- merged_df_pa |>
   left_join(school_facts, by = "aun") |>
   filter(!is.na(aun)) |>
   filter(!is.na(school_enrollment))
 
-message(
-  "\nPA public school students with school covariates: ",
-  nrow(merged_df_pa)
-)
-message("  Treated: ", sum(merged_df_pa$treated_in_year == 1))
-message("  Control: ", sum(merged_df_pa$treated_in_year == 0))
-message("  Unique schools: ", n_distinct(merged_df_pa$aun))
-
-# =============================================================================
-# VALIDATION DIAGNOSTICS
-# =============================================================================
-
-message("\n=== PA School Merge Diagnostics ===")
-
-n_pa_schools <- merged_df_pa |> distinct(hs_name_clean) |> nrow()
-n_with_aun <- merged_df_pa |>
-  filter(!is.na(aun)) |>
-  distinct(hs_name_clean) |>
+# Two-step PA attrition diagnostic
+n_pa_raw <- merged_df_all |> filter(state == "pennsylvania") |> nrow()
+n_pa_after_aun <- merged_df_all |>
+  filter(state == "pennsylvania", !is.na(aun)) |>
   nrow()
+n_pa_final <- nrow(merged_df_pa)
 
-message("PA Public Schools: ", n_pa_schools)
+message("PA attrition breakdown:")
+message("  PA students before filter:     ", n_pa_raw)
 message(
-  "Matched to AUN: ",
-  n_with_aun,
-  " (",
-  round(100 * n_with_aun / n_pa_schools, 1),
-  "%)"
+  "  After dropping no-AUN:         ",
+  n_pa_after_aun,
+  "  (-",
+  n_pa_raw - n_pa_after_aun,
+  ")"
 )
-
-message("\nStudent-level match (public schools only):")
-message("  All students have AUN: ", sum(!is.na(merged_df_pa$aun)))
 message(
-  "  All students have school data: ",
-  sum(!is.na(merged_df_pa$school_enrollment))
+  "  After dropping no school data: ",
+  n_pa_final,
+  "  (-",
+  n_pa_after_aun - n_pa_final,
+  ")"
 )
-
-message("\nPA public school students by application year:")
-merged_df_pa |>
-  group_by(year) |>
-  summarise(
-    n = n(),
-    n_treated = sum(treated_in_year == 1),
-    pct_treated = round(100 * n_treated / n, 1),
-    .groups = "drop"
-  ) |>
-  print()
-
-message("\nSchool characteristics (averages):")
-merged_df_pa |>
-  summarise(
-    avg_enrollment = round(mean(school_enrollment, na.rm = TRUE)),
-    avg_pct_econ_disadv = round(
-      mean(school_pct_econ_disadvantaged, na.rm = TRUE),
-      1
-    ),
-    avg_pct_english_learner = round(
-      mean(school_pct_english_learner, na.rm = TRUE),
-      1
-    ),
-    avg_pct_special_ed = round(mean(school_pct_special_ed, na.rm = TRUE), 1),
-    avg_pct_white = round(mean(school_pct_white, na.rm = TRUE), 1),
-    n_title_i = sum(school_title_i == "Yes", na.rm = TRUE)
-  ) |>
-  glimpse()
 
 # =============================================================================
 # SAVE OUTPUTS
 # =============================================================================
 
-message("\n=== Saving Datasets ===\n")
-
 write_csv(merged_df_all, here("data", "merged_all_states.csv"))
+write_csv(merged_df_pa, here("data", "merged_df_pa_public.csv"))
+
 message(
   "Saved: data/merged_all_states.csv (",
   nrow(merged_df_all),
   " students)"
 )
-
-write_csv(merged_df_pa, here("data", "merged_df_pa_public.csv"))
 message(
   "Saved: data/merged_df_pa_public.csv (",
   nrow(merged_df_pa),
-  " students - public schools only)"
+  " students)"
 )
 
-# --- Final summary and clean up ----------------------------------------------
+# =============================================================================
+# FINAL COUNTS
+# =============================================================================
+
+merged_df_all_n <- merged_df_all |>
+  count(year, name = "n_total") |>
+  left_join(
+    merged_df_all |>
+      filter(treated_in_year == 1) |>
+      count(year, name = "n_alumni"),
+    by = "year"
+  ) |>
+  mutate(
+    n_alumni = replace_na(n_alumni, 0L),
+    n_applicants = n_total - n_alumni,
+    pct_alumni = round(n_alumni / n_total * 100, 1)
+  ) |>
+  select(year, n_applicants, n_alumni, n_total, pct_alumni)
+
+merged_df_pa_n <- merged_df_pa |>
+  count(year, name = "n_total") |>
+  left_join(
+    merged_df_pa |>
+      filter(treated_in_year == 1) |>
+      count(year, name = "n_alumni"),
+    by = "year"
+  ) |>
+  mutate(
+    n_alumni = replace_na(n_alumni, 0L),
+    n_applicants = n_total - n_alumni,
+    pct_alumni = round(n_alumni / n_total * 100, 1)
+  ) |>
+  select(year, n_applicants, n_alumni, n_total, pct_alumni)
+
+write_csv(merged_df_all_n, here("output", "n_merged_all_by_year.csv"))
+write_csv(merged_df_pa_n, here("output", "n_merged_pa_by_year.csv"))
+
+merged_df_all_n
+merged_df_pa_n
+
+# --- Final clean up ----------------------------------------------
 rm(
   list = setdiff(
     ls(),
-    c("merged_df_all", "merged_df_pa", "crosswalk", "school_facts")
-  )
-)
-
-message("\n=== School Merge Complete ===")
-message("Final datasets in memory:")
-message("  merged_df_all: ", nrow(merged_df_all), " students (all states)")
-message(
-  "    - PA students with AUN: ",
-  sum(
-    !is.na(merged_df_all$aun) &
-      merged_df_all$state %in% c("pa", "pennsylvania")
-  )
-)
-message("    - Non-PA students (AUN = NA): ", sum(is.na(merged_df_all$aun)))
-message(
-  "  merged_df_pa: ",
-  nrow(merged_df_pa),
-  " students (PA public schools only)"
-)
-message("    - All have AUN and school covariates")
-message("    - Unique schools: ", n_distinct(merged_df_pa$aun))
-
-rm(
-  list = setdiff(
-    ls(),
-    c("merged_df_all", "merged_df_pa")
+    c("merged_df_all", "merged_df_pa", "merged_df_all_n", "merged_df_pa_n")
   )
 )

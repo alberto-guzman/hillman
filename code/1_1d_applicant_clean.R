@@ -1,5 +1,13 @@
 # =============================================================================
-# Hillman Summer Applicants
+# 1_1d_applicant_clean.R
+#
+# Purpose: Load and clean Hillman Summer program applicant data across cohort
+#          years, standardize variables, and produce one analysis-ready dataset.
+#
+# Input:   data/ — year-specific Excel applicant files (2017–2023)
+# Output:  `applicants`  — cleaned long-format applicant data frame
+#          `applicant_n` — raw applicant counts by year
+#          output/n_applicants_by_year.csv
 # =============================================================================
 
 library(tidyverse)
@@ -17,11 +25,12 @@ library(skimr)
 library(haven)
 library(cobalt)
 
-# -----------------------------------------------------------------------------
 here()
 
-# -----------------------------------------------------------------------------
-# Helper Function: Custom column name cleaning
+# =============================================================================
+# HELPER FUNCTION
+# =============================================================================
+
 clean_custom_names <- function(df) {
   df |>
     rename_with(
@@ -32,8 +41,11 @@ clean_custom_names <- function(df) {
     )
 }
 
-# -----------------------------------------------------------------------------
-# 2017 Data ------------------------------------------------------------------
+# =============================================================================
+# LOAD AND CLEAN YEAR-BY-YEAR FILES
+# =============================================================================
+
+# --- 2017 --------------------------------------------------------------------
 df_2017 <- read_excel(here("data", "hillman_2017.xlsx")) |>
   clean_custom_names() |>
   select(
@@ -106,8 +118,7 @@ df_2017 <- read_excel(here("data", "hillman_2017.xlsx")) |>
     year = 2017
   )
 
-# -----------------------------------------------------------------------------
-# 2018 Data ------------------------------------------------------------------
+# --- 2018 --------------------------------------------------------------------
 df_2018 <- read_excel(here("data", "hillman_2018.xlsx")) |>
   clean_custom_names() |>
   select(
@@ -190,8 +201,7 @@ df_2018 <- read_excel(here("data", "hillman_2018.xlsx")) |>
     year = 2018
   )
 
-# -----------------------------------------------------------------------------
-# 2019 Data ------------------------------------------------------------------
+# --- 2019 --------------------------------------------------------------------
 df_2019 <- read_excel(
   here("data", "hillman_2019.xlsx"),
   sheet = "All (Extra info)"
@@ -297,7 +307,7 @@ df_2019 <- read_excel(
     year = 2019
   )
 
-# Merge in stipend data for 2019
+# Stipend data for 2019 is in a separate file
 df_stipend <- read_excel(here("data", "hillman_raw.xlsx"), sheet = "2019") |>
   select(first_name, last_name, stipend)
 
@@ -305,8 +315,7 @@ df_2019 <- df_2019 |>
   left_join(df_stipend, by = c("first_name", "last_name"))
 rm(df_stipend)
 
-# -----------------------------------------------------------------------------
-# 2020 Data ------------------------------------------------------------------
+# --- 2020 --------------------------------------------------------------------
 df_2020 <- read_excel(here("data", "hillman_2020.xlsx")) |>
   clean_custom_names() |>
   select(
@@ -376,8 +385,7 @@ df_2020 <- read_excel(here("data", "hillman_2020.xlsx")) |>
   ) |>
   mutate(year = 2020)
 
-# -----------------------------------------------------------------------------
-# 2021 Data ------------------------------------------------------------------
+# --- 2021 --------------------------------------------------------------------
 df_2021 <- read_excel(here("data", "hillman_2021.xlsx")) |>
   clean_names() |>
   select(
@@ -447,8 +455,7 @@ df_2021 <- read_excel(here("data", "hillman_2021.xlsx")) |>
   ) |>
   mutate(year = 2021)
 
-# -----------------------------------------------------------------------------
-# 2022 Data ------------------------------------------------------------------
+# --- 2022 --------------------------------------------------------------------
 df_2022 <- read_excel(here("data", "hillman_2022.xlsx")) |>
   clean_names() |>
   select(
@@ -521,8 +528,7 @@ df_2022 <- read_excel(here("data", "hillman_2022.xlsx")) |>
   ) |>
   mutate(year = 2022)
 
-# -----------------------------------------------------------------------------
-# 2023 Data ------------------------------------------------------------------
+# --- 2023 --------------------------------------------------------------------
 df_2023 <- read_csv(here("data", "hillman_2023.csv")) |>
   clean_names() |>
   select(
@@ -594,7 +600,7 @@ df_2023 <- read_csv(here("data", "hillman_2023.csv")) |>
   ) |>
   mutate(year = 2023)
 
-# Merge stipend information for 2023 from the external text file
+# Stipend data for 2023 is in a separate text file
 df2023_stipend <- read_delim(
   here("data", "2023_applicants_stipendEligible.txt"),
   delim = "\t",
@@ -612,8 +618,9 @@ df_2023 <- df_2023 |>
   left_join(df2023_stipend, by = c("first_name", "last_name"))
 rm(df2023_stipend)
 
-# -----------------------------------------------------------------------------
-# Merge All Years ------------------------------------------------------------
+# =============================================================================
+# COMBINE ALL YEARS
+# =============================================================================
 
 applicants <- bind_rows(
   df_2017,
@@ -625,7 +632,6 @@ applicants <- bind_rows(
   df_2023
 )
 
-# Remove columns not needed in the final analysis and clean up names
 applicants <- applicants |>
   select(
     -c(
@@ -640,38 +646,42 @@ applicants <- applicants |>
       middle_name
     )
   ) |>
-  # Clean first and last names (convert to lower case and remove extra characters)
   mutate(
     first_name = str_to_lower(first_name) |> str_remove("\\(.*") |> str_trim(),
     last_name = str_to_lower(last_name) |> str_trim()
   )
 
-# -----------------------------------------------------------------------------
-# Additional Data Adjustments ------------------------------------------------
+# =============================================================================
+# STANDARDIZE VARIABLES
+# =============================================================================
 
-# Clean names (remove special characters, quotes, parentheses)
+# Name cleaning: remove special characters, quotes, parentheses
 applicants <- applicants |>
   mutate(
     first_name = first_name |>
       str_to_lower() |>
-      str_replace_all('"(.*?)"|\\((.*?)\\)', " ") |>
+      str_replace_all("\"(.*?)\"|\\.\\((.*?)\\)", " ") |>
       str_replace_all("[^a-z]", " ") |>
       str_squish(),
-
     last_name = last_name |>
       str_to_lower() |>
-      str_replace_all('"(.*?)"|\\((.*?)\\)', " ") |>
+      str_replace_all("\"(.*?)\"|\\.\\((.*?)\\)", " ") |>
       str_replace_all("[^a-z]", " ") |>
       str_squish()
   )
 
-# Standardize GPA to 4.0 scale
+# GPA standardization to 4.0 scale.
+# GPAs on other scales (5.0, 6.0, 10.0, 100-point) are converted
+# proportionally. Weighted GPAs above 4.0 use the scale denominator;
+# unweighted GPAs above 4.0 are set to NA.
 applicants <- applicants |>
   mutate(
     gpa_weight = case_when(
       is.na(gpa_weight) ~ NA_real_,
-      tolower(as.character(gpa_weight)) %in% c("1", "yes", "y", "true", "t") ~ 1,
-      tolower(as.character(gpa_weight)) %in% c("0", "no", "n", "false", "f") ~ 0,
+      tolower(as.character(gpa_weight)) %in%
+        c("1", "yes", "y", "true", "t") ~ 1,
+      tolower(as.character(gpa_weight)) %in%
+        c("0", "no", "n", "false", "f") ~ 0,
       TRUE ~ suppressWarnings(as.numeric(as.character(gpa_weight)))
     )
   ) |>
@@ -684,9 +694,9 @@ applicants <- applicants |>
       is.na(gpa_num) ~ NA_real_,
       gpa_num == 0 ~ NA_real_,
       gpa_num <= 4.0 ~ gpa_num,
-      gpa_num > 4.0 & gpa_num <= 5.0 ~ 
+      gpa_num > 4.0 & gpa_num <= 5.0 ~
         if_else(gpa_weight == 1, (gpa_num / 5.0) * 4.0, NA_real_),
-      gpa_num > 5.0 & gpa_num <= 6.0 ~ 
+      gpa_num > 5.0 & gpa_num <= 6.0 ~
         if_else(gpa_weight == 1, (gpa_num / 6.0) * 4.0, NA_real_),
       gpa_num > 6.0 & gpa_num <= 10.0 ~ (gpa_num / 10.0) * 4.0,
       gpa_num >= 93 ~ 4.0,
@@ -705,53 +715,71 @@ applicants <- applicants |>
   ) |>
   select(-gpa_num, -gpa_old)
 
-# Convert 0 to NA for all test scores and other variables where 0 is invalid
+# Out-of-range value cleaning
 applicants <- applicants |>
   mutate(
-    # GPA: convert 0 to NA (double-check in case any slipped through)
     gpa = if_else(gpa == 0, NA_real_, gpa),
-    
-    # Grade: only keep 9-12
     grade = if_else(grade < 9 | grade > 12, NA_integer_, grade),
-    
-    # House size: convert 0 to NA, cap at 11
-    house_size = if_else(house_size == 0 | house_size > 11, NA_integer_, house_size),
-    
-    # ZIP codes: valid US ZIPs are 00501-99950
+    house_size = if_else(
+      house_size == 0 | house_size > 11,
+      NA_integer_,
+      house_size
+    ),
     zip = if_else(zip < 501 | zip > 99950, NA_integer_, zip),
-    
-    # SAT scores: 0 -> NA, valid range 200-800
+
     sat_math = if_else(sat_math == 0, NA_integer_, sat_math),
     sat_verbal = if_else(sat_verbal == 0, NA_integer_, sat_verbal),
-    sat_writing = if_else(sat_writing == 0 | sat_writing < 200 | sat_writing > 800, 
-                          NA_integer_, sat_writing),
-    sat_reading_writing = if_else(sat_reading_writing == 0, NA_integer_, sat_reading_writing),
-    
-    # PSAT scores: 0 -> NA, cap at 760 (max PSAT score per section)
-    psat_math = if_else(psat_math == 0 | psat_math > 760, NA_integer_, psat_math),
-    psat_verbal = if_else(psat_verbal == 0 | psat_verbal > 760, NA_integer_, psat_verbal),
-    psat_writing = if_else(psat_writing == 0 | psat_writing > 760, NA_integer_, psat_writing),
-    psat_reading_writing = if_else(psat_reading_writing == 0, NA_integer_, psat_reading_writing),
-    
-    # ACT scores: 0 -> NA (valid range is 1-36)
+    sat_writing = if_else(
+      sat_writing == 0 | sat_writing < 200 | sat_writing > 800,
+      NA_integer_,
+      sat_writing
+    ),
+    sat_reading_writing = if_else(
+      sat_reading_writing == 0,
+      NA_integer_,
+      sat_reading_writing
+    ),
+
+    psat_math = if_else(
+      psat_math == 0 | psat_math > 760,
+      NA_integer_,
+      psat_math
+    ),
+    psat_verbal = if_else(
+      psat_verbal == 0 | psat_verbal > 760,
+      NA_integer_,
+      psat_verbal
+    ),
+    psat_writing = if_else(
+      psat_writing == 0 | psat_writing > 760,
+      NA_integer_,
+      psat_writing
+    ),
+    psat_reading_writing = if_else(
+      psat_reading_writing == 0,
+      NA_integer_,
+      psat_reading_writing
+    ),
+
     act_math = if_else(act_math == 0, NA_integer_, act_math),
     act_read = if_else(act_read == 0, NA_integer_, act_read),
     act_science = if_else(act_science == 0, NA_integer_, act_science),
     act_writing = if_else(act_writing == 0, NA_integer_, act_writing)
   ) |>
-  
-  # Drop problematic/duplicate columns
   select(
-    -`act_scores_|__|_verbal`,  # Duplicate/malformed ACT verbal column
-    -date_of_birth,              # Has invalid future dates
-    -application_form_hillman_academy_completion_status  # Not needed
+    -`act_scores_|__|_verbal`,
+    -date_of_birth,
+    -application_form_hillman_academy_completion_status
   )
 
-# Create High School Graduation Year variable
+# Derive HS graduation year from application year and grade
 applicants <- applicants |>
   mutate(hs_grad_year = year + (12 - grade))
 
-# Check for duplicate applicants
+# =============================================================================
+# REMOVE DUPLICATES
+# =============================================================================
+
 duplicates_check <- applicants |>
   group_by(first_name, last_name, year) |>
   filter(n() > 1) |>
@@ -762,33 +790,46 @@ if (nrow(duplicates_check) > 0) {
   print(duplicates_check)
 }
 
-# Remove manually flagged duplicate records
+# Manually identified duplicate entries verified against source data
 remove_duplicates <- tibble(
-  first_name = c("amanda", "angela", "arnav", "charles", "daniel", 
-                 "grace", "imani", "sanyah"),
-  last_name = c("lu", "tao", "patel", "mawhinney", "wang", 
-                "wang", "smith", "nabi")
+  first_name = c(
+    "amanda",
+    "angela",
+    "arnav",
+    "charles",
+    "daniel",
+    "grace",
+    "imani",
+    "sanyah"
+  ),
+  last_name = c(
+    "lu",
+    "tao",
+    "patel",
+    "mawhinney",
+    "wang",
+    "wang",
+    "smith",
+    "nabi"
+  )
 )
 
 applicants <- applicants |>
   anti_join(remove_duplicates, by = c("first_name", "last_name"))
 
-# -----------------------------------------------------------------------------
-# Final Checks & Summaries ---------------------------------------------------
+# =============================================================================
+# FINAL COUNTS
+# =============================================================================
 
-# Count unique applicants by year
-year_counts <- applicants |>
-  group_by(first_name, last_name, year) |>
-  summarise(n = n(), .groups = "drop") |>
-  group_by(year) |>
-  summarise(total_unique_students = sum(n), .groups = "drop")
+applicant_n <- applicants |>
+  count(year, name = "n_applicants") |>
+  mutate(
+    cumulative_n = cumsum(n_applicants),
+    pct_of_total = round(n_applicants / sum(n_applicants) * 100, 1)
+  )
 
-message("\nFinal applicant counts by year:")
-print(year_counts)
+write_csv(applicant_n, here("output", "n_applicants_by_year.csv"))
 
-message("\nTotal applicants: ", nrow(applicants))
-message("GPA missing: ", sum(is.na(applicants$gpa)), 
-        " (", round(100 * mean(is.na(applicants$gpa)), 1), "%)")
+applicant_n
 
-# Clean up workspace
-rm(list = setdiff(ls(), "applicants"))
+rm(list = setdiff(ls(), c("applicants", "applicant_n")))

@@ -5,8 +5,10 @@
 #          indicator dataset (one row per student, one column per program year).
 #
 # Input:   data/Alumni Tracker (...).csv
-# Output:  `alum` — wide data frame with treated_2017:2023, treated_ever,
-#          and treated_before_2017 indicators
+# Output:  `alum`   — wide data frame with treated_2017:2023, treated_ever,
+#                     and treated_before_2017 indicators
+#          `alum_n` — raw alumni counts by year
+#          output/n_alumni_by_year.csv
 # =============================================================================
 
 # --- Load raw alumni tracker -------------------------------------------------
@@ -15,9 +17,12 @@ alum <- readr::read_csv(
   col_types = readr::cols(...7 = readr::col_skip())
 )
 
-# --- Standardize name fields -------------------------------------------------
+# =============================================================================
+# STANDARDIZE NAMES
+# =============================================================================
 # Lowercase, strip nicknames/parentheticals, and collapse whitespace so names
 # join cleanly with the applicant data.
+
 alum <- alum |>
   mutate(
     first_name = First |>
@@ -25,7 +30,6 @@ alum <- alum |>
       str_replace_all('"(.*?)"|\\.\\((.*?)\\)', " ") |>
       str_replace_all("[^a-z]", " ") |>
       str_squish(),
-
     last_name = Last |>
       str_to_lower() |>
       str_replace_all('"(.*?)"|\\.\\((.*?)\\)', " ") |>
@@ -34,7 +38,10 @@ alum <- alum |>
   ) |>
   select(-First, -Last)
 
-# --- Derive participation year range per student -----------------------------
+# =============================================================================
+# BUILD PARTICIPATION YEAR RANGE
+# =============================================================================
+
 alum <- alum |>
   mutate(
     year_max = if_else(
@@ -49,9 +56,10 @@ alum <- alum |>
     )
   )
 
-# --- Reshape to long format and de-duplicate ---------------------------------
-# Pivot year1:year4 to long, remove a manually flagged duplicate entry,
-# then drop any remaining exact duplicates.
+# =============================================================================
+# RESHAPE TO LONG AND DE-DUPLICATE
+# =============================================================================
+
 alum_long <- alum |>
   select(first_name, last_name, year1:year4) |>
   pivot_longer(
@@ -66,15 +74,17 @@ alum_long <- alum |>
   ) |>
   drop_na(year)
 
+# Manually verified duplicate entry
 alum_long <- alum_long |>
   filter(!(first_name == "amanda" & last_name == "lu"))
 
 alum_long <- alum_long |>
   distinct(first_name, last_name, year, .keep_all = TRUE)
 
-# --- Build wide treatment indicators (one column per year) ------------------
-# Add a treatment flag, pivot to wide so each year becomes treated_YYYY,
-# then reorder columns chronologically.
+# =============================================================================
+# BUILD WIDE TREATMENT INDICATORS
+# =============================================================================
+
 alum <- alum_long |>
   mutate(treatment = 1L)
 
@@ -93,12 +103,12 @@ treated_cols <- treated_cols[order(as.integer(str_extract(
   treated_cols,
   "\\d{4}"
 )))]
+
 treated_years <- treated_years |>
   select(first_name, last_name, all_of(treated_cols))
 
-# --- Add summary treatment flags --------------------------------------------
 # treated_ever: participated in any year
-# treated_before_2017: participated before the analytic window (excluded later)
+# treated_before_2017: participated before the analytic window (flagged, not dropped here)
 treated_years <- treated_years |>
   mutate(
     treated_ever = if_else(
@@ -131,20 +141,21 @@ treated_years <- treated_years |>
     treated_2017:treated_2023
   )
 
-# --- Diagnostic summary ------------------------------------------------------
-message("\n=== Treatment Summary by Year ===\n")
-treated_years |>
-  select(treated_2017:treated_2023) |>
-  summarise(across(everything(), sum, na.rm = TRUE)) |>
-  pivot_longer(everything(), names_to = "year", values_to = "n_treated") |>
-  arrange(year) |>
-  print()
+# =============================================================================
+# FINAL COUNTS
+# =============================================================================
 
-message("\nTotal unique alumni: ", nrow(treated_years))
-message("Ever treated: ", sum(treated_years$treated_ever))
-message("Treated before 2017: ", sum(treated_years$treated_before_2017))
-
-# --- Finalize and clean up ---------------------------------------------------
 alum <- treated_years
 
-rm(list = setdiff(ls(), c("alum", "applicants")))
+alum_n <- alum_long |>
+  count(year, name = "n_alumni") |>
+  mutate(
+    cumulative_n = cumsum(n_alumni),
+    pct_of_total = round(n_alumni / sum(n_alumni) * 100, 1)
+  )
+
+write_csv(alum_n, here("output", "n_alumni_by_year.csv"))
+
+alum_n
+
+rm(list = setdiff(ls(), c("alum", "alum_n", "applicants", "applicant_n")))

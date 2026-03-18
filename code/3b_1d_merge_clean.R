@@ -3,27 +3,20 @@
 #
 # Purpose: Standardize covariates in the merged applicant/alumni dataset,
 #          merge NSC college outcome data, and restrict to the analytic sample
-#          (graduation cohorts 2018–2022).
+#          (graduation cohorts 2018–2022, NSC-matched students only).
 #
 # Input:   `merged_df` — one row per student (from script 3a)
 #          data/files_for_danielle_nsc/clean_Hillman_2017_2025.dta — NSC data
-# Output:  `merged_clean` — analysis-ready dataset with standardized
-#          covariates and NSC outcomes attached
+# Output:  `merged_clean`   — analysis-ready dataset restricted to students
+#                             with an NSC record, standardized covariates,
+#                             and NSC outcomes attached
+#          `merged_clean_n` — applicant and alumni counts by year
+#          output/n_merged_clean_by_year.csv
 # =============================================================================
 
 # =============================================================================
 # STANDARDIZE COVARIATES
 # =============================================================================
-# Recode raw applicant fields to consistent numeric indicators:
-#   - GPA / PSAT: convert 0s to NA (already cleaned, double-check)
-#   - Stipend, first-gen, US citizenship, disability, negative school
-#     environment: free-text → 0/1
-#   - Race: derive racially_marginalized and bi_multi_racial flags from
-#     self_identity string
-#   - Geography: derive urban/suburban/rural flags from geographic_location
-#   - Note: 2023 first-gen responses were reverse-coded in the source data
-#     and are flipped here.
-
 merged_clean <- merged_df |>
   mutate(
     gpa = na_if(gpa, 0),
@@ -33,8 +26,7 @@ merged_clean <- merged_df |>
       str_detect(
         stipend,
         regex("\\b(yes|stipend eligible|yes student)\\b", ignore_case = TRUE)
-      ) ~
-        1L,
+      ) ~ 1L,
       TRUE ~ 0L
     ),
 
@@ -47,7 +39,8 @@ merged_clean <- merged_df |>
       TRUE ~ NA_integer_
     ),
 
-    # Fix 2023 reverse-coded first-gen
+    # 2023 first_gen question was reverse-coded in the source data ("did a
+    # parent attend college?" vs. "will you be the first?") — flip it here.
     first_gen = if_else(
       year == 2023 & !is.na(first_gen),
       1L - first_gen,
@@ -88,6 +81,8 @@ merged_clean <- merged_df |>
       missing = NA_integer_
     ),
 
+    # Any non-"no" non-missing response is coded 1 (presence of disability/
+    # negative school environment). Verify raw values with count() if recoding.
     disability = case_when(
       str_detect(
         documented_disability,
@@ -96,7 +91,6 @@ merged_clean <- merged_df |>
       !is.na(documented_disability) ~ 1L,
       TRUE ~ NA_integer_
     ),
-
     neg_school = case_when(
       str_detect(school_impact, regex("^\\s*no\\b", ignore_case = TRUE)) ~ 0L,
       !is.na(school_impact) ~ 1L,
@@ -113,11 +107,6 @@ merged_clean <- merged_df |>
 # =============================================================================
 # MERGE NSC OUTCOME DATA
 # =============================================================================
-# Load the NSC file, de-duplicate on (first_name, last_name, hs_grad_year),
-# then left-join onto the cleaned applicant data.
-# Enrollment outcomes (seamless_enroll, enrolled_ever_*) are coded 0 for
-# non-matches; degree/persistence outcomes remain NA for non-matched students
-# because they are conditional on enrollment.
 
 library(haven)
 
@@ -158,7 +147,8 @@ outcomes <- read_dta(here(
 
 message("Loaded NSC outcome data: ", nrow(outcomes), " records")
 
-# De-duplicate NSC records
+# De-duplicate NSC records: keep the row with the most non-missing outcomes;
+# break ties by preferring seamless_enroll = 1.
 outcomes_dupes <- outcomes |>
   group_by(first_name, last_name, hs_grad_year) |>
   filter(n() > 1) |>
@@ -168,33 +158,10 @@ if (nrow(outcomes_dupes) > 0) {
   message(
     "Found ",
     nrow(outcomes_dupes),
-    " duplicate outcome records (",
-    round(100 * nrow(outcomes_dupes) / nrow(outcomes), 1),
-    "%)"
+    " duplicate NSC records — deduplicating"
   )
-
-  dupes_summary <- outcomes_dupes |>
-    group_by(first_name, last_name, hs_grad_year) |>
-    summarise(
-      n = n(),
-      seamless_enroll_same = length(unique(seamless_enroll)) == 1,
-      .groups = "drop"
-    )
-
-  message(
-    "  Duplicates with identical outcomes: ",
-    sum(dupes_summary$seamless_enroll_same)
-  )
-  message(
-    "  Duplicates with different outcomes: ",
-    sum(!dupes_summary$seamless_enroll_same)
-  )
-
   outcomes <- outcomes |>
     group_by(first_name, last_name, hs_grad_year) |>
-    # Sort so the record with the most non-missing outcome values comes first,
-    # rather than taking an arbitrary row. For records with identical non-missing
-    # counts, ties are broken by seamless_enroll descending (prefer enrolled=1).
     arrange(
       desc(rowSums(!is.na(across(everything())))),
       desc(seamless_enroll),
@@ -202,88 +169,52 @@ if (nrow(outcomes_dupes) > 0) {
     ) |>
     slice(1) |>
     ungroup()
-
   message("After de-duplication: ", nrow(outcomes), " unique outcome records")
 } else {
-  message("No duplicate outcome records found")
+  message("No duplicate NSC records found")
 }
-
-message("\n=== Merging NSC outcomes with applicant data ===\n")
 
 merged_clean <- merged_clean |>
   left_join(outcomes, by = c("first_name", "last_name", "hs_grad_year"))
 
-# Merge diagnostics
-merge_stats <- merged_clean |>
-  summarise(
-    n_total = n(),
-    n_matched = sum(!is.na(seamless_enroll)),
-    pct_matched = round(100 * n_matched / n_total, 1),
-    n_unmatched = sum(is.na(seamless_enroll)),
-    pct_unmatched = round(100 * n_unmatched / n_total, 1)
-  )
-
-message("Merge statistics:")
-message("  Total applicants: ", merge_stats$n_total)
-message(
-  "  Matched to NSC: ",
-  merge_stats$n_matched,
-  " (",
-  merge_stats$pct_matched,
-  "%)"
-)
-message(
-  "  Unmatched: ",
-  merge_stats$n_unmatched,
-  " (",
-  merge_stats$pct_unmatched,
-  "%)"
-)
-
-# Check match rates by treatment status
+# Check match rates by treatment status before applying filter
 match_by_treatment <- merged_clean |>
   group_by(treated_in_year) |>
   summarise(
     n = n(),
     n_matched = sum(!is.na(seamless_enroll)),
-    pct_matched = round(100 * n_matched / n, 1)
+    pct_matched = round(100 * n_matched / n, 1),
+    .groups = "drop"
   )
 
-message("\nMatch rates by treatment status:")
+message("NSC match rates by treatment status:")
 print(match_by_treatment)
 
-# Code NSC non-matches as 0 for enrollment outcomes only.
-# ASSUMPTION: students not found in NSC are assumed not enrolled.
-# This is standard practice when using NSC as the universe of enrollment
-# records, but it will bias estimates downward if non-match rates differ
-# by treatment status (see match_by_treatment diagnostic above).
-# Robustness check: re-run main models restricting to NSC-matched students
-# only (i.e., drop non-matches rather than coding as 0) and compare ATT.
+# Drop students with no NSC record rather than coding enrollment as 0.
+# Absence from NSC is not equivalent to non-enrollment; coding it 0 would
+# bias enrollment estimates if non-match rates differ by treatment status.
+pre_nsc_filter_n <- nrow(merged_clean)
+
 merged_clean <- merged_clean |>
-  mutate(across(
-    c(
-      seamless_enroll,
-      seamless_enroll_stem,
-      enrolled_ever_nsc,
-      enrolled_ever_stem
-    ),
-    ~ if_else(is.na(.), 0, .)
-  ))
+  filter(!is.na(seamless_enroll))
+
+message(
+  "NSC filter: ",
+  nrow(merged_clean),
+  " retained, ",
+  pre_nsc_filter_n - nrow(merged_clean),
+  " dropped"
+)
 # =============================================================================
 # FILTER TO ANALYTIC SAMPLE (graduation cohorts 2018–2022)
 # =============================================================================
-# Restrict to students with valid hs_grad_year (2018–2022), valid grade
-# (9–12), and non-missing graduation year. Earlier cohorts have incomplete
-# NSC follow-up; later cohorts are too recent for 6-year degree outcomes.
-
-message("\n=== Filtering to graduation cohorts 2018-2022 ===\n")
+# Earlier cohorts have incomplete NSC follow-up; later cohorts are too recent
+# for 6-year degree outcomes.
 
 pre_filter_n <- nrow(merged_clean)
 
-# Calculate removal statistics BEFORE filtering
 removal_stats <- merged_clean |>
   summarise(
-    total = n(),
     missing_grad_year = sum(is.na(hs_grad_year)),
     missing_grade = sum(is.na(grade)),
     invalid_grade = sum(!is.na(grade) & (grade < 9 | grade > 12)),
@@ -307,14 +238,16 @@ merged_clean <- merged_clean |>
     hs_grad_year <= 2022
   )
 
-post_filter_n <- nrow(merged_clean)
-
-message("Removed ", pre_filter_n - post_filter_n, " observations:")
+message(
+  "Cohort filter removed ",
+  pre_filter_n - nrow(merged_clean),
+  " observations:"
+)
 message("  Missing hs_grad_year: ", removal_stats$missing_grad_year)
 message("  Missing grade: ", removal_stats$missing_grade)
-message("  Invalid grade (not 9-12): ", removal_stats$invalid_grade)
-message("  hs_grad_year outside 2018-2022: ", removal_stats$outside_range)
-message("Remaining: ", post_filter_n, " observations")
+message("  Invalid grade: ", removal_stats$invalid_grade)
+message("  Outside 2018-2022: ", removal_stats$outside_range)
+message("Remaining: ", nrow(merged_clean))
 
 # =============================================================================
 # SELECT FINAL VARIABLE SET
@@ -348,17 +281,14 @@ merged_clean <- merged_clean |>
     neg_school,
     us_citizen,
     first_gen,
-    # NSC enrollment outcomes (non-matches coded 0)
     seamless_enroll,
     seamless_enroll_stem,
     enrolled_ever_nsc,
     enrolled_ever_stem,
-    # NSC degree outcomes (conditional on enrollment — NAs = censored)
     degree_ever_nsc,
     degree_ever_stem_nsc,
     degree_6years_all_nsc,
     bachdegree_6years_all_nsc,
-    # NSC retention / persistence outcomes
     reten_fall_enter,
     reten_fall_enter_stem,
     reten_fall_enter2,
@@ -373,51 +303,41 @@ merged_clean <- merged_clean |>
     firsttime_fulltime
   )
 
-# --- Final diagnostics -------------------------------------------------------
-message("\n=== Cleaning Complete ===")
-message("Dataset includes ", nrow(merged_clean), " students")
-message("  Treated: ", sum(merged_clean$treated_in_year == 1))
-message("  Control: ", sum(merged_clean$treated_in_year == 0))
-message(
-  "  Graduation cohorts: ",
-  paste(sort(unique(merged_clean$hs_grad_year)), collapse = ", ")
-)
+# =============================================================================
+# FINAL COUNTS
+# =============================================================================
 
-message("\n=== Sample by Application Year ===")
-merged_clean |>
-  group_by(year, treated_in_year) |>
-  summarise(n = n(), .groups = "drop") |>
-  pivot_wider(
-    names_from = treated_in_year,
-    values_from = n,
-    names_prefix = "treated_",
-    values_fill = 0
+merged_clean_n <- merged_clean |>
+  count(year, name = "n_total") |>
+  left_join(
+    merged_clean |>
+      filter(treated_in_year == 1) |>
+      count(year, name = "n_alumni"),
+    by = "year"
   ) |>
   mutate(
-    total = treated_0 + treated_1,
-    pct_treated = round(100 * treated_1 / total, 1)
+    n_alumni = replace_na(n_alumni, 0L),
+    n_applicants = n_total - n_alumni,
+    pct_alumni = round(n_alumni / n_total * 100, 1)
   ) |>
-  print()
+  select(year, n_applicants, n_alumni, n_total, pct_alumni)
 
-message("\n=== Sample by Graduation Cohort ===")
-merged_clean |>
-  group_by(hs_grad_year, treated_in_year) |>
-  summarise(n = n(), .groups = "drop") |>
-  pivot_wider(
-    names_from = treated_in_year,
-    values_from = n,
-    names_prefix = "treated_",
-    values_fill = 0
-  ) |>
-  mutate(
-    total = treated_0 + treated_1,
-    pct_treated = round(100 * treated_1 / total, 1)
-  ) |>
-  print()
+write_csv(merged_clean_n, here("output", "n_merged_clean_by_year.csv"))
+
+merged_clean_n
 
 rm(
   list = setdiff(
     ls(),
-    c("alum", "applicants", "merged_df", "merged_clean", "outcomes")
+    c(
+      "merged_clean",
+      "merged_clean_n",
+      "merged_df",
+      "merged_n",
+      "alum",
+      "alum_n",
+      "applicants",
+      "applicant_n"
+    )
   )
 )
