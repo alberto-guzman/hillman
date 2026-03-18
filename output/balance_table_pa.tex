@@ -1,0 +1,44 @@
+\begin{table}[t]
+\caption*{
+{\fontsize{10}{12}\selectfont  \textbf{Table 1: Covariate Balance Before and After Propensity Score Matching}\fontsize{8}{10}\selectfont } \\ 
+{\fontsize{8}{10}\selectfont  PA Public Schools, Year-Only Matching\fontsize{8}{10}\selectfont }
+} 
+\fontsize{8.0pt}{10.0pt}\selectfont
+\begin{tabular*}{\linewidth}{@{\extracolsep{\fill}}l|cccccc}
+\toprule
+ & \multicolumn{3}{c}{Before Matching} & \multicolumn{3}{c}{After Matching} \\ 
+\cmidrule(lr){2-4} \cmidrule(lr){5-7}
+ & Control & Treated & SMD & Control & Treated & SMD \\ 
+\midrule\addlinespace[2.5pt]
+grade\_9 & {0.026} & {0.026} & {0.001} & {0.053} & {0.027} & {-0.027} \\ 
+grade\_10 & 0.285 & 0.307 & 0.022 & 0.354 & 0.310 & -0.044 \\ 
+grade\_11 & 0.608 & 0.596 & -0.011 & 0.513 & 0.593 & 0.080 \\ 
+grade\_12 & 0.082 & 0.070 & -0.012 & 0.080 & 0.071 & -0.009 \\ 
+gender & 0.364 & 0.491 & 0.127 & 0.425 & 0.487 & 0.062 \\ 
+gpa & 3.547 & 3.543 & -0.007 & 3.687 & 3.543 & -0.199 \\ 
+psat\_math & 479.385 & 458.912 & -0.063 & 466.991 & 457.841 & -0.028 \\ 
+stipend & 0.131 & 0.412 & 0.282 & 0.389 & 0.407 & 0.018 \\ 
+house\_size & 3.836 & 3.798 & -0.024 & 3.540 & 3.814 & 0.176 \\ 
+racially\_marginalized & 0.062 & 0.211 & 0.149 & 0.212 & 0.204 & -0.009 \\ 
+bi\_multi\_racial & 0.018 & 0.026 & 0.008 & 0.009 & 0.027 & 0.018 \\ 
+urban & 0.131 & 0.237 & 0.106 & 0.248 & 0.230 & -0.018 \\ 
+suburban & 0.764 & 0.684 & -0.080 & 0.708 & 0.690 & -0.018 \\ 
+rural & 0.062 & 0.044 & -0.018 & 0.018 & 0.044 & 0.027 \\ 
+disability & 0.041 & 0.079 & 0.038 & 0.088 & 0.071 & -0.018 \\ 
+neg\_school & 0.077 & 0.132 & 0.055 & 0.080 & 0.133 & 0.053 \\ 
+us\_citizen & 0.977 & 1.000 & 0.023 & 1.000 & 1.000 & 0.000 \\ 
+first\_gen & 0.015 & 0.070 & 0.055 & 0.044 & 0.071 & 0.027 \\ 
+school\_enrollment & 589.918 & 585.754 & -0.017 & 559.823 & 585.858 & 0.105 \\ 
+school\_pct\_econ\_disadvantaged & 26.020 & 35.464 & 0.307 & 38.045 & 35.055 & -0.097 \\ 
+school\_pct\_english\_learner & 2.545 & 2.153 & -0.199 & 2.106 & 2.157 & 0.026 \\ 
+school\_pct\_special\_ed & 17.144 & 18.440 & 0.190 & 18.581 & 18.346 & -0.035 \\ 
+school\_pct\_white & {\bfseries 67.545} & {\bfseries 56.140} & {\bfseries -0.336} & {\bfseries 54.848} & {\bfseries 56.616} & {\bfseries 0.052} \\ 
+\bottomrule
+\end{tabular*}
+\begin{minipage}{\linewidth}
+\vspace{.05em}
+Before matching: N treated = 114, N control = 390 \textbar{} After matching: N treated = 113, N control = 81\\
+\emph{Notes:} SMD = standardized mean difference. Matching: nearest-neighbor with replacement, caliper = 0.5 SD, exact match on application year.\\
+\end{minipage}
+\end{table}
+
