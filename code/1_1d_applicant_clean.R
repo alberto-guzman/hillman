@@ -459,8 +459,8 @@ df_2021 <- read_excel(here("data", "hillman_2021.xlsx")) |>
 df_2022 <- read_excel(here("data", "hillman_2022.xlsx")) |>
   clean_names() |>
   select(
-    applicant_first_name,
-    applicant_last_name,
+    personal_information_first_name,
+    personal_information_last_name,
     personal_information_gender,
     grades_current_grade,
     what_race_s_do_you_identify_with,
@@ -481,8 +481,8 @@ df_2022 <- read_excel(here("data", "hillman_2022.xlsx")) |>
     "stipend_eligible_y_n"
   ) |>
   rename(
-    first_name = applicant_first_name,
-    last_name = applicant_last_name,
+    first_name = personal_information_first_name,
+    last_name = personal_information_last_name,
     grade = grades_current_grade,
     city = personal_information_city,
     state = personal_information_state,
@@ -532,8 +532,8 @@ df_2022 <- read_excel(here("data", "hillman_2022.xlsx")) |>
 df_2023 <- read_csv(here("data", "hillman_2023.csv")) |>
   clean_names() |>
   select(
-    applicant_first_name,
-    applicant_last_name,
+    personal_information_first_name,
+    personal_information_last_name,
     personal_information_gender,
     grades_current_grade,
     what_race_s_do_you_identify_with,
@@ -554,8 +554,8 @@ df_2023 <- read_csv(here("data", "hillman_2023.csv")) |>
     "application_form_hillman_academy_completion_status"
   ) |>
   rename(
-    first_name = applicant_first_name,
-    last_name = applicant_last_name,
+    first_name = personal_information_first_name,
+    last_name = personal_information_last_name,
     grade = grades_current_grade,
     city = personal_information_city,
     state = personal_information_state,
@@ -611,7 +611,7 @@ df2023_stipend <- read_delim(
   rename(
     stipend = stipend_eligible,
     first_name = applicant_first_name,
-    last_name = applicant_last_name
+    last_name  = applicant_last_name
   )
 
 df_2023 <- df_2023 |>
