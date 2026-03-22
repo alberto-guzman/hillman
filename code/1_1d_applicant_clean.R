@@ -15,15 +15,9 @@ library(readxl)
 library(here)
 library(stringr)
 library(lubridate)
-library(naniar)
 library(janitor)
 library(readr)
 library(tidylog)
-library(MatchIt)
-library(finalfit)
-library(skimr)
-library(haven)
-library(cobalt)
 
 here()
 
@@ -388,6 +382,8 @@ df_2020 <- read_excel(here("data", "hillman_2020.xlsx")) |>
 # --- 2021 --------------------------------------------------------------------
 df_2021 <- read_excel(here("data", "hillman_2021.xlsx")) |>
   clean_names() |>
+  # 2021 source file contains exact duplicate rows for every applicant — remove
+  distinct() |>
   select(
     first_1,
     last_2,
@@ -611,11 +607,17 @@ df2023_stipend <- read_delim(
   rename(
     stipend = stipend_eligible,
     first_name = applicant_first_name,
-    last_name  = applicant_last_name
+    last_name = applicant_last_name
   )
 
 df_2023 <- df_2023 |>
-  left_join(df2023_stipend, by = c("first_name", "last_name"))
+  left_join(df2023_stipend, by = c("first_name", "last_name")) |>
+  # stipend join creates duplicates when nickname partially matches legal name
+  # keep row with non-missing stipend; otherwise keep first row
+  group_by(first_name, last_name) |>
+  arrange(desc(!is.na(stipend)), .by_group = TRUE) |>
+  slice(1) |>
+  ungroup()
 rm(df2023_stipend)
 
 # =============================================================================
@@ -741,22 +743,22 @@ applicants <- applicants |>
     ),
 
     psat_math = if_else(
-      psat_math == 0 | psat_math > 760,
+      psat_math < 160 | psat_math > 760,
       NA_integer_,
       psat_math
     ),
     psat_verbal = if_else(
-      psat_verbal == 0 | psat_verbal > 760,
+      psat_verbal < 160 | psat_verbal > 760,
       NA_integer_,
       psat_verbal
     ),
     psat_writing = if_else(
-      psat_writing == 0 | psat_writing > 760,
+      psat_writing < 160 | psat_writing > 760,
       NA_integer_,
       psat_writing
     ),
     psat_reading_writing = if_else(
-      psat_reading_writing == 0,
+      psat_reading_writing < 160 | psat_reading_writing > 760,
       NA_integer_,
       psat_reading_writing
     ),
@@ -790,32 +792,172 @@ if (nrow(duplicates_check) > 0) {
   print(duplicates_check)
 }
 
-# Manually identified duplicate entries verified against source data
+# drop blank rows introduced by 2022 file
+applicants <- applicants |>
+  filter(!is.na(first_name), !is.na(last_name))
+
+# Manually identified duplicate entries verified against source data.
+# year column ensures only the duplicate entry for that specific year is
+# removed — not all records for that student across all years.
 remove_duplicates <- tibble(
   first_name = c(
+    # pre-existing duplicates
     "amanda",
     "angela",
+    "grace",
+    "imani",
+    "sanyah",
+    # 2022 duplicates from legal name column switch
     "arnav",
     "charles",
     "daniel",
-    "grace",
-    "imani",
-    "sanyah"
+    # 2023 duplicates from stipend join
+    "andrew",
+    "angelina",
+    "anjali",
+    "bhoomika",
+    "dylan",
+    "ethan",
+    "hannah",
+    "jeremy",
+    "maria",
+    "nandita",
+    "nevaeh",
+    "nitin",
+    "peter",
+    "rashmita",
+    "risha",
+    "rithvik",
+    "shivani",
+    "sophia",
+    "sravan",
+    "vienna"
   ),
   last_name = c(
     "lu",
     "tao",
+    "wang",
+    "smith",
+    "nabi",
     "patel",
     "mawhinney",
     "wang",
-    "wang",
-    "smith",
-    "nabi"
+    "li",
+    "huang",
+    "srinivasan",
+    "navandar",
+    "sun",
+    "hu",
+    "habershaw",
+    "lee",
+    "parkhitko",
+    "kolli",
+    "foster",
+    "gupta",
+    "ko",
+    "chekka",
+    "solanki",
+    "avula",
+    "umesh",
+    "hadi",
+    "koduri",
+    "li"
+  ),
+  year = c(
+    2018L,
+    2021L,
+    2021L,
+    2017L,
+    2021L,
+    2022L,
+    2022L,
+    2022L,
+    2023L,
+    2023L,
+    2023L,
+    2023L,
+    2023L,
+    2023L,
+    2023L,
+    2023L,
+    2023L,
+    2023L,
+    2023L,
+    2023L,
+    2023L,
+    2023L,
+    2023L,
+    2023L,
+    2023L,
+    2023L,
+    2023L,
+    2023L
   )
 )
 
 applicants <- applicants |>
-  anti_join(remove_duplicates, by = c("first_name", "last_name"))
+  anti_join(remove_duplicates, by = c("first_name", "last_name", "year"))
+
+# Normalize state to uppercase 2-letter abbreviations.
+# Strips non-alpha characters (e.g. "PA`"), converts full names to
+# abbreviations. Only states observed in this dataset are listed —
+# unrecognized values pass through as-is for manual review.
+applicants <- applicants |>
+  mutate(
+    state = {
+      s <- state |> str_to_upper() |> str_remove_all("[^A-Z]")
+      case_match(
+        s,
+        "PENNSYLVANIA" ~ "PA",
+        "NEWJERSEY" ~ "NJ",
+        "NEWYORK" ~ "NY",
+        "OHIO" ~ "OH",
+        "VIRGINIA" ~ "VA",
+        "MARYLAND" ~ "MD",
+        "DELAWARE" ~ "DE",
+        "WESTVIRGINIA" ~ "WV",
+        "CONNECTICUT" ~ "CT",
+        "MASSACHUSETTS" ~ "MA",
+        "NORTHCAROLINA" ~ "NC",
+        "SOUTHCAROLINA" ~ "SC",
+        "GEORGIA" ~ "GA",
+        "FLORIDA" ~ "FL",
+        "TEXAS" ~ "TX",
+        "CALIFORNIA" ~ "CA",
+        "ILLINOIS" ~ "IL",
+        "MICHIGAN" ~ "MI",
+        "INDIANA" ~ "IN",
+        "WASHINGTON" ~ "WA",
+        "HAWAII" ~ "HI",
+        "ALABAMA" ~ "AL",
+        "COLORADO" ~ "CO",
+        "TENNESSEE" ~ "TN",
+        "MISSOURI" ~ "MO",
+        "DISTRICTOFCOLUMBIA" ~ "DC",
+        "IOWA" ~ "IA",
+        "KANSAS" ~ "KS",
+        "MINNESOTA" ~ "MN",
+        "NEVADA" ~ "NV",
+        "OREGON" ~ "OR",
+        "NEBRASKA" ~ "NE",
+        "PUERTORICO" ~ "PR",
+        "WISCONSIN" ~ "WI",
+        "ARIZONA" ~ "AZ",
+        "ARKANSAS" ~ "AR",
+        "LOUISIANA" ~ "LA",
+        "NEWMEXICO" ~ "NM",
+        "IDAHO" ~ "ID",
+        "OKLAHOMA" ~ "OK",
+        "VERMONT" ~ "VT",
+        # Non-US entries — recode to NA
+        "BRAZIL" ~ NA_character_,
+        "INDIA" ~ NA_character_,
+        # Invalid / ambiguous — recode to NA
+        "NA" ~ NA_character_,
+        .default = s
+      )
+    }
+  )
 
 # =============================================================================
 # FINAL COUNTS

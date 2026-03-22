@@ -1,50 +1,76 @@
 # =============================================================================
 # 2_1d_alumni_clean.R
 #
-# Purpose: Clean the Hillman alumni tracker and build a wide treatment
-#          indicator dataset (one row per student, one column per program year).
+# Purpose: Load and clean the Hillman alumni tracker. Outputs one row per
+#          student with treatment flags and cleaned names for merging to
+#          applicant file in 3a_1d_master_merge.R.
 #
-# Input:   data/Alumni Tracker (...).csv
-# Output:  `alum`   — wide data frame with treated_2017:2023, treated_ever,
-#                     and treated_before_2017 indicators
-#          `alum_n` — raw alumni counts by year
-#          output/n_alumni_by_year.csv
+# Name cleaning:
+#   - Strip quoted/parenthetical nicknames: "ore", (ivy), etc.
+#   - Strip suffixes: jr, sr, ii, iii
+#   - Strip apostrophes and non-alpha characters (hyphens to spaces)
+#   - Known spelling variant: hiruni hewapathirana mayunne to mayadunne
+#
+# treated_before_2017: created HERE from year columns -- do NOT recreate in 3a
+#
+# Input:  data/Alumni Tracker (Updated 9.13.2023 - SJ) with Charts.csv
+# Output: `alum`   -- one row per student with treatment flags
+#         `alum_n` -- alumni counts by participation year
 # =============================================================================
 
-# --- Load raw alumni tracker -------------------------------------------------
-alum <- readr::read_csv(
-  here::here("data", "Alumni Tracker (Updated 9.13.2023 - SJ) with Charts.csv"),
-  col_types = readr::cols(...7 = readr::col_skip())
-)
+library(tidyverse)
+library(readxl)
+library(here)
+library(janitor)
+library(stringr)
 
 # =============================================================================
-# STANDARDIZE NAMES
+# LOAD RAW ALUMNI TRACKER
 # =============================================================================
-# Lowercase, strip nicknames/parentheticals, and collapse whitespace so names
-# join cleanly with the applicant data.
 
-alum <- alum |>
+alum_raw <- read_csv(
+  here(
+    "data",
+    "Alumni Tracker (Updated 9.13.2023 - SJ) with Charts.csv"
+  ),
+  show_col_types = FALSE
+) |>
+  clean_names()
+
+message("Raw alumni tracker: ", nrow(alum_raw), " rows")
+
+# After clean_names(): First -> first, Last -> last, year1-year4 (no underscore)
+# Guard: confirm no year5+ columns exist -- pivot assumes max year4
+stopifnot(!any(str_detect(names(alum_raw), "^year5")))
+
+# =============================================================================
+# CLEAN NAMES
+# =============================================================================
+# Legal names used to match against application files, which use
+# personal_information_first/last_name for 2022/2023 files.
+# Cleaning steps:
+#   1. Strip quoted nicknames: "ore", "venice", "max"
+#   2. Strip parenthetical nicknames: (ivy), (zahra)
+#   3. Strip suffixes: jr, sr, ii, iii
+#   4. Strip non-alpha characters (hyphens, apostrophes -> spaces)
+#   5. Normalize whitespace
+
+alum <- alum_raw |>
   mutate(
-    first_name = First |>
+    first_name = first |>
       str_to_lower() |>
-      # Strip quoted nicknames: "ore", "venice", "max" etc.
       str_remove_all('"[^"]*"') |>
-      # Strip parenthetical nicknames: (ivy), (zahra), (ore) etc.
       str_remove_all('\\([^)]*\\)') |>
-      # Strip everything else non-alpha
       str_replace_all("[^a-z]", " ") |>
       str_squish(),
-    last_name = Last |>
+    last_name = last |>
       str_to_lower() |>
       str_remove_all('"[^"]*"') |>
       str_remove_all('\\([^)]*\\)') |>
-      # Strip suffixes
       str_remove("\\s+(jr|sr|ii|iii)\\.?$") |>
-      # Strip asterisks and other punctuation
       str_replace_all("[^a-z]", " ") |>
       str_squish()
   ) |>
-  # Fix known spelling variants between tracker and application files
   mutate(
     last_name = case_when(
       first_name == "hiruni" & str_detect(last_name, "mayunne") ~
@@ -52,126 +78,125 @@ alum <- alum |>
       TRUE ~ last_name
     )
   ) |>
-  select(-First, -Last)
+  select(-first, -last)
+
+message(
+  "After name cleaning: ",
+  n_distinct(alum$first_name),
+  " unique first names, ",
+  n_distinct(alum$last_name),
+  " unique last names"
+)
 
 # =============================================================================
-# BUILD PARTICIPATION YEAR RANGE
+# PIVOT TO LONG FORMAT
 # =============================================================================
-
-alum <- alum |>
-  mutate(
-    year_max = if_else(
-      if_all(year1:year4, is.na),
-      NA_real_,
-      pmax(year1, year2, year3, year4, na.rm = TRUE)
-    ),
-    year_min = if_else(
-      if_all(year1:year4, is.na),
-      NA_real_,
-      pmin(year1, year2, year3, year4, na.rm = TRUE)
-    )
-  )
-
-# =============================================================================
-# RESHAPE TO LONG AND DE-DUPLICATE
-# =============================================================================
+# year columns are year1, year2, year3, year4 (no underscore after clean_names)
 
 alum_long <- alum |>
-  select(first_name, last_name, year1:year4) |>
   pivot_longer(
-    cols = starts_with("year"),
-    names_to = "year_col",
+    cols = matches("^year[0-9]+$"),
+    names_to = "participation_number",
     values_to = "year"
   ) |>
-  transmute(
-    first_name,
-    last_name,
-    year = suppressWarnings(as.integer(year))
+  filter(!is.na(year)) |>
+  mutate(
+    participation_number = as.integer(str_extract(
+      participation_number,
+      "[0-9]+"
+    )),
+    year = as.integer(year)
+  )
+
+# Manually verified duplicate -- remove one row for amanda lu
+alum_long <- alum_long |>
+  filter(
+    !(first_name == "amanda" & last_name == "lu" & participation_number == 2)
+  )
+
+message("alum_long after dedup: ", nrow(alum_long), " rows")
+
+# =============================================================================
+# BUILD TREATMENT FLAGS
+# =============================================================================
+# treated_before_2017: student first participation year is before 2017.
+#   Created here -- do NOT recreate in 3a.
+# first_treatment_year: earliest participation year.
+# total_times_treated: number of distinct participation years.
+
+alum_flags <- alum_long |>
+  group_by(first_name, last_name) |>
+  summarise(
+    first_treatment_year = min(year, na.rm = TRUE),
+    total_times_treated = n_distinct(year),
+    .groups = "drop"
   ) |>
-  drop_na(year)
+  mutate(
+    treated_ever = 1L,
+    treated_before_2017 = if_else(first_treatment_year < 2017, 1L, 0L)
+  )
 
-# Manually verified duplicate entry
-alum_long <- alum_long |>
-  filter(!(first_name == "amanda" & last_name == "lu"))
+message(
+  "treated_before_2017: ",
+  sum(alum_flags$treated_before_2017),
+  " students"
+)
 
-alum_long <- alum_long |>
-  distinct(first_name, last_name, year, .keep_all = TRUE)
-
-# =============================================================================
-# BUILD WIDE TREATMENT INDICATORS
-# =============================================================================
-
-alum <- alum_long |>
-  mutate(treatment = 1L)
-
-treated_years <- alum |>
-  select(first_name, last_name, year, treatment) |>
-  distinct() |>
+# Build year-specific treatment indicators (2017-2023 only)
+treated_years <- alum_long |>
+  filter(between(year, 2017L, 2023L)) |>
+  distinct(first_name, last_name, year) |>
+  mutate(treated_in_year = 1L) |>
   pivot_wider(
     names_from = year,
-    values_from = treatment,
+    values_from = treated_in_year,
     names_prefix = "treated_",
-    values_fill = 0
+    values_fill = 0L
   )
 
-treated_cols <- grep("^treated_\\d{4}$", names(treated_years), value = TRUE)
-treated_cols <- treated_cols[order(as.integer(str_extract(
-  treated_cols,
-  "\\d{4}"
-)))]
+# Ensure all years 2017-2023 present even if no alumni in that year
+for (yr in 2017:2023) {
+  col <- paste0("treated_", yr)
+  if (!col %in% names(treated_years)) {
+    treated_years[[col]] <- 0L
+  }
+}
 
+# Order year columns
 treated_years <- treated_years |>
-  select(first_name, last_name, all_of(treated_cols))
+  select(first_name, last_name, paste0("treated_", 2017:2023))
 
-# treated_ever: participated in any year
-# treated_before_2017: participated before the analytic window (flagged, not dropped here)
-treated_years <- treated_years |>
-  mutate(
-    treated_ever = if_else(
-      rowSums(pick(starts_with("treated_")), na.rm = TRUE) > 0,
-      1L,
-      0L
-    )
-  )
+# Join flags and year indicators back to alum (one row per student)
+alum <- alum |>
+  select(-matches("^year[0-9]+$")) |>
+  left_join(alum_flags, by = c("first_name", "last_name")) |>
+  left_join(treated_years, by = c("first_name", "last_name")) |>
+  mutate(across(starts_with("treated_"), ~ replace_na(.x, 0L)))
 
-treated_years <- treated_years |>
-  mutate(
-    treated_before_2017 = if_else(
-      rowSums(
-        pick(matches("^treated_200[0-9]$|^treated_201[0-6]$")),
-        na.rm = TRUE
-      ) >
-        0,
-      1L,
-      0L
-    )
-  )
-
-# --- Subset to analytic window (2017–2023) -----------------------------------
-treated_years <- treated_years |>
-  select(
-    first_name,
-    last_name,
-    treated_ever,
-    treated_before_2017,
-    treated_2017:treated_2023
-  )
+message("alum: ", nrow(alum), " rows x ", ncol(alum), " cols")
 
 # =============================================================================
 # FINAL COUNTS
 # =============================================================================
-
-alum <- treated_years
 
 alum_n <- alum_long |>
   count(year, name = "n_alumni") |>
   mutate(
     cumulative_n = cumsum(n_alumni),
     pct_of_total = round(n_alumni / sum(n_alumni) * 100, 1)
-  )
+  ) |>
+  arrange(year)
 
 write_csv(alum_n, here("output", "n_alumni_by_year.csv"))
-
 alum_n
 
-rm(list = setdiff(ls(), c("alum", "alum_n", "applicants", "applicant_n")))
+# =============================================================================
+# CLEAN UP
+# =============================================================================
+
+rm(
+  list = setdiff(
+    ls(),
+    c("alum", "alum_n", "applicants", "applicant_n")
+  )
+)
