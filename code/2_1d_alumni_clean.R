@@ -27,14 +27,30 @@ alum <- alum |>
   mutate(
     first_name = First |>
       str_to_lower() |>
-      str_replace_all('"(.*?)"|\\.\\((.*?)\\)', " ") |>
+      # Strip quoted nicknames: "ore", "venice", "max" etc.
+      str_remove_all('"[^"]*"') |>
+      # Strip parenthetical nicknames: (ivy), (zahra), (ore) etc.
+      str_remove_all('\\([^)]*\\)') |>
+      # Strip everything else non-alpha
       str_replace_all("[^a-z]", " ") |>
       str_squish(),
     last_name = Last |>
       str_to_lower() |>
-      str_replace_all('"(.*?)"|\\.\\((.*?)\\)', " ") |>
+      str_remove_all('"[^"]*"') |>
+      str_remove_all('\\([^)]*\\)') |>
+      # Strip suffixes
+      str_remove("\\s+(jr|sr|ii|iii)\\.?$") |>
+      # Strip asterisks and other punctuation
       str_replace_all("[^a-z]", " ") |>
       str_squish()
+  ) |>
+  # Fix known spelling variants between tracker and application files
+  mutate(
+    last_name = case_when(
+      first_name == "hiruni" & str_detect(last_name, "mayunne") ~
+        str_replace(last_name, "mayunne", "mayadunne"),
+      TRUE ~ last_name
+    )
   ) |>
   select(-First, -Last)
 
