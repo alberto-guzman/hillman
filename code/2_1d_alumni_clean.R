@@ -24,13 +24,15 @@ library(here)
 library(janitor)
 library(stringr)
 
+dir.create(here("output", "counts"), recursive = TRUE, showWarnings = FALSE)
+
 # =============================================================================
 # LOAD RAW ALUMNI TRACKER
 # =============================================================================
 
 alum_raw <- read_csv(
   here(
-    "data",
+    "data", "raw", "alumni",
     "Alumni Tracker (Updated 9.13.2023 - SJ) with Charts.csv"
   ),
   show_col_types = FALSE
@@ -187,7 +189,7 @@ alum_n <- alum_long |>
   ) |>
   arrange(year)
 
-write_csv(alum_n, here("output", "n_alumni_by_year.csv"))
+write_csv(alum_n, here("output", "counts", "n_alumni_by_year.csv"))
 alum_n
 
 # =============================================================================

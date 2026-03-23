@@ -53,8 +53,8 @@ library(here)
 # 1. LOAD MATCHED DATASETS
 # =============================================================================
 
-matched_all <- readRDS(here("data", "matched_all_states_year_only.rds"))
-matched_pa <- readRDS(here("data", "matched_pa_year_only.rds"))
+matched_all <- readRDS(here("data", "matched", "matched_all_states_year_only.rds"))
+matched_pa <- readRDS(here("data", "matched", "matched_pa_year_only.rds"))
 
 message(
   "All-states: ",
@@ -898,25 +898,24 @@ het_plot
 # 9. SAVE ALL OUTPUTS
 # =============================================================================
 
-if (!dir.exists(here("output"))) {
-  dir.create(here("output"))
-}
+dir.create(here("output", "tables"), recursive = TRUE, showWarnings = FALSE)
+dir.create(here("output", "figures"), recursive = TRUE, showWarnings = FALSE)
 
 # ATT tables
-gtsave(att_gt_all, here("output", "att_table_all_states.html"))
-gtsave(att_gt_all, here("output", "att_table_all_states.tex"))
-gtsave(att_gt_pa, here("output", "att_table_pa.html"))
-gtsave(att_gt_pa, here("output", "att_table_pa.tex"))
+gtsave(att_gt_all, here("output", "tables", "att_table_all_states.html"))
+gtsave(att_gt_all, here("output", "tables", "att_table_all_states.tex"))
+gtsave(att_gt_pa, here("output", "tables", "att_table_pa.html"))
+gtsave(att_gt_pa, here("output", "tables", "att_table_pa.tex"))
 
 # Descriptive tables
-gtsave(desc_gt_all, here("output", "desc_by_year_all_states.html"))
-gtsave(desc_gt_all, here("output", "desc_by_year_all_states.tex"))
-gtsave(desc_gt_pa, here("output", "desc_by_year_pa.html"))
-gtsave(desc_gt_pa, here("output", "desc_by_year_pa.tex"))
+gtsave(desc_gt_all, here("output", "tables", "desc_by_year_all_states.html"))
+gtsave(desc_gt_all, here("output", "tables", "desc_by_year_all_states.tex"))
+gtsave(desc_gt_pa, here("output", "tables", "desc_by_year_pa.html"))
+gtsave(desc_gt_pa, here("output", "tables", "desc_by_year_pa.tex"))
 
 # Heterogeneity plot
 ggsave(
-  here("output", "het_plot.png"),
+  here("output", "figures", "het_plot.png"),
   het_plot,
   width = 12,
   height = 7,

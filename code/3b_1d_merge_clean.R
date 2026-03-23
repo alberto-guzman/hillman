@@ -161,6 +161,8 @@ merged_clean <- merged_df |>
 
 library(haven)
 
+dir.create(here("output", "counts"), recursive = TRUE, showWarnings = FALSE)
+
 outcomes <- read_dta(here(
   "data/files_for_danielle_nsc",
   "clean_Hillman_2017_2025.dta"
@@ -494,7 +496,7 @@ merged_clean_n <- merged_clean |>
   ) |>
   select(year, n_applicants, n_alumni, n_total, pct_alumni)
 
-write_csv(merged_clean_n, here("output", "n_merged_clean_by_year.csv"))
+write_csv(merged_clean_n, here("output", "counts", "n_merged_clean_by_year.csv"))
 
 merged_clean_n
 

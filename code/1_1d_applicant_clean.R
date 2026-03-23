@@ -13,13 +13,11 @@
 library(tidyverse)
 library(readxl)
 library(here)
-library(stringr)
-library(lubridate)
 library(janitor)
-library(readr)
 library(tidylog)
 
-here()
+dir.create(here("output", "counts"), recursive = TRUE, showWarnings = FALSE)
+
 
 # =============================================================================
 # HELPER FUNCTION
@@ -39,8 +37,12 @@ clean_custom_names <- function(df) {
 # LOAD AND CLEAN YEAR-BY-YEAR FILES
 # =============================================================================
 
+# Note: 2017-2022 source files contain only submitted/complete records.
+# 2023 is exported from a system that includes incomplete records, so a
+# completion status filter is applied there explicitly.
+
 # --- 2017 --------------------------------------------------------------------
-df_2017 <- read_excel(here("data", "hillman_2017.xlsx")) |>
+df_2017 <- read_excel(here("data", "raw", "applicants", "hillman_2017.xlsx")) |>
   clean_custom_names() |>
   select(
     -c(
@@ -91,11 +93,11 @@ df_2017 <- read_excel(here("data", "hillman_2017.xlsx")) |>
     gpa_weight = gpa_weighted
   ) |>
   mutate(
-    gender = if_else(tolower(gender) == "male", 1, 0),
-    gpa_weight = if_else(tolower(gpa_weight) == "yes", 1, 0),
+    gender = as.integer(tolower(gender) == "male"),
+    gpa_weight = if_else(tolower(gpa_weight) == "yes", 1L, 0L),
     high_school_pub_priv = str_to_lower(high_school_pub_priv),
     jkcf = str_to_lower(jkcf),
-    zip = as.integer(zip),
+    zip = as.character(zip),
     grade = as.integer(grade),
     gpa = as.numeric(gpa),
     sat_math = as.integer(sat_math),
@@ -113,7 +115,7 @@ df_2017 <- read_excel(here("data", "hillman_2017.xlsx")) |>
   )
 
 # --- 2018 --------------------------------------------------------------------
-df_2018 <- read_excel(here("data", "hillman_2018.xlsx")) |>
+df_2018 <- read_excel(here("data", "raw", "applicants", "hillman_2018.xlsx")) |>
   clean_custom_names() |>
   select(
     -c(
@@ -176,9 +178,9 @@ df_2018 <- read_excel(here("data", "hillman_2018.xlsx")) |>
     school_impact = "do_you_believe_your_school_environment_negatively_impacts_your_educational_opportunities_related_to_obtaining_a_career_in_science_research"
   ) |>
   mutate(
-    gender = if_else(tolower(gender) == "male", 1, 0),
-    gpa_weight = if_else(tolower(gpa_weight) == "yes", 1, 0),
-    zip = as.integer(zip),
+    gender = as.integer(tolower(gender) == "male"),
+    gpa_weight = if_else(tolower(gpa_weight) == "yes", 1L, 0L),
+    zip = as.character(zip),
     grade = as.integer(grade),
     gpa = as.numeric(gpa),
     sat_math = as.integer(sat_math),
@@ -197,7 +199,7 @@ df_2018 <- read_excel(here("data", "hillman_2018.xlsx")) |>
 
 # --- 2019 --------------------------------------------------------------------
 df_2019 <- read_excel(
-  here("data", "hillman_2019.xlsx"),
+  here("data", "raw", "applicants", "hillman_2019.xlsx"),
   sheet = "All (Extra info)"
 ) |>
   clean_custom_names() |>
@@ -284,7 +286,7 @@ df_2019 <- read_excel(
   mutate(
     gender = as.integer(tolower(gender) == "male"),
     gpa_weight = as.integer(tolower(gpa_weight) == "yes"),
-    zip = as.integer(zip),
+    zip = as.character(zip),
     grade = as.integer(grade),
     gpa = as.numeric(gpa),
     sat_math = as.integer(sat_math),
@@ -302,7 +304,7 @@ df_2019 <- read_excel(
   )
 
 # Stipend data for 2019 is in a separate file
-df_stipend <- read_excel(here("data", "hillman_raw.xlsx"), sheet = "2019") |>
+df_stipend <- read_excel(here("data", "raw", "applicants", "hillman_raw.xlsx"), sheet = "2019") |>
   select(first_name, last_name, stipend)
 
 df_2019 <- df_2019 |>
@@ -310,7 +312,7 @@ df_2019 <- df_2019 |>
 rm(df_stipend)
 
 # --- 2020 --------------------------------------------------------------------
-df_2020 <- read_excel(here("data", "hillman_2020.xlsx")) |>
+df_2020 <- read_excel(here("data", "raw", "applicants", "hillman_2020.xlsx")) |>
   clean_custom_names() |>
   select(
     first,
@@ -362,9 +364,9 @@ df_2020 <- read_excel(here("data", "hillman_2020.xlsx")) |>
     stipend = "stipend_eligible...77"
   ) |>
   mutate(
-    gender = if_else(tolower(gender) == "male", 1, 0),
-    gpa_weight = if_else(tolower(gpa_weight) == "yes", 1, 0),
-    zip = as.integer(zip),
+    gender = as.integer(tolower(gender) == "male"),
+    gpa_weight = if_else(tolower(gpa_weight) == "yes", 1L, 0L),
+    zip = as.character(zip),
     grade = as.integer(grade),
     gpa = as.numeric(gpa),
     sat_math = as.integer(sat_math),
@@ -380,7 +382,7 @@ df_2020 <- read_excel(here("data", "hillman_2020.xlsx")) |>
   mutate(year = 2020)
 
 # --- 2021 --------------------------------------------------------------------
-df_2021 <- read_excel(here("data", "hillman_2021.xlsx")) |>
+df_2021 <- read_excel(here("data", "raw", "applicants", "hillman_2021.xlsx")) |>
   clean_names() |>
   # 2021 source file contains exact duplicate rows for every applicant — remove
   distinct() |>
@@ -388,7 +390,6 @@ df_2021 <- read_excel(here("data", "hillman_2021.xlsx")) |>
     first_1,
     last_2,
     gender,
-    date_of_birth,
     grades_current_grade_6,
     race,
     "school_you_attend_if_homeschooled_please_enter_school_district_of_residence",
@@ -434,9 +435,9 @@ df_2021 <- read_excel(here("data", "hillman_2021.xlsx")) |>
     stipend = stipend_eligible
   ) |>
   mutate(
-    gender = if_else(tolower(gender) == "male", 1, 0),
-    gpa_weight = if_else(tolower(gpa_weight) == "yes", 1, 0),
-    zip = as.integer(zip),
+    gender = as.integer(tolower(gender) == "male"),
+    gpa_weight = if_else(tolower(gpa_weight) == "yes", 1L, 0L),
+    zip = as.character(zip),
     grade = as.integer(grade),
     gpa = as.numeric(gpa),
     sat_math = as.integer(sat_math),
@@ -452,7 +453,7 @@ df_2021 <- read_excel(here("data", "hillman_2021.xlsx")) |>
   mutate(year = 2021)
 
 # --- 2022 --------------------------------------------------------------------
-df_2022 <- read_excel(here("data", "hillman_2022.xlsx")) |>
+df_2022 <- read_excel(here("data", "raw", "applicants", "hillman_2022.xlsx")) |>
   clean_names() |>
   select(
     personal_information_first_name,
@@ -507,9 +508,9 @@ df_2022 <- read_excel(here("data", "hillman_2022.xlsx")) |>
     stipend = "stipend_eligible_y_n"
   ) |>
   mutate(
-    gender = if_else(tolower(gender) == "male", 1, 0),
-    gpa_weight = if_else(tolower(gpa_weight) == "yes", 1, 0),
-    zip = as.integer(zip),
+    gender = as.integer(tolower(gender) == "male"),
+    gpa_weight = if_else(tolower(gpa_weight) == "yes", 1L, 0L),
+    zip = as.character(zip),
     grade = as.integer(grade),
     gpa = as.numeric(gpa),
     sat_math = as.integer(sat_math),
@@ -525,7 +526,7 @@ df_2022 <- read_excel(here("data", "hillman_2022.xlsx")) |>
   mutate(year = 2022)
 
 # --- 2023 --------------------------------------------------------------------
-df_2023 <- read_csv(here("data", "hillman_2023.csv")) |>
+df_2023 <- read_csv(here("data", "raw", "applicants", "hillman_2023.csv")) |>
   clean_names() |>
   select(
     personal_information_first_name,
@@ -579,9 +580,17 @@ df_2023 <- read_csv(here("data", "hillman_2023.csv")) |>
   ) |>
   filter(application_form_hillman_academy_completion_status == "Completed") |>
   mutate(
-    gender = if_else(tolower(gender) == "male", 1, 0),
-    gpa_weight = if_else(tolower(gpa_weight) == "yes", 1, 0),
-    zip = as.integer(zip),
+    # 2023 asks "did any of your parents/guardians attend college?" -- opposite
+    # polarity to 2019-2022 "will you be the FIRST person to attend college?"
+    # Flip so first_gen = "Yes" consistently means first-generation in all years.
+    first_gen = case_when(
+      tolower(first_gen) == "no" ~ "Yes",
+      tolower(first_gen) == "yes" ~ "No",
+      TRUE ~ first_gen
+    ),
+    gender = as.integer(tolower(gender) == "male"),
+    gpa_weight = if_else(tolower(gpa_weight) == "yes", 1L, 0L),
+    zip = as.character(zip),
     grade = as.integer(grade),
     gpa = as.numeric(gpa),
     sat_math = as.integer(sat_math),
@@ -598,7 +607,7 @@ df_2023 <- read_csv(here("data", "hillman_2023.csv")) |>
 
 # Stipend data for 2023 is in a separate text file
 df2023_stipend <- read_delim(
-  here("data", "2023_applicants_stipendEligible.txt"),
+  here("data", "raw", "applicants", "2023_applicants_stipendEligible.txt"),
   delim = "\t",
   escape_double = FALSE,
   trim_ws = TRUE
@@ -634,6 +643,8 @@ applicants <- bind_rows(
   df_2023
 )
 
+# act_verbal exists in 2019-2022 source files and is dropped here along with
+# other year-specific columns not carried forward to the combined dataset.
 applicants <- applicants |>
   select(
     -c(
@@ -662,12 +673,12 @@ applicants <- applicants |>
   mutate(
     first_name = first_name |>
       str_to_lower() |>
-      str_replace_all("\"(.*?)\"|\\.\\((.*?)\\)", " ") |>
+      str_replace_all("\"[^\"]*\"|\\([^)]*\\)", " ") |>
       str_replace_all("[^a-z]", " ") |>
       str_squish(),
     last_name = last_name |>
       str_to_lower() |>
-      str_replace_all("\"(.*?)\"|\\.\\((.*?)\\)", " ") |>
+      str_replace_all("\"[^\"]*\"|\\([^)]*\\)", " ") |>
       str_replace_all("[^a-z]", " ") |>
       str_squish()
   )
@@ -677,16 +688,6 @@ applicants <- applicants |>
 # proportionally. Weighted GPAs above 4.0 use the scale denominator;
 # unweighted GPAs above 4.0 are set to NA.
 applicants <- applicants |>
-  mutate(
-    gpa_weight = case_when(
-      is.na(gpa_weight) ~ NA_real_,
-      tolower(as.character(gpa_weight)) %in%
-        c("1", "yes", "y", "true", "t") ~ 1,
-      tolower(as.character(gpa_weight)) %in%
-        c("0", "no", "n", "false", "f") ~ 0,
-      TRUE ~ suppressWarnings(as.numeric(as.character(gpa_weight)))
-    )
-  ) |>
   mutate(
     gpa_old = gpa,
     gpa_num = as.numeric(gpa_old)
@@ -701,6 +702,7 @@ applicants <- applicants |>
       gpa_num > 5.0 & gpa_num <= 6.0 ~
         if_else(gpa_weight == 1, (gpa_num / 6.0) * 4.0, NA_real_),
       gpa_num > 6.0 & gpa_num <= 10.0 ~ (gpa_num / 10.0) * 4.0,
+      # Values 10.0 < gpa < 65.0 have no recognised scale mapping -> NA
       gpa_num >= 93 ~ 4.0,
       gpa_num >= 90 ~ 3.7 + (gpa_num - 90) * 0.1,
       gpa_num >= 87 ~ 3.3 + (gpa_num - 87) * 0.133,
@@ -727,7 +729,14 @@ applicants <- applicants |>
       NA_integer_,
       house_size
     ),
-    zip = if_else(zip < 501 | zip > 99950, NA_integer_, zip),
+    # zip stored as character to preserve leading zeros (e.g. CT "06510")
+    zip = if_else(
+      is.na(suppressWarnings(as.integer(zip))) |
+        suppressWarnings(as.integer(zip)) < 501 |
+        suppressWarnings(as.integer(zip)) > 99950,
+      NA_character_,
+      zip
+    ),
 
     sat_math = if_else(sat_math == 0, NA_integer_, sat_math),
     sat_verbal = if_else(sat_verbal == 0, NA_integer_, sat_verbal),
@@ -769,7 +778,6 @@ applicants <- applicants |>
     act_writing = if_else(act_writing == 0, NA_integer_, act_writing)
   ) |>
   select(
-    -`act_scores_|__|_verbal`,
     -date_of_birth,
     -application_form_hillman_academy_completion_status
   )
@@ -788,7 +796,11 @@ duplicates_check <- applicants |>
   summarise(n = n(), .groups = "drop")
 
 if (nrow(duplicates_check) > 0) {
-  message("Warning: ", nrow(duplicates_check), " duplicate records found")
+  message(
+    "Warning: ",
+    nrow(duplicates_check),
+    " duplicate name/year groups found"
+  )
   print(duplicates_check)
 }
 
@@ -797,6 +809,8 @@ applicants <- applicants |>
   filter(!is.na(first_name), !is.na(last_name))
 
 # Manually identified duplicate entries verified against source data.
+# For each flagged name/year, row_number() is used so only the duplicate
+# row(s) are removed -- the first (kept) record is never dropped.
 # year column ensures only the duplicate entry for that specific year is
 # removed — not all records for that student across all years.
 remove_duplicates <- tibble(
@@ -895,8 +909,17 @@ remove_duplicates <- tibble(
   )
 )
 
+# Tag each row within its name/year group, then drop rows 2+ only for flagged
+# duplicates. This preserves the first (kept) record even if there are 3+ rows.
 applicants <- applicants |>
-  anti_join(remove_duplicates, by = c("first_name", "last_name", "year"))
+  group_by(first_name, last_name, year) |>
+  mutate(.row_n = row_number()) |>
+  ungroup() |>
+  anti_join(
+    remove_duplicates |> mutate(.row_n = 2L),
+    by = c("first_name", "last_name", "year", ".row_n")
+  ) |>
+  select(-.row_n)
 
 # Normalize state to uppercase 2-letter abbreviations.
 # Strips non-alpha characters (e.g. "PA`"), converts full names to
@@ -970,7 +993,7 @@ applicant_n <- applicants |>
     pct_of_total = round(n_applicants / sum(n_applicants) * 100, 1)
   )
 
-write_csv(applicant_n, here("output", "n_applicants_by_year.csv"))
+write_csv(applicant_n, here("output", "counts", "n_applicants_by_year.csv"))
 
 applicant_n
 

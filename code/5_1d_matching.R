@@ -279,7 +279,8 @@ run_matching <- function(data, covariates) {
     method = "nearest",
     exact = ~year,
     distance = "glm",
-    caliper = 0.5,
+    caliper = 0.5,          # 0.5 pooled SDs of the propensity score
+    caliper.d = "pooled SD",
     replace = TRUE
   )
 }
@@ -525,17 +526,16 @@ sample_gt_pa
 # 6. SAVE OUTPUTS
 # =============================================================================
 
-if (!dir.exists(here("output"))) {
-  dir.create(here("output"))
-}
+dir.create(here("output", "tables"), recursive = TRUE, showWarnings = FALSE)
+dir.create(here("data", "matched"), recursive = TRUE, showWarnings = FALSE)
 
-saveRDS(matched_data_all, here("data", "matched_all_states_year_only.rds"))
-saveRDS(matched_data_pa, here("data", "matched_pa_year_only.rds"))
+saveRDS(matched_data_all, here("data", "matched", "matched_all_states_year_only.rds"))
+saveRDS(matched_data_pa, here("data", "matched", "matched_pa_year_only.rds"))
 
-gtsave(balance_gt_all, here("output", "balance_table_all_states.html"))
-gtsave(balance_gt_all, here("output", "balance_table_all_states.tex"))
-gtsave(balance_gt_pa, here("output", "balance_table_pa.html"))
-gtsave(balance_gt_pa, here("output", "balance_table_pa.tex"))
+gtsave(balance_gt_all, here("output", "tables", "balance_table_all_states.html"))
+gtsave(balance_gt_all, here("output", "tables", "balance_table_all_states.tex"))
+gtsave(balance_gt_pa, here("output", "tables", "balance_table_pa.html"))
+gtsave(balance_gt_pa, here("output", "tables", "balance_table_pa.tex"))
 
 message("\n=== Matching complete ===")
 message(

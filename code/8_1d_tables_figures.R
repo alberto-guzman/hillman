@@ -10,26 +10,25 @@ library(here)
 library(cobalt)
 library(purrr)
 library(stringr)
-if (!dir.exists(here('output'))) {
-  dir.create(here('output'))
-}
+dir.create(here('output', 'tables'), recursive = TRUE, showWarnings = FALSE)
+dir.create(here('output', 'figures'), recursive = TRUE, showWarnings = FALSE)
 
 focal_outcomes <- c(
-  "seamless_enroll",
-  "seamless_enroll_stem",
-  "x4yr_initial",
-  "public4yr_initial",
-  "reten_fall_enter2",
-  "degree_6years_all_nsc"
+  "enroll_seamless_itt",
+  "enroll_seamless_stem_itt",
+  "inst_4yr_entry",
+  "inst_public4yr_entry",
+  "reten_1y",
+  "deg_any_6y"
 )
 
 focal_labels <- c(
-  seamless_enroll = "Seamless enrollment (any)",
-  seamless_enroll_stem = "Seamless STEM enrollment",
-  x4yr_initial = "Initial enrollment: any 4-year",
-  public4yr_initial = "Initial enrollment: public 4-year",
-  reten_fall_enter2 = "Retained into 2nd year",
-  degree_6years_all_nsc = "Any degree within 6 years"
+  enroll_seamless_itt = "Seamless enrollment (ITT)",
+  enroll_seamless_stem_itt = "Seamless STEM enrollment (ITT)",
+  inst_4yr_entry = "Initial enrollment: any 4-year",
+  inst_public4yr_entry = "Initial enrollment: public 4-year",
+  reten_1y = "Retained into 2nd year",
+  deg_any_6y = "Any degree within 6 years"
 )
 
 sig_stars <- function(p) {
@@ -416,7 +415,7 @@ plot_coef <- function(
     filter(outcome == outcome_var, !suppressed, sample == sample_filter) |>
     mutate(
       subgroup = factor(subgroup, levels = rev(sort(unique(subgroup)))),
-      sig = pval < 0.10,
+      sig = as.character(pval < 0.10),
       xmin_plot = pmax(conf_lo_pp, -65),
       xmax_plot = pmin(conf_hi_pp, 65)
     )
@@ -543,7 +542,7 @@ gpa_fig_data <- results_gpa_het |>
       outcome_label,
       levels = c('Seamless STEM Enrollment', 'Retained into 2nd Year')
     ),
-    sig = pval < 0.10
+    sig = as.character(pval < 0.10)
   )
 
 gpa_levels <- c('3.0 - 3.4', '3.5 - 3.9', '4.0+')
@@ -714,6 +713,8 @@ make_cohort_table <- function(pre_all, pre_pa, matched_all, matched_pa) {
     )
   tbl <- bind_rows(tbl_all, tbl_pa, totals) |>
     mutate(
+      # 2020 excluded (COVID), 2022 excluded (insufficient NSC follow-up),
+      # 2023 excluded (no outcome data yet)
       year = factor(year, levels = c('2017', '2018', '2019', '2021', 'Total'))
     )
   n_rows <- nrow(tbl)
@@ -771,8 +772,8 @@ tbl_names <- list(
   appendix_a2 = 'appendix_table_a2_sample_by_cohort'
 )
 for (nm in names(tbl_names)) {
-  gtsave(get(nm), here('output', paste0(tbl_names[[nm]], '.html')))
-  gtsave(get(nm), here('output', paste0(tbl_names[[nm]], '.tex')))
+  gtsave(get(nm), here('output', 'tables', paste0(tbl_names[[nm]], '.html')))
+  gtsave(get(nm), here('output', 'tables', paste0(tbl_names[[nm]], '.tex')))
 }
 message('Saved all tables.')
 message('\n=== Saving Figures ===')
@@ -788,14 +789,14 @@ for (i in seq_along(figs)) {
   fig <- figs[[i]]
   d <- dims[[i]]
   ggsave(
-    here('output', paste0(nm, '.pdf')),
+    here('output', 'figures', paste0(nm, '.pdf')),
     fig,
     width = d[1],
     height = d[2],
     dpi = 300
   )
   ggsave(
-    here('output', paste0(nm, '.png')),
+    here('output', 'figures', paste0(nm, '.png')),
     fig,
     width = d[1],
     height = d[2],

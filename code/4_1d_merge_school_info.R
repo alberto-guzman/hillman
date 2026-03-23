@@ -4,18 +4,21 @@
 #          PA public school subsample.
 #
 # Input:   `merged_clean` — analysis-ready student data (from script 3b)
-#          data/high_school_match.dta — HS name → AUN crosswalk
-#          data/SchoolFastFacts_20242025.xlsx — PA school-level covariates
+#          data/processed/high_school_match.dta — HS name → AUN crosswalk
+#          data/raw/SchoolFastFacts_20242025.xlsx — PA school-level covariates
 # Output:  `merged_df_all`   — all-states dataset with normalized school names
 #                               and AUN where matched
 #          `merged_df_pa`    — PA public school students with school covariates
 #          `merged_df_all_n` — applicant and alumni counts by year (all states)
 #          `merged_df_pa_n`  — applicant and alumni counts by year (PA public)
-#          data/merged_all_states.csv
-#          data/merged_df_pa_public.csv
-#          output/n_merged_all_by_year.csv
-#          output/n_merged_pa_by_year.csv
+#          data/processed/merged_all_states.csv
+#          data/processed/merged_df_pa_public.csv
+#          output/counts/n_merged_all_by_year.csv
+#          output/counts/n_merged_pa_by_year.csv
 # =============================================================================
+
+dir.create(here("data", "processed"), recursive = TRUE, showWarnings = FALSE)
+dir.create(here("output", "counts"), recursive = TRUE, showWarnings = FALSE)
 
 # =============================================================================
 # HELPER FUNCTION
@@ -113,7 +116,7 @@ message(
 # MERGE SCHOOL → AUN CROSSWALK
 # =============================================================================
 
-crosswalk <- read_dta(here("data", "high_school_match.dta")) |>
+crosswalk <- read_dta(here("data", "processed", "high_school_match.dta")) |>
   mutate(hs_name_clean = normalize_hs(hs_name_clean)) |>
   select(hs_name_clean, pa_state_name, aun) |>
   distinct(hs_name_clean, pa_state_name, .keep_all = TRUE) |>
@@ -161,7 +164,7 @@ merged_df_pa <- merged_df_all |>
 message("PA students: ", nrow(merged_df_pa))
 
 school_facts <- readxl::read_excel(here(
-  "data",
+  "data", "raw",
   "SchoolFastFacts_20242025.xlsx"
 )) |>
   janitor::clean_names() |>
@@ -217,8 +220,8 @@ message(
 # SAVE OUTPUTS
 # =============================================================================
 
-write_csv(merged_df_all, here("data", "merged_all_states.csv"))
-write_csv(merged_df_pa, here("data", "merged_df_pa_public.csv"))
+write_csv(merged_df_all, here("data", "processed", "merged_all_states.csv"))
+write_csv(merged_df_pa, here("data", "processed", "merged_df_pa_public.csv"))
 
 message(
   "Saved: data/merged_all_states.csv (",
@@ -265,8 +268,8 @@ merged_df_pa_n <- merged_df_pa |>
   ) |>
   select(year, n_applicants, n_alumni, n_total, pct_alumni)
 
-write_csv(merged_df_all_n, here("output", "n_merged_all_by_year.csv"))
-write_csv(merged_df_pa_n, here("output", "n_merged_pa_by_year.csv"))
+write_csv(merged_df_all_n, here("output", "counts", "n_merged_all_by_year.csv"))
+write_csv(merged_df_pa_n, here("output", "counts", "n_merged_pa_by_year.csv"))
 
 merged_df_all_n
 merged_df_pa_n

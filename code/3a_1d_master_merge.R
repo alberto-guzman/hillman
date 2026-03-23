@@ -13,6 +13,8 @@
 #          output/n_merged_by_year.csv
 # =============================================================================
 
+dir.create(here("output", "counts"), recursive = TRUE, showWarnings = FALSE)
+
 # =============================================================================
 # JOIN APPLICANTS TO ALUMNI
 # =============================================================================
@@ -168,7 +170,7 @@ merged_n <- merged_df |>
   ) |>
   select(year, n_applicants, n_alumni, n_total, pct_alumni)
 
-write_csv(merged_n, here("output", "n_merged_by_year.csv"))
+write_csv(merged_n, here("output", "counts", "n_merged_by_year.csv"))
 
 merged_n
 

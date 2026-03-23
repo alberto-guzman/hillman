@@ -176,9 +176,7 @@ results_subgroup_pa <- map_dfr(subgroups, \(sg) {
 # 5. SAVE RESULTS
 # =============================================================================
 
-if (!dir.exists(here("output"))) {
-  dir.create(here("output"))
-}
+dir.create(here("output", "tables"), recursive = TRUE, showWarnings = FALSE)
 
 saveRDS(results_subgroup_all, here("output", "att_subgroup_all_states.rds"))
 saveRDS(results_subgroup_pa, here("output", "att_subgroup_pa.rds"))
@@ -457,11 +455,11 @@ att_subgroup_gt_pa
 
 gtsave(
   att_subgroup_gt_all,
-  here("output", "att_subgroup_table_all_states.html")
+  here("output", "tables", "att_subgroup_table_all_states.html")
 )
-gtsave(att_subgroup_gt_all, here("output", "att_subgroup_table_all_states.tex"))
-gtsave(att_subgroup_gt_pa, here("output", "att_subgroup_table_pa.html"))
-gtsave(att_subgroup_gt_pa, here("output", "att_subgroup_table_pa.tex"))
+gtsave(att_subgroup_gt_all, here("output", "tables", "att_subgroup_table_all_states.tex"))
+gtsave(att_subgroup_gt_pa, here("output", "tables", "att_subgroup_table_pa.html"))
+gtsave(att_subgroup_gt_pa, here("output", "tables", "att_subgroup_table_pa.tex"))
 
 message("Saved: att_subgroup_table_all_states.html/.tex")
 message("Saved: att_subgroup_table_pa.html/.tex")
