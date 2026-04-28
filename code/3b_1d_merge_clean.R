@@ -1,7 +1,3 @@
-# Retention/persistence: conditional on enroll_ever == 1, cohorts <= 2021 — 2022 cohort excluded
-#       — NSC file has no fall 2023 follow-up records so all 2022 reten/pers
-#       values would be 0 (missing data, not true dropout).
-#
 # =============================================================================
 # 3b_1d_merge_clean.R
 #
@@ -80,14 +76,6 @@ merged_clean <- merged_df |>
       str_detect(tolower(as.character(first_gen)), "yes|1|true") ~ 1L,
       str_detect(tolower(as.character(first_gen)), "no|0|false") ~ 0L,
       TRUE ~ NA_integer_
-    ),
-
-    # 2023 first_gen question was reverse-coded in the source data ("did a
-    # parent attend college?" vs. "will you be the first?") — flip it here.
-    first_gen = if_else(
-      year == 2023 & !is.na(first_gen),
-      1L - first_gen,
-      first_gen
     ),
 
     racially_marginalized = case_when(

@@ -1,5 +1,7 @@
-#          `merged_df_all`   — all-states dataset with normalized school names
-#                              and AUN where matchedigh school names, link students to PA school AUN codes
+# =============================================================================
+# 4_1d_merge_school_info.R
+#
+# Purpose: Normalize high school names, link students to PA school AUN codes
 #          via a name crosswalk, and merge school-level covariates for the
 #          PA public school subsample.
 #
@@ -28,16 +30,16 @@ dir.create(here("output", "counts"), recursive = TRUE, showWarnings = FALSE)
 
 normalize_hs <- function(x) {
   x |>
-    stringr::str_to_lower() |>
-    stringr::str_replace_all("[^a-z0-9 ]", " ") |>
-    stringr::str_squish() |>
-    stringr::str_replace_all(
+    str_to_lower() |>
+    str_replace_all("[^a-z0-9 ]", " ") |>
+    str_squish() |>
+    str_replace_all(
       "\\b(highschool|high school|hs|shs|senior high)\\b",
       "hs"
     ) |>
-    stringr::str_replace_all("\\b(jr|jr\\.|junior)\\b", "j") |>
-    stringr::str_replace_all("\\bsr\\.?\\b", "s") |>
-    stringr::str_replace_all("\\bcharter school\\b", "cs")
+    str_replace_all("\\b(jr|jr\\.|junior)\\b", "j") |>
+    str_replace_all("\\bsr\\.?\\b", "s") |>
+    str_replace_all("\\bcharter school\\b", "cs")
 }
 
 # =============================================================================
@@ -116,9 +118,11 @@ message(
 # MERGE SCHOOL → AUN CROSSWALK
 # =============================================================================
 
+# schoolnumber (crosswalk) = schl (SchoolFastFacts) — school-level within district.
+# aun alone is district-level; join on aun + schoolnumber to get the right school.
 crosswalk <- read_dta(here("data", "processed", "high_school_match.dta")) |>
   mutate(hs_name_clean = normalize_hs(hs_name_clean)) |>
-  select(hs_name_clean, pa_state_name, aun) |>
+  select(hs_name_clean, pa_state_name, aun, schoolnumber) |>
   distinct(hs_name_clean, pa_state_name, .keep_all = TRUE) |>
   rename(pa_state_name_cw = pa_state_name)
 
@@ -163,14 +167,21 @@ merged_df_pa <- merged_df_all |>
 
 message("PA students: ", nrow(merged_df_pa))
 
+# schl is a unique school-level identifier within each district (aun).
+# Join on aun + schl = schoolnumber to get the specific high school's stats,
+# not an arbitrary school from the same district.
 school_facts <- readxl::read_excel(here(
   "data", "raw",
   "SchoolFastFacts_20242025.xlsx"
 )) |>
   janitor::clean_names() |>
-  mutate(aun = as.numeric(aun)) |>
+  mutate(
+    aun  = as.numeric(aun),
+    schl = as.numeric(schl)
+  ) |>
   select(
     aun,
+    schl,
     school_title_i = title_i_school,
     school_enrollment = enrollment,
     school_pct_econ_disadvantaged = economically_disadvantaged,
@@ -178,19 +189,13 @@ school_facts <- readxl::read_excel(here(
     school_pct_special_ed = special_education,
     school_pct_white = white
   ) |>
-  mutate(
-    school_title_i = as.integer(school_title_i == "Yes")
-  ) |>
-  group_by(aun) |>
-  slice(1) |>
-  ungroup()
+  mutate(school_title_i = as.integer(school_title_i == "Yes"))
 
-message("School Fast Facts loaded: ", nrow(school_facts), " unique schools")
+message("School Fast Facts loaded: ", nrow(school_facts), " schools")
 
 merged_df_pa <- merged_df_pa |>
-  left_join(school_facts, by = "aun") |>
-  filter(!is.na(aun)) |>
-  filter(!is.na(school_enrollment))
+  left_join(school_facts, by = c("aun", "schoolnumber" = "schl")) |>
+  filter(!is.na(aun), !is.na(school_enrollment))
 
 # Two-step PA attrition diagnostic
 n_pa_raw <- merged_df_all |> filter(state == "pennsylvania") |> nrow()
@@ -224,12 +229,12 @@ write_csv(merged_df_all, here("data", "processed", "merged_all_states.csv"))
 write_csv(merged_df_pa, here("data", "processed", "merged_df_pa_public.csv"))
 
 message(
-  "Saved: data/merged_all_states.csv (",
+  "Saved: data/processed/merged_all_states.csv (",
   nrow(merged_df_all),
   " students)"
 )
 message(
-  "Saved: data/merged_df_pa_public.csv (",
+  "Saved: data/processed/merged_df_pa_public.csv (",
   nrow(merged_df_pa),
   " students)"
 )

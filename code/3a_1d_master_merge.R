@@ -20,19 +20,26 @@ dir.create(here("output", "counts"), recursive = TRUE, showWarnings = FALSE)
 # =============================================================================
 # Non-matching applicants (never treated) get 0 across all treated_* columns.
 
+# Only bring in treatment flags from alum — all other alum columns either
+# conflict with applicant columns (e.g. gender) or are not needed downstream.
+# first_treatment_year / total_times_treated are recalculated below from
+# applicant records so they reflect application-year timing.
 merged_df <- applicants |>
-  left_join(alum, by = c("first_name", "last_name")) |>
+  left_join(
+    alum |> select(
+      first_name, last_name,
+      treated_ever, treated_before_2017,
+      starts_with("treated_20")
+    ),
+    by = c("first_name", "last_name")
+  ) |>
   mutate(
     across(
       starts_with("treated_20"),
-      ~ ifelse(is.na(.), 0L, as.integer(.))
+      ~ if_else(is.na(.), 0L, as.integer(.))
     ),
-    treated_ever = ifelse(is.na(treated_ever), 0L, treated_ever),
-    treated_before_2017 = ifelse(
-      is.na(treated_before_2017),
-      0L,
-      treated_before_2017
-    )
+    treated_ever       = if_else(is.na(treated_ever), 0L, treated_ever),
+    treated_before_2017 = if_else(is.na(treated_before_2017), 0L, treated_before_2017)
   )
 
 # Flag whether the student was treated in their application year
@@ -70,16 +77,8 @@ first_treatment <- merged_df |>
 merged_df <- merged_df |>
   left_join(first_treatment, by = c("first_name", "last_name")) |>
   mutate(
-    first_treatment_year = ifelse(
-      is.na(first_treatment_year),
-      0,
-      first_treatment_year
-    ),
-    total_times_treated = ifelse(
-      is.na(total_times_treated),
-      0L,
-      total_times_treated
-    )
+    first_treatment_year = if_else(is.na(first_treatment_year), 0L, as.integer(first_treatment_year)),
+    total_times_treated  = if_else(is.na(total_times_treated),  0L, total_times_treated)
   )
 
 # =============================================================================

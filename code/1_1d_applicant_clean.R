@@ -285,7 +285,7 @@ df_2019 <- read_excel(
   ) |>
   mutate(
     gender = as.integer(tolower(gender) == "male"),
-    gpa_weight = as.integer(tolower(gpa_weight) == "yes"),
+    gpa_weight = if_else(tolower(gpa_weight) == "yes", 1L, 0L),
     zip = as.character(zip),
     grade = as.integer(grade),
     gpa = as.numeric(gpa),
@@ -312,6 +312,7 @@ df_2019 <- df_2019 |>
 rm(df_stipend)
 
 # --- 2020 --------------------------------------------------------------------
+# Loaded for completeness; excluded from analysis in script 3b due to COVID disruption.
 df_2020 <- read_excel(here("data", "raw", "applicants", "hillman_2020.xlsx")) |>
   clean_custom_names() |>
   select(
@@ -621,8 +622,10 @@ df2023_stipend <- read_delim(
 
 df_2023 <- df_2023 |>
   left_join(df2023_stipend, by = c("first_name", "last_name")) |>
-  # stipend join creates duplicates when nickname partially matches legal name
-  # keep row with non-missing stipend; otherwise keep first row
+  # stipend join creates duplicates when nickname partially matches legal name;
+  # keep row with non-missing stipend, otherwise first row. This resolves most
+  # cases at join time; the global remove_duplicates block below catches any
+  # that remain after bind_rows.
   group_by(first_name, last_name) |>
   arrange(desc(!is.na(stipend)), .by_group = TRUE) |>
   slice(1) |>
@@ -730,10 +733,9 @@ applicants <- applicants |>
       house_size
     ),
     # zip stored as character to preserve leading zeros (e.g. CT "06510")
+    zip_int = suppressWarnings(as.integer(zip)),
     zip = if_else(
-      is.na(suppressWarnings(as.integer(zip))) |
-        suppressWarnings(as.integer(zip)) < 501 |
-        suppressWarnings(as.integer(zip)) > 99950,
+      is.na(zip_int) | zip_int < 501 | zip_int > 99950,
       NA_character_,
       zip
     ),
@@ -777,10 +779,11 @@ applicants <- applicants |>
     act_science = if_else(act_science == 0, NA_integer_, act_science),
     act_writing = if_else(act_writing == 0, NA_integer_, act_writing)
   ) |>
-  select(
-    -date_of_birth,
-    -application_form_hillman_academy_completion_status
-  )
+  select(-any_of(c(
+    "date_of_birth",
+    "application_form_hillman_academy_completion_status",
+    "zip_int"
+  )))
 
 # Derive HS graduation year from application year and grade
 applicants <- applicants |>

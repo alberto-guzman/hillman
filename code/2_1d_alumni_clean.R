@@ -22,8 +22,6 @@ library(tidyverse)
 library(readxl)
 library(here)
 library(janitor)
-library(stringr)
-
 dir.create(here("output", "counts"), recursive = TRUE, showWarnings = FALSE)
 
 # =============================================================================
@@ -43,7 +41,7 @@ message("Raw alumni tracker: ", nrow(alum_raw), " rows")
 
 # After clean_names(): First -> first, Last -> last, year1-year4 (no underscore)
 # Guard: confirm no year5+ columns exist -- pivot assumes max year4
-stopifnot(!any(str_detect(names(alum_raw), "^year5")))
+stopifnot(sum(str_detect(names(alum_raw), "^year[0-9]+$")) <= 4)
 
 # =============================================================================
 # CLEAN NAMES
@@ -157,12 +155,7 @@ treated_years <- alum_long |>
   )
 
 # Ensure all years 2017-2023 present even if no alumni in that year
-for (yr in 2017:2023) {
-  col <- paste0("treated_", yr)
-  if (!col %in% names(treated_years)) {
-    treated_years[[col]] <- 0L
-  }
-}
+treated_years[setdiff(paste0("treated_", 2017:2023), names(treated_years))] <- 0L
 
 # Order year columns
 treated_years <- treated_years |>
