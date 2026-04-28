@@ -11,8 +11,8 @@
 #
 # Input:   `merged_df_all` — all-states cleaned dataset (from script 4)
 #          `merged_df_pa`  — PA public school dataset (from script 4)
-# Output:  data/matched_all_states_year_only.rds
-#          data/matched_pa_year_only.rds
+# Output:  data/matched/matched_all_states_year_only.rds
+#          data/matched/matched_pa_year_only.rds
 #          output/balance_table_all_states.html/.tex
 #          output/balance_table_pa.html/.tex
 # =============================================================================
@@ -22,7 +22,6 @@ library(MatchIt)
 library(cobalt)
 library(gt)
 library(here)
-library(purrr)
 
 # =============================================================================
 # SHARED COVARIATES
@@ -58,37 +57,10 @@ pa_extra_covariates <- c(
   # school_title_i excluded — high collinearity with school_pct_econ_disadvantaged
 )
 
-# Display labels for balance tables — human-readable names aligned to
-# base_covariates + grade dummies
-display_covars_all <- c(
-  "gender",
-  "gpa",
-  "psat_math",
-  "stipend",
-  "house_size",
-  "racially_marginalized",
-  "bi_multi_racial",
-  "urban",
-  "suburban",
-  "rural",
-  "disability",
-  "neg_school",
-  "us_citizen",
-  "first_gen",
-  "grade_9",
-  "grade_10",
-  "grade_11",
-  "grade_12"
-)
-
-display_covars_pa <- c(
-  display_covars_all,
-  "school_enrollment",
-  "school_pct_econ_disadvantaged",
-  "school_pct_english_learner",
-  "school_pct_special_ed",
-  "school_pct_white"
-)
+# Display names for balance tables — derived from covariate vectors so
+# adding a covariate to base_covariates automatically appears in the table.
+display_covars_all <- c(base_covariates, paste0("grade_", 9:12))
+display_covars_pa  <- c(display_covars_all, pa_extra_covariates)
 
 # =============================================================================
 # HELPER: BUILD BALANCE TABLE (gt)

@@ -307,9 +307,12 @@ run_all_outcomes <- function(matched, covars, sample_label) {
     data_sub <- matched |>
       filter(enroll_ever == 1, !is.na(.data[[out]]))
 
-    # Additional cohort restriction for reten/pers
+    # Cohort restrictions: reten/pers need fall follow-up through 2022;
+    # degree outcomes need sufficient time to complete (≤ 2022 for 6-year rates).
     if (out %in% c("reten_1y", "pers_1y")) {
       data_sub <- data_sub |> filter(hs_grad_year <= 2021)
+    } else if (out %in% c("deg_any_ever", "deg_bach_ever", "deg_any_6y", "deg_bach_4y", "deg_bach_6y")) {
+      data_sub <- data_sub |> filter(hs_grad_year <= 2022)
     }
 
     message(
@@ -632,26 +635,22 @@ make_year_table <- function(matched, title_subtitle) {
       names_glue = "{year}_{.value}"
     )
 
-  ordered_cols <- c(
-    "outcome_label",
-    as.vector(outer(
-      as.character(years),
-      c("n_trt", "n_ctrl", "ctrl_fmt", "trt_fmt", "diff_fmt"),
-      paste,
-      sep = "_"
-    ))
-  )
+  # t() gives year-grouped order: 2017_n_trt, 2017_n_ctrl, ..., 2018_n_trt, ...
+  # Without t(), as.vector reads column-major (stats-grouped), scrambling labels.
+  year_stat_cols <- c(t(outer(
+    as.character(years),
+    c("n_trt", "n_ctrl", "ctrl_fmt", "trt_fmt", "diff_fmt"),
+    paste,
+    sep = "_"
+  )))
+
+  ordered_cols <- c("outcome_label", year_stat_cols)
   tbl <- tbl |> select(all_of(ordered_cols))
   n_rows <- nrow(tbl)
 
   label_list <- setNames(
     rep(list("NT", "NC", "Control", "Treated", "Diff."), length(years)),
-    as.vector(outer(
-      as.character(years),
-      c("n_trt", "n_ctrl", "ctrl_fmt", "trt_fmt", "diff_fmt"),
-      paste,
-      sep = "_"
-    ))
+    year_stat_cols
   )
 
   gt_tbl <- tbl |>
