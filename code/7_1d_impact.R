@@ -238,6 +238,22 @@ fit_att <- function(data, outcome_var, predictors) {
 
   coef_row <- summary(fit)$coefficients["treated_in_year", ]
 
+  # HC2 breaks down when any observation has leverage h_ii = 1 (small matched
+  # subsamples with replacement). Fall back to HC1 and warn so the caller knows.
+  if (is.nan(coef_row["Std. Error"])) {
+    warning(
+      "HC2 SE is NaN for outcome '", outcome_var,
+      "' (n=", nrow(data), ") — falling back to HC1"
+    )
+    fit <- lm_robust(
+      as.formula(formula_str),
+      data = data,
+      weights = weights,
+      se_type = "HC1"
+    )
+    coef_row <- summary(fit)$coefficients["treated_in_year", ]
+  }
+
   wt_mean <- function(x, w) weighted.mean(x, w, na.rm = TRUE)
 
   tibble(

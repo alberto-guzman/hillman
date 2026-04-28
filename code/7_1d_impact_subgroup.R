@@ -35,8 +35,6 @@
 library(dplyr)
 library(purrr)
 library(tidyr)
-library(marginaleffects)
-library(sandwich)
 library(gt)
 library(here)
 
@@ -67,9 +65,7 @@ subgroups <- list(
 # are included in the sample size summary but excluded from the ATT table.
 MIN_TREATED <- 20
 
-# Outcome vectors (enrollment_outcomes, degree_outcomes, outcome_labels)
-# are inherited from 7_1d_impact.R via source() above.
-# Any changes to the trimmed outcome set should be made there only.
+# panel_a/b/c_outcomes and fit_att() are inherited from 7_1d_impact.R via source().
 
 # =============================================================================
 # 3. HELPER: RUN OUTCOMES FOR ONE SUBGROUP × ONE SAMPLE
@@ -115,35 +111,38 @@ run_subgroup <- function(matched, covars, sg_var, sg_label, sample_label) {
       n_control = n_ctl,
       ctrl_mean = NA_real_,
       trt_mean = NA_real_,
-      att_pp = NA_real_,
-      se_pp = NA_real_,
+      att = NA_real_,
+      se = NA_real_,
       pval = NA_real_,
-      conf_lo_pp = NA_real_,
-      conf_hi_pp = NA_real_,
+      conf_lo = NA_real_,
+      conf_hi = NA_real_,
       suppressed = TRUE
     ))
   }
 
-  # nsc_matched flag already added by add_nsc_flag() in 7_1d_impact.R
-
-  # (a) Enrollment — full subgroup sample
-  res_enroll <- map(enrollment_outcomes, \(out) {
+  # (a) ITT enrollment — full subgroup sample (non-NSC coded 0)
+  res_enroll <- map(panel_a_outcomes, \(out) {
     fit_att(data_sg, out, covars)
   }) |>
     list_rbind() |>
     mutate(sample = "full")
 
-  # (b) Enrollment — NSC-matched only
-  data_nsc <- data_sg |> filter(nsc_matched)
-  res_enroll_nsc <- map(enrollment_outcomes, \(out) {
+  # (b) Enrollment — NSC-matched students only
+  data_nsc <- data_sg |> filter(has_nsc_record == 1)
+  res_enroll_nsc <- map(panel_b_outcomes, \(out) {
     fit_att(data_nsc, out, covars)
   }) |>
     list_rbind() |>
     mutate(sample = "nsc_matched")
 
   # (c) Degree / persistence — non-censored subsample
-  res_degree <- map(degree_outcomes, \(out) {
+  res_degree <- map(panel_c_outcomes, \(out) {
     data_sub <- data_sg |> filter(!is.na(.data[[out]]))
+    if (out %in% c("reten_1y", "pers_1y")) {
+      data_sub <- data_sub |> filter(hs_grad_year <= 2021)
+    } else if (out %in% c("deg_any_ever", "deg_bach_ever", "deg_any_6y", "deg_bach_4y", "deg_bach_6y")) {
+      data_sub <- data_sub |> filter(hs_grad_year <= 2022)
+    }
     if (sum(data_sub$treated_in_year == 1) < MIN_TREATED) {
       return(NULL)
     }
@@ -162,15 +161,15 @@ run_subgroup <- function(matched, covars, sg_var, sg_label, sample_label) {
 
 message("\n=== ALL STATES SUBGROUP ANALYSIS ===")
 
-results_subgroup_all <- map_dfr(subgroups, \(sg) {
+results_subgroup_all <- map(subgroups, \(sg) {
   run_subgroup(matched_all, base_covars, sg$var, sg$label, "All States")
-})
+}) |> list_rbind()
 
 message("\n=== PA PUBLIC SCHOOLS SUBGROUP ANALYSIS ===")
 
-results_subgroup_pa <- map_dfr(subgroups, \(sg) {
+results_subgroup_pa <- map(subgroups, \(sg) {
   run_subgroup(matched_pa, pa_covars, sg$var, sg$label, "PA Public Schools")
-})
+}) |> list_rbind()
 
 # =============================================================================
 # 5. SAVE RESULTS
@@ -263,9 +262,9 @@ make_subgroup_table <- function(results, title_subtitle) {
     mutate(
       ctrl_mean_fmt = sprintf("%.3f", ctrl_mean),
       trt_mean_fmt = sprintf("%.3f", trt_mean),
-      att_fmt = paste0(sprintf("%.3f", att_pp / 100), sig_stars(pval)),
-      se_fmt = paste0("(", sprintf("%.3f", se_pp / 100), ")"),
-      ci_fmt = fmt_ci(conf_lo_pp / 100, conf_hi_pp / 100),
+      att_fmt = paste0(sprintf("%.3f", att), sig_stars(pval)),
+      se_fmt = paste0("(", sprintf("%.3f", se), ")"),
+      ci_fmt = fmt_ci(conf_lo, conf_hi),
       pval_fmt = fmt_pval(pval),
       panel = sample
     ) |>
@@ -382,7 +381,7 @@ make_subgroup_table <- function(results, title_subtitle) {
       source_note = md(paste0(
         "*Notes:* ATT = average treatment effect on the treated estimated via a ",
         "linear probability model (LPM) with matching weights and cohort fixed effects. ",
-        "Standard errors (in parentheses) are clustered by matched subclass. ",
+        "Standard errors (in parentheses) are HC2 heteroskedasticity-robust. ",
         "95% confidence intervals are reported in brackets. ",
         "All outcomes are binary (0/1); ATT and means are reported as proportions. ",
         "\\* p < 0.10, \\*\\* p < 0.05, \\*\\*\\* p < 0.01."
