@@ -48,8 +48,13 @@ base_covariates <- c(
   "rural",
   "disability",
   "neg_school",
-  "us_citizen",
-  "first_gen"
+  "us_citizen"
+  # first_gen excluded: question wasn't on the 2017 or 2018 application
+  # forms, so it's 100% missing for those cohorts and the missing-indicator
+  # method produces first_gen_miss == 1[year %in% c(2017, 2018)] — perfectly
+  # collinear with year FE in the outcome model and aliased in the PS logit.
+  # Among 2019–2021 cohorts where it was measured, only 1 of 86 students
+  # is first-generation, so within-sample variation is also negligible.
 )
 
 all_states_extra_covariates <- c("pa_state")
@@ -224,7 +229,18 @@ message("\n=== ALL-STATES MATCHING ===\n")
 # locks the matched set against any future upstream reordering.
 set.seed(20260428)
 
-matching_data_all <- prepare_matching_data(merged_df_all, all_states_covariates)
+# All-states exclusions:
+#   2021 — only 1 treated student appears in the analytic sample (after the
+#          hs_grad ≤ 2021 cap, only application-year 2021 grade-12 students
+#          survive, and the alumni tracker has just 1 such treated student).
+#          The resulting n=2 matched cell (1T/1C) breaks HC3 SEs in the
+#          outcome model (leverage = 1) and contributes ~0 information to the
+#          ATT. Excluded for analytic stability.
+matching_data_all <- prepare_matching_data(
+  merged_df_all,
+  all_states_covariates,
+  exclude_years = 2021
+)
 
 message(
   "Matching sample: ",

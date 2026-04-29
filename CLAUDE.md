@@ -113,6 +113,14 @@ Scripts 5+ load from RDS files.
 5. **Hardcoded duplicate-row removal** based on row order — was fragile to
    source-file reorderings. Now uses a deterministic completeness sort
    (`desc(!is.na(stipend))`, then `desc(!is.na(gpa))`).
+6. **Including `first_gen` as a covariate.** The question wasn't on the
+   2017 or 2018 application forms, so `first_gen` is 100% missing for
+   those cohorts. The missing-indicator method then produces
+   `first_gen_miss == 1[year %in% c(2017, 2018)]` — a perfect linear
+   combination of the year FE / intercept. Aliasing in the PS logit and
+   the outcome LPM (contributes to HC3 SE failure on aliased cells).
+   Dropped from the covariate set entirely. Only 1 of 237 matched students
+   is coded first-generation, so within-sample variation is also negligible.
 
 ## Reproducibility
 

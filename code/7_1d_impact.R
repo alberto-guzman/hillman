@@ -161,13 +161,16 @@ base_covars <- c(
   "disability",
   "neg_school",
   "us_citizen",
-  "first_gen",
+  # first_gen excluded: question wasn't on the 2017 or 2018 application
+  # forms, so first_gen_miss == 1[year %in% c(2017, 2018)] is perfectly
+  # collinear with year FE. See script 5 base_covariates note.
   # missing indicators — only included where missingness exists in matched
   # sample AND the column is not redundant.
   # Excluded as constant: gender_miss, stipend_miss, us_citizen_miss.
   # Excluded as redundant duplicates: suburban_miss, rural_miss
   # (all three geo _miss columns are derived from the same field and are
   # therefore identical; urban_miss alone covers the geographic missingness).
+  # Excluded as collinear with year FE: first_gen_miss (see note above).
   "gpa_miss",
   "psat_math_miss",
   "house_size_miss",
@@ -175,8 +178,7 @@ base_covars <- c(
   "bi_multi_racial_miss",
   "urban_miss",
   "disability_miss",
-  "neg_school_miss",
-  "first_gen_miss"
+  "neg_school_miss"
 )
 
 pa_covars <- c(
@@ -338,7 +340,7 @@ results_pa |>
 #   - enroll_seamless_stem (STEM enrollment, Panel A; has_nsc_record == 1)
 #   - pers_1y_stem         (STEM persistence, Panel C; enroll_ever == 1)
 #
-# Subgroups: racially_marginalized, first_gen, gender, urban/rural
+# Subgroups: racially_marginalized, gender, urban/rural
 # Results saved to RDS; plots produced by 8_1d_tables_figures.R.
 
 het_outcomes <- c("enroll_seamless_stem", "pers_1y_stem")
@@ -358,11 +360,9 @@ run_het <- function(matched, covars, sample_label) {
         "Not racially marginalized" = 0
       )
     ),
-    list(
-      name = "first_gen",
-      var = "first_gen",
-      levels = list("First generation" = 1, "Not first generation" = 0)
-    ),
+    # first_gen subgroup removed: only 1 of 237 matched students is coded
+    # first-generation (the question wasn't on 2017-2018 forms; values
+    # imputed to 0). Subgroup ATT would be n=1 — not meaningful.
     list(
       name = "gender",
       var = "gender",
@@ -429,8 +429,6 @@ results_het <- bind_rows(results_het_all, results_het_pa) |>
       levels = c(
         "Racially marginalized",
         "Not racially marginalized",
-        "First generation",
-        "Not first generation",
         "Female",
         "Male",
         "Urban",

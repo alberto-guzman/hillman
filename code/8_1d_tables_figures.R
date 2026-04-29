@@ -153,10 +153,12 @@ desc_vars <- c(
   "suburban",
   "rural",
   "disability",
-  "neg_school",
-  "first_gen"
+  "neg_school"
   # us_citizen excluded: non-citizens are removed before matching, so the
   # column is 1 or NA for everyone in pre_all — uninformative to display.
+  # first_gen excluded: 100% missing on the 2017–2018 application forms;
+  # included it in earlier specs but the missing-indicator collinear with
+  # year FE made it uninformative. Removed from the main analysis.
 )
 
 desc_labels <- c(
@@ -175,8 +177,7 @@ desc_labels <- c(
   suburban           = "Suburban",
   rural              = "Rural",
   disability         = "Documented disability",
-  neg_school         = "Negative school environment",
-  first_gen          = "First-generation college student"
+  neg_school         = "Negative school environment"
 )
 
 # Group labels used for row grouping
@@ -196,8 +197,7 @@ desc_group <- c(
   suburban           = "Geography",
   rural              = "Geography",
   disability         = "Student Background",
-  neg_school         = "Student Background",
-  first_gen          = "Student Background"
+  neg_school         = "Student Background"
 )
 
 make_desc_table <- function(pre_data, title_subtitle) {
@@ -329,7 +329,6 @@ bal_labels <- c(
   disability                    = "Documented disability",
   neg_school                    = "Negative school environment",
   us_citizen                    = "U.S. citizen",
-  first_gen                     = "First-generation college student",
   grade_9                       = "Grade 9",
   grade_10                      = "Grade 10",
   grade_11                      = "Grade 11",
@@ -410,7 +409,7 @@ display_vars_all <- c(
   "gender", "gpa", "psat_math", "stipend", "house_size",
   "racially_marginalized", "bi_multi_racial",
   "urban", "suburban", "rural",
-  "disability", "neg_school", "us_citizen", "first_gen",
+  "disability", "neg_school", "us_citizen",
   paste0("grade_", 9:12)
 )
 
