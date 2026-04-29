@@ -141,8 +141,6 @@ Re-run only the impact analysis (script 5 outputs already exist on disk):
 
 ```r
 source("code/7_1d_impact.R")
-source("code/7_1d_impact_subgroup.R")
-source("code/8_1d_tables_figures.R")
 ```
 
 Inspect a results object:

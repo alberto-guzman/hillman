@@ -49,7 +49,6 @@
 # Output:  output/att_results_all_states.rds
 #          output/att_results_pa.rds
 #          output/att_results_het.rds
-# Tables and figures are produced by 8_1d_tables_figures.R.
 # =============================================================================
 
 library(dplyr)
@@ -341,7 +340,7 @@ results_pa |>
 #   - pers_1y_stem         (STEM persistence, Panel C; enroll_ever == 1)
 #
 # Subgroups: racially_marginalized, gender, urban/rural
-# Results saved to RDS; plots produced by 8_1d_tables_figures.R.
+# Results saved to output/att_results_het.rds.
 
 het_outcomes <- c("enroll_seamless_stem", "pers_1y_stem")
 

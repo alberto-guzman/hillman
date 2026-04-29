@@ -45,10 +45,8 @@ Scripts execute in order:
 | `3a_1d_master_merge.R` | Merge applicants to alumni; build per-student treatment timeline; drop 2020 (COVID) |
 | `3b_1d_merge_clean.R` | Standardize covariates; merge NSC outcome data; restrict to HS-grad cohorts 2018–2021 |
 | `4_1d_merge_school_info.R` | Normalize school names; merge PA school-level covariates |
-| `5_1d_matching.R` | Propensity score matching (NN, with replacement, caliper = 0.25 SD, exact-on-year) |
-| `7_1d_impact.R` | ATT estimation via g-computation (LPM + `marginaleffects::avg_comparisons()`, HC3 SEs); pooled, cohort, and heterogeneity |
-| `7_1d_impact_subgroup.R` | Detailed subgroup ATT estimates (stipend, race, geography, etc.) |
-| `8_1d_tables_figures.R` | Publication tables (HTML) and figures (PNG) |
+| `5_1d_matching.R` | 1:3 propensity score matching (NN, with replacement, caliper = 0.25 SD, exact-on-year) |
+| `7_1d_impact.R` | ATT estimation via g-computation (LPM + `marginaleffects::avg_comparisons()`, HC3 SEs); pooled and heterogeneity |
 
 > Scripts use `here` package for paths. Open the `.Rproj` file to set the
 > project root before running.
@@ -59,25 +57,25 @@ Scripts execute in order:
 
 ### Sample
 
-- **Applicant cohorts (`year`):** 2017, 2018, 2019, 2021 — used for matching strata. 2020 excluded (program disrupted by COVID); 2022/2023 application cohorts have no analyzable HS-grad windows yet.
+- **Applicant cohorts (`year`):** 2017, 2018, 2019 — used for matching strata. 2020 excluded (program disrupted by COVID); 2021 excluded from matching (only 1 analytic-sample treated student all-states, 0 in PA); 2022/2023 application cohorts have no analyzable HS-grad windows yet.
 - **HS graduation cohorts (`hs_grad_year`):** 2018–2021 — drives outcome availability. 2022 cohort excluded (NSC partial coverage); 2023+ excluded (NSC has no enrollment data yet).
 - **Two analytic samples:**
-  - **All states** — pre-match 644 (142 T / 502 C); matched 237 (136 T / 101 C)
-  - **PA public schools only** — pre-match 334 (87 T / 247 C); matched 137 (78 T / 59 C)
+  - **All states** — pre-match 722 (159 T / 563 C); matched 347 (134 T / 213 unique C)
+  - **PA public schools only** — pre-match 388 (98 T / 290 C); matched 202 (77 T / 125 unique C)
 
 ### Propensity-score matching (script 5)
 
-- Nearest-neighbor with replacement
+- 1:3 nearest-neighbor with replacement
 - Caliper = **0.25 pooled SDs** of the propensity score
 - Exact match on `year` (application year)
-- Logistic PS model with grade dummies (grade 11 reference), 14 base covariates, 1 PA-residence indicator (all-states only), 5 school-level covariates (PA only), and missingness indicators where applicable
+- Logistic PS model with grade dummies (grade 11 reference), 13 base covariates, 1 PA-residence indicator (all-states only), 5 school-level covariates (PA only), and missingness indicators where applicable. `first_gen` excluded due to structural missingness in 2017–2018 cohorts.
 - `set.seed(20260428)` for reproducibility
 
 ### Outcome estimation (script 7)
 
 - Doubly-robust linear probability model with matching weights
 - ATT recovered via g-computation (`marginaleffects::avg_comparisons()`, `newdata = subset(treated == 1)`, `vcov = "HC3"`)
-- HC3 SEs per Hill & Reiter (2006) for matching with replacement; HC1 fallback for leverage = 1
+- HC3 SEs per Hill & Reiter (2006) for matching with replacement; no fallback (cells with degenerate vcov are surfaced as warnings rather than silently demoted)
 - Year fixed effects via `factor(year)`
 - All panels condition on `has_nsc_record == 1` (per PI input on non-NSC institution reporting)
 
@@ -96,9 +94,7 @@ Scripts execute in order:
 
 ### Additional analyses
 
-- **Cohort ATT** — per-application-year ATT for the 4 focal STEM outcomes (`enroll_seamless`, `enroll_seamless_stem`, `pers_1y_stem`, `deg_bach_6y`). Output: `att_results_cohort.rds`. Cells with <15 treated suppressed.
-- **Heterogeneity** — subgroup ATTs by `racially_marginalized`, `first_gen`, `gender`, urban/rural for the focal STEM outcomes. Output: `att_results_het.rds`.
-- **Detailed subgroup analysis** — extended subgroup tables in `7_1d_impact_subgroup.R`. Output: `att_subgroup_*.rds`.
+- **Heterogeneity** — subgroup ATTs by `racially_marginalized`, `gender`, urban/rural for the focal STEM outcomes (`enroll_seamless_stem`, `pers_1y_stem`). Output: `att_results_het.rds`. Subgroups suppressed when fewer than 15 treated.
 
 ---
 
@@ -117,26 +113,16 @@ Scripts execute in order:
 
 ## Outputs
 
-### Tables (`output/tables/`)
-
-- `table_1_descriptive.html` — Table 1: descriptive statistics by treatment
-- `table_2_balance_all_states.html` — Table 2: covariate balance (all states)
-- `table_3_att_all_states.html` — Table 3: main ATT results (all states), 3 panels
-- `table_4_att_pa.html` — Table 4: main ATT results (PA public schools), 3 panels
-- `appendix_a1_balance_pa.html` — Appendix A1: balance table (PA)
-- `appendix_a2_sample_sizes.html` — Appendix A2: sample sizes by cohort
-
-### Figures (`output/figures/`)
-
-- `figure_1_love_plot.png` — Figure 1: covariate balance Love plot (all states)
-- `figure_2_subgroup_effects.png` — Figure 2: subgroup ATT coefficient plot
-
 ### Result objects (`output/`)
 
-- `att_results_all_states.rds`, `att_results_pa.rds` — pooled ATT, by panel
-- `att_results_cohort.rds` — per-cohort ATT (focal outcomes)
-- `att_results_het.rds` — heterogeneity ATT
-- `att_subgroup_all_states.rds`, `att_subgroup_pa.rds` — detailed subgroup tables
+- `att_results_all_states.rds`, `att_results_pa.rds` — pooled ATT, by panel (HC3 SEs)
+- `att_results_het.rds` — heterogeneity ATT (subgroup × focal STEM outcomes)
+
+### Counts (`output/counts/`)
+
+- `n_applicants_by_year.csv`, `n_alumni_by_year.csv`, `n_merged_by_year.csv`,
+  `n_merged_clean_by_year.csv`, `n_merged_all_by_year.csv`, `n_merged_pa_by_year.csv`
+  — sample-size attrition at each pipeline stage
 
 ---
 
@@ -144,10 +130,10 @@ Scripts execute in order:
 
 | | All states | PA public schools |
 |---|---:|---:|
-| Pre-match (analytic pool) | 644 (142 T / 502 C) | 334 (87 T / 247 C) |
-| Matched | 237 (136 T / 101 C) | 137 (78 T / 59 C) |
-| NSC-matched (Panels A/B regression sample) | 229 | 133 |
-| Enrolled (Panel C regression sample) | 196 | 116 |
+| Pre-match (analytic pool) | 722 (159 T / 563 C) | 388 (98 T / 290 C) |
+| Matched | 347 (134 T / 213 unique C) | 202 (77 T / 125 unique C) |
+| NSC-matched (Panels A/B regression sample) | 338 | 198 |
+| Enrolled (Panel C regression sample) | 295 | 180 |
 
 Identification rests on conditional ignorability given the matched covariate
 set, with doubly-robust adjustment via the outcome regression. The 2017 HS
