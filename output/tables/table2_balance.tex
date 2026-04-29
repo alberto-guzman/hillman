@@ -2,6 +2,7 @@
 \centering
 \caption{\label{tab:balance}Standardized Mean Differences Before and After Matching}
 \centering
+\begin{threeparttable}
 \begin{tabular}[t]{lrrrr}
 \toprule
 \multicolumn{1}{c}{ } & \multicolumn{2}{c}{PA public schools} & \multicolumn{2}{c}{All states} \\
@@ -9,32 +10,32 @@
  & Unadj. SMD & Matched SMD & Unadj. SMD & Matched SMD\\
 \midrule
 \addlinespace[0.3em]
-\multicolumn{5}{l}{\textit{Academic preparation}}\\
+\multicolumn{5}{l}{Academic preparation}\\
 \hspace{1em}GPA (4.0 scale) & -0.074 & -0.030 & -0.052 & -0.100\\
 \hspace{1em}PSAT Math & -0.122 & 0.107 & -0.084 & 0.151\\
 \addlinespace[0.3em]
-\multicolumn{5}{l}{\textit{Program participation}}\\
+\multicolumn{5}{l}{Program participation}\\
 \hspace{1em}Received program stipend & 0.169 & -0.009 & 0.235 & -0.010\\
 \hspace{1em}Negative school experience & -0.005 & -0.058 & 0.003 & -0.026\\
 \addlinespace[0.3em]
-\multicolumn{5}{l}{\textit{Demographics}}\\
+\multicolumn{5}{l}{Demographics}\\
 \hspace{1em}Male & 0.207 & 0.069 & 0.077 & 0.004\\
 \hspace{1em}Household size & -0.013 & 0.171 & 0.084 & 0.156\\
 \hspace{1em}Racially marginalized & 0.039 & -0.019 & 0.052 & -0.014\\
 \hspace{1em}Bi/multi-racial & 0.007 & 0.005 & 0.058 & -0.000\\
 \hspace{1em}Disability disclosed & 0.044 & -0.028 & 0.061 & 0.022\\
 \addlinespace[0.3em]
-\multicolumn{5}{l}{\textit{School locale}}\\
+\multicolumn{5}{l}{School locale}\\
 \hspace{1em}Urban locale & 0.021 & -0.012 & 0.040 & 0.047\\
 \hspace{1em}Suburban locale & -0.042 & 0.000 & -0.071 & 0.039\\
 \hspace{1em}Rural locale & -0.006 & 0.002 & 0.012 & -0.056\\
 \addlinespace[0.3em]
-\multicolumn{5}{l}{\textit{Grade in program}}\\
+\multicolumn{5}{l}{Grade in program}\\
 \hspace{1em}9th grade & 0.011 & 0.009 & 0.012 & -0.000\\
 \hspace{1em}10th grade & -0.000 & 0.044 & -0.041 & -0.047\\
 \hspace{1em}12th grade & 0.039 & 0.014 & 0.032 & 0.021\\
 \addlinespace[0.3em]
-\multicolumn{5}{l}{\textit{School characteristics (PA only)}}\\
+\multicolumn{5}{l}{School characteristics (PA only)}\\
 \hspace{1em}Enrollment (count) & 0.007 & 0.102 & -- & --\\
 \hspace{1em}Economically disadvantaged & -0.104 & -0.097 & -- & --\\
 \hspace{1em}English learners & 0.097 & -0.016 & -- & --\\
@@ -42,4 +43,9 @@
 \hspace{1em}White students & -0.049 & 0.120 & -- & --\\
 \bottomrule
 \end{tabular}
+\begin{tablenotes}
+\item \textit{Source:} Authors' calculations from Hillman applicant records and the National Student Clearinghouse.
+\item \textit{Notes:} For continuous covariates, the standardized mean difference (SMD) is the difference in means divided by the treated-group standard deviation (Stuart, 2010); for indicator covariates, the entry is the raw difference in proportions. The conventional balance threshold is $|\text{SMD}| \le .10$. Matching is 1:3 nearest-neighbor with replacement, caliper $=$ 0.25 SD on the propensity-score logit, with exact matching on application year for the PA sample and on application year $\times$ state of residence for the all-states sample.
+\end{tablenotes}
+\end{threeparttable}
 \end{table}

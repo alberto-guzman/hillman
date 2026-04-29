@@ -6,14 +6,24 @@
 # .tex is also rendered to .png via pdflatex + pdftoppm so a quick visual
 # check is available without compiling the full manuscript.
 #
+# Style adopted from Page et al. (2026), EdWorkingPaper No. 26-1409:
+#   - Booktabs rules; plain (non-italic) section headers
+#   - Vertical SE format (estimate over (SE)) via \makecell line breaks
+#   - Significance markers: ~ p<.10; * p<.05; ** p<.01; *** p<.001
+#   - Source line + detailed prose Notes via kableExtra::footnote
+#
+# Conventions specific to this paper:
+#   - All proportions reported in [0, 1] scale (no percentages)
+#   - Table 1 reports M (SD) for every covariate; Table 2 reports SMDs only
+#   - Table 3 has one model spec per outcome (covariates + year FE always on)
+#
 #   Table 1: Sample descriptive statistics, matched samples
-#   Table 2: Pre- and post-matching covariate balance (SMD + variance ratio)
-#   Table 3: Estimated treatment effects (ATT, SE, 95% CI)
+#   Table 2: Standardized mean differences before and after matching
+#   Table 3: Estimated treatment effects (ATT, SE)
 #
-# All proportions are reported in their natural [0, 1] scale (no percentages).
-#
-# LaTeX preamble requirements (typical kableExtra defaults):
+# LaTeX preamble requirements (host document):
 #   \usepackage{booktabs}
+#   \usepackage{makecell}
 #
 # PNG rendering uses the system's pdflatex + pdftoppm (poppler-utils). If
 # either is missing, the .tex files are still produced and PNG rendering
@@ -135,8 +145,6 @@ format_cell <- function(x, w, binary, digits = 2) {
   m <- weighted_mean(x, w)
   if (is.na(m)) return("--")
   s <- weighted_sd(x, w)
-  # Continuous covars: 2-decimal M (SD). Binary covars: 3-decimal proportion
-  # with its Bernoulli SD = sqrt(p(1-p)) for symmetry.
   if (binary) {
     sprintf("%.3f (%.3f)", m, s)
   } else {
@@ -164,7 +172,7 @@ build_descriptives <- function(data, var_spec) {
     mutate(
       treated = map_chr(var, ~ {
         x <- mask_imputed(data, .x)
-        if (.x %in% school_pct_vars) x <- x / 100  # 0-100 → 0-1
+        if (.x %in% school_pct_vars) x <- x / 100
         format_cell(x[trt_idx], data$weights[trt_idx], !(.x %in% continuous_vars))
       }),
       control = map_chr(var, ~ {
@@ -215,13 +223,38 @@ table1_kbl <- table1_df |>
     linesep  = ""
   ) |>
   add_header_above(c(" " = 1, "PA public schools" = 2, "All states" = 2)) |>
-  pack_rows(index = group_index(desc_combined$group), italic = TRUE, bold = FALSE) |>
-  kable_styling(latex_options = c("hold_position"))
+  pack_rows(index = group_index(desc_combined$group),
+            italic = FALSE, bold = FALSE) |>
+  kable_styling(latex_options = c("hold_position")) |>
+  footnote(
+    general_title = "",
+    general = c(
+      paste(
+        "\\\\textit{Source:} Authors' calculations from Hillman applicant",
+        "records and the National Student Clearinghouse."
+      ),
+      paste(
+        "\\\\textit{Notes:} Cell entries are weighted means and standard",
+        "deviations (in parentheses); for indicator covariates, the standard",
+        "deviation is the binomial $\\\\sqrt{p(1-p)}$. Weights are MatchIt",
+        "subclass weights from 1:3 nearest-neighbor propensity-score matching",
+        "with replacement, caliper $=$ 0.25 SD on the propensity-score logit.",
+        "The propensity-score model uses paired zero-imputation with missing",
+        "indicators for continuous covariates; descriptive means and SDs are",
+        "computed on observed values only. School-level covariates are",
+        "available only for PA public-school students. 11th grade is the",
+        "modal/reference grade in the propensity-score model."
+      )
+    ),
+    escape = FALSE,
+    threeparttable = TRUE,
+    fixed_small_size = FALSE
+  )
 
 write_tex(table1_kbl, file.path(out_dir, "table1_descriptives.tex"))
 
 # -----------------------------------------------------------------------------
-# Table 2 — Covariate balance (already on standardized / ratio scales)
+# Table 2 — Covariate balance (SMDs only)
 # -----------------------------------------------------------------------------
 
 bal_to_df <- function(matchit_obj) {
@@ -273,14 +306,41 @@ table2_kbl <- table2_df |>
     linesep  = ""
   ) |>
   add_header_above(c(" " = 1, "PA public schools" = 2, "All states" = 2)) |>
-  pack_rows(index = group_index(table2_df$group), italic = TRUE, bold = FALSE) |>
-  kable_styling(latex_options = c("hold_position"))
+  pack_rows(index = group_index(table2_df$group),
+            italic = FALSE, bold = FALSE) |>
+  kable_styling(latex_options = c("hold_position")) |>
+  footnote(
+    general_title = "",
+    general = c(
+      paste(
+        "\\\\textit{Source:} Authors' calculations from Hillman applicant",
+        "records and the National Student Clearinghouse."
+      ),
+      paste(
+        "\\\\textit{Notes:} For continuous covariates, the standardized mean",
+        "difference (SMD) is the difference in means divided by the",
+        "treated-group standard deviation (Stuart, 2010); for indicator",
+        "covariates, the entry is the raw difference in proportions. The",
+        "conventional balance threshold is $|\\\\text{SMD}| \\\\le .10$. Matching",
+        "is 1:3 nearest-neighbor with replacement, caliper $=$ 0.25 SD on the",
+        "propensity-score logit, with exact matching on application year for",
+        "the PA sample and on application year $\\\\times$ state of residence",
+        "for the all-states sample."
+      )
+    ),
+    escape = FALSE,
+    threeparttable = TRUE,
+    fixed_small_size = FALSE
+  )
 
 write_tex(table2_kbl, file.path(out_dir, "table2_balance.tex"))
 
 # -----------------------------------------------------------------------------
-# Table 3 — Estimated treatment effects (proportions)
+# Table 3 — Estimated treatment effects (vertical SE; ~/*/**/*** sig)
 # -----------------------------------------------------------------------------
+# Each outcome row puts the ATT on the first line and (SE) on a second line
+# below via `linebreak()` (renders as \makecell{ATT \\ (SE)}). Significance
+# markers attach to the ATT.
 
 panel_label <- c(
   A = "Panel A. Enrollment",
@@ -292,37 +352,23 @@ format_prop <- function(x, digits = 3) {
   ifelse(is.na(x), "--", formatC(x, digits = digits, format = "f"))
 }
 
-format_att <- function(att, se) {
-  ifelse(
-    is.na(att),
-    "--",
-    ifelse(
-      is.na(se),
-      formatC(att, digits = 3, format = "f"),
-      sprintf("%s (%s)",
-              formatC(att, digits = 3, format = "f"),
-              formatC(se,  digits = 3, format = "f"))
-    )
-  )
-}
-
-format_ci <- function(lo, hi) {
-  ifelse(
-    is.na(lo) | is.na(hi),
-    "--",
-    sprintf("[%.3f, %.3f]", lo, hi)
-  )
-}
-
 stars <- function(p) {
   case_when(
     is.na(p)  ~ "",
     p < 0.001 ~ "$^{***}$",
     p < 0.01  ~ "$^{**}$",
     p < 0.05  ~ "$^{*}$",
-    p < 0.10  ~ "$^{\\dagger}$",
+    p < 0.10  ~ "$^{\\sim}$",
     TRUE      ~ ""
   )
+}
+
+format_att_vert <- function(att, se, pval) {
+  est <- ifelse(is.na(att), "--", paste0(formatC(att, digits = 3, format = "f"), stars(pval)))
+  sed <- ifelse(is.na(se),  "",   paste0("(", formatC(se, digits = 3, format = "f"), ")"))
+  # linebreak() emits \makecell[r]{est \\\\ sed}; right-align so it stays
+  # tabular-aligned with the rest of the column.
+  linebreak(paste0(est, "\n", sed), align = "r", double_escape = FALSE)
 }
 
 outcome_order <- c(
@@ -339,8 +385,7 @@ build_impact_block <- function(att_df) {
       label,
       n      = n_obs,
       ctrl   = format_prop(ctrl_mean),
-      att_se = paste0(format_att(att, se), stars(pval)),
-      ci     = format_ci(conf_lo, conf_hi)
+      att    = format_att_vert(att, se, pval)
     )
 }
 
@@ -354,8 +399,8 @@ impact_wide <- left_join(impact_pa, impact_all, by = c("panel", "outcome", "labe
   ) |>
   arrange(panel, outcome) |>
   select(label, panel_full,
-         pa_n,  pa_ctrl,  pa_att_se,  pa_ci,
-         all_n, all_ctrl, all_att_se, all_ci)
+         pa_n,  pa_ctrl,  pa_att,
+         all_n, all_ctrl, all_att)
 
 table3_kbl <- impact_wide |>
   select(-panel_full) |>
@@ -363,24 +408,43 @@ table3_kbl <- impact_wide |>
     format    = "latex",
     booktabs  = TRUE,
     escape    = FALSE,
-    align     = c("l", "r", "r", "r", "r", "r", "r", "r", "r"),
+    align     = c("l", "r", "r", "r", "r", "r", "r"),
     col.names = c(
       "",
-      "$n$", "Comparison", "ATT ($SE$)", "95\\% CI",
-      "$n$", "Comparison", "ATT ($SE$)", "95\\% CI"
+      "$n$", "Comparison", "ATT",
+      "$n$", "Comparison", "ATT"
     ),
     caption = "Estimated Treatment Effects on College Enrollment, Institution Type, and Persistence",
     label   = "impact",
     linesep = ""
   ) |>
-  add_header_above(c(" " = 1, "PA public schools" = 4, "All states" = 4)) |>
-  pack_rows(index = group_index(impact_wide$panel_full), italic = TRUE, bold = FALSE) |>
+  add_header_above(c(" " = 1, "PA public schools" = 3, "All states" = 3)) |>
+  pack_rows(index = group_index(impact_wide$panel_full),
+            italic = FALSE, bold = FALSE) |>
   kable_styling(latex_options = c("hold_position")) |>
   footnote(
-    general        = "$^{\\\\dagger}$ $p<.10$; $^{*}$ $p<.05$; $^{**}$ $p<.01$; $^{***}$ $p<.001$.",
-    general_title  = "",
-    escape         = FALSE,
-    threeparttable = FALSE
+    general_title = "",
+    general = c(
+      paste(
+        "\\\\textit{Source:} Authors' calculations from Hillman applicant",
+        "records and the National Student Clearinghouse."
+      ),
+      paste(
+        "\\\\textit{Notes:} Average treatment effects on the treated (ATT)",
+        "estimated via g-computation on a doubly-robust weighted linear",
+        "probability model fit on the matched sample, with year fixed effects",
+        "and HC3 robust standard errors (Hill \\\\& Reiter, 2006). Estimates and",
+        "standard errors are reported as proportions; comparison-group means",
+        "are matched-sample proportions. Standard errors are shown in",
+        "parentheses below each ATT. Panel C conditions on enrollment in any",
+        "postsecondary institution. PA public schools is the primary analytic",
+        "sample; all-states is reported as a robustness check."
+      ),
+      "\\\\textit{Statistical significance:} $^{\\\\sim}$ $p<.10$;\\\\quad $^{*}$ $p<.05$;\\\\quad $^{**}$ $p<.01$;\\\\quad $^{***}$ $p<.001$."
+    ),
+    escape = FALSE,
+    threeparttable = TRUE,
+    fixed_small_size = FALSE
   )
 
 write_tex(table3_kbl, file.path(out_dir, "table3_impact.tex"))
@@ -395,7 +459,9 @@ for (f in c("table1_descriptives.tex", "table2_balance.tex", "table3_impact.tex"
 # -----------------------------------------------------------------------------
 # Wraps each table.tex in a `standalone` document with `\standaloneenv{table}`
 # so the PDF crops to the table content. `varwidth=30cm` allows the page to be
-# wider than letter so the dual-sample tables aren't cut off.
+# wider than letter so the dual-sample tables aren't cut off. `\makecell` is
+# loaded for the vertical-SE format in Table 3 and `threeparttable` for the
+# Source / Notes / significance footnotes used by all three tables.
 
 render_one <- function(tex_path) {
   pdflatex <- Sys.which("pdflatex")
@@ -413,7 +479,10 @@ render_one <- function(tex_path) {
 
   writeLines(c(
     "\\documentclass[border=8pt,varwidth=30cm]{standalone}",
+    "\\usepackage{amsmath}",   # \text{} in math mode
     "\\usepackage{booktabs}",
+    "\\usepackage{makecell}",
+    "\\usepackage{threeparttable}",
     "\\standaloneenv{table}",
     "\\begin{document}",
     sprintf("\\input{%s}", normalizePath(tex_path)),

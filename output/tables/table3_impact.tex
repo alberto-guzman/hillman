@@ -2,25 +2,31 @@
 \centering
 \caption{\label{tab:impact}Estimated Treatment Effects on College Enrollment, Institution Type, and Persistence}
 \centering
-\begin{tabular}[t]{lrrrrrrrr}
+\begin{threeparttable}
+\begin{tabular}[t]{lrrrrrr}
 \toprule
-\multicolumn{1}{c}{ } & \multicolumn{4}{c}{PA public schools} & \multicolumn{4}{c}{All states} \\
-\cmidrule(l{3pt}r{3pt}){2-5} \cmidrule(l{3pt}r{3pt}){6-9}
- & $n$ & Comparison & ATT ($SE$) & 95\% CI & $n$ & Comparison & ATT ($SE$) & 95\% CI\\
+\multicolumn{1}{c}{ } & \multicolumn{3}{c}{PA public schools} & \multicolumn{3}{c}{All states} \\
+\cmidrule(l{3pt}r{3pt}){2-4} \cmidrule(l{3pt}r{3pt}){5-7}
+ & $n$ & Comparison & ATT & $n$ & Comparison & ATT\\
 \midrule
 \addlinespace[0.3em]
-\multicolumn{9}{l}{\textit{Panel A. Enrollment}}\\
-\hspace{1em}Seamless enrollment & 197 & 0.880 & 0.007 (0.060) & {}[-0.111, 0.125] & 314 & 0.872 & 0.006 (0.041) & {}[-0.074, 0.086]\\
-\hspace{1em}Seamless STEM enrollment & 197 & 0.454 & 0.037 (0.092) & {}[-0.144, 0.217] & 314 & 0.463 & 0.084 (0.069) & {}[-0.051, 0.219]\\
+\multicolumn{7}{l}{Panel A. Enrollment}\\
+\hspace{1em}Seamless enrollment & 197 & 0.880 & \makecell[r]{0.007\\(0.060)} & 314 & 0.872 & \makecell[r]{0.006\\(0.041)}\\
+\hspace{1em}Seamless STEM enrollment & 197 & 0.454 & \makecell[r]{0.037\\(0.092)} & 314 & 0.463 & \makecell[r]{0.084\\(0.069)}\\
 \addlinespace[0.3em]
-\multicolumn{9}{l}{\textit{Panel B. Initial institution type}}\\
-\hspace{1em}Initial enrollment: any 4-year & 197 & 0.884 & 0.023 (0.055) & {}[-0.086, 0.131] & 314 & 0.883 & 0.012 (0.039) & {}[-0.063, 0.088]\\
-\hspace{1em}Initial enrollment: any 2-year & 197 & 0.005 & -0.001 (0.004) & {}[-0.008, 0.007] & 314 & 0.000 & 0.000 & --\\
+\multicolumn{7}{l}{Panel B. Initial institution type}\\
+\hspace{1em}Initial enrollment: any 4-year & 197 & 0.884 & \makecell[r]{0.023\\(0.055)} & 314 & 0.883 & \makecell[r]{0.012\\(0.039)}\\
+\hspace{1em}Initial enrollment: any 2-year & 197 & 0.005 & \makecell[r]{-0.001\\(0.004)} & 314 & 0.000 & \makecell[r]{0.000\\}\\
 \addlinespace[0.3em]
-\multicolumn{9}{l}{\textit{Panel C. Persistence (conditional on enrollment)}}\\
-\hspace{1em}Persisted to 2nd year (any inst.) & 177 & 0.948 & -0.006 (0.049) & {}[-0.101, 0.089] & 275 & 0.981 & -0.032 (0.024) & {}[-0.079, 0.015]\\
-\hspace{1em}Persisted in STEM to 2nd year & 177 & 0.229 & 0.160 (0.084)$^{\dagger}$ & {}[-0.005, 0.325] & 275 & 0.373 & 0.103 (0.072) & {}[-0.037, 0.244]\\
+\multicolumn{7}{l}{Panel C. Persistence (conditional on enrollment)}\\
+\hspace{1em}Persisted to 2nd year (any inst.) & 177 & 0.948 & \makecell[r]{-0.006\\(0.049)} & 275 & 0.981 & \makecell[r]{-0.032\\(0.024)}\\
+\hspace{1em}Persisted in STEM to 2nd year & 177 & 0.229 & \makecell[r]{0.160$^{\sim}$\\(0.084)} & 275 & 0.373 & \makecell[r]{0.103\\(0.072)}\\
 \bottomrule
-\multicolumn{9}{l}{\rule{0pt}{1em}$^{\dagger}$ $p<.10$; $^{*}$ $p<.05$; $^{**}$ $p<.01$; $^{***}$ $p<.001$.}\\
 \end{tabular}
+\begin{tablenotes}
+\item \textit{Source:} Authors' calculations from Hillman applicant records and the National Student Clearinghouse.
+\item \textit{Notes:} Average treatment effects on the treated (ATT) estimated via g-computation on a doubly-robust weighted linear probability model fit on the matched sample, with year fixed effects and HC3 robust standard errors (Hill \& Reiter, 2006). Estimates and standard errors are reported as proportions; comparison-group means are matched-sample proportions. Standard errors are shown in parentheses below each ATT. Panel C conditions on enrollment in any postsecondary institution. PA public schools is the primary analytic sample; all-states is reported as a robustness check.
+\item \textit{Statistical significance:} $^{\sim}$ $p<.10$;\quad $^{*}$ $p<.05$;\quad $^{**}$ $p<.01$;\quad $^{***}$ $p<.001$.
+\end{tablenotes}
+\end{threeparttable}
 \end{table}
