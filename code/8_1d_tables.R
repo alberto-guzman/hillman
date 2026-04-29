@@ -67,53 +67,19 @@ dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
 
 eepa_theme <- function(gt_obj) {
   gt_obj |>
+    # APA/EEPA serif typeface, publication body size (~10pt). This is a
+    # typography choice, not a width override — gt still sizes the table
+    # to its content (width: auto).
     opt_table_font(font = c("Times New Roman", "Times", "serif")) |>
     tab_options(
-      table.font.size                = px(11),
+      table.font.size                = px(13),
+      # White backgrounds — no zebra striping, no colored row-group bars
       table.background.color         = "white",
       heading.background.color       = "white",
-      heading.title.font.weight      = "bold",
-      heading.title.font.size        = px(13),
-      heading.subtitle.font.size     = px(10),
-      heading.border.bottom.color    = "white",
       column_labels.background.color = "white",
-      column_labels.font.weight      = "bold",
-      column_labels.border.top.style    = "solid",
-      column_labels.border.top.width    = px(2),
-      column_labels.border.top.color    = "black",
-      column_labels.border.bottom.style = "solid",
-      column_labels.border.bottom.width = px(1),
-      column_labels.border.bottom.color = "black",
-      column_labels.vlines.color     = "white",
-      table.border.top.style         = "solid",
-      table.border.top.width         = px(2),
-      table.border.top.color         = "black",
-      table.border.bottom.style      = "solid",
-      table.border.bottom.width      = px(2),
-      table.border.bottom.color      = "black",
-      table_body.hlines.color        = "white",
-      table_body.border.top.style    = "solid",
-      table_body.border.top.width    = px(0),
-      table_body.border.bottom.style = "solid",
-      table_body.border.bottom.width = px(1),
-      table_body.border.bottom.color = "black",
       row_group.background.color     = "white",
-      row_group.font.weight          = "normal",
-      row_group.font.size            = px(11),
-      row_group.border.top.color     = "white",
-      row_group.border.bottom.color  = "white",
-      row_group.padding              = px(6),
       stub.background.color          = "white",
-      stub.border.color              = "white",
-      stub.border.width              = px(0),
-      data_row.padding               = px(3),
-      source_notes.font.size         = px(9),
-      source_notes.border.lr.color   = "white",
-      source_notes.padding           = px(6)
-    ) |>
-    opt_table_lines(extent = "none") |>
-    # Re-impose only the rules we want (theme above, but opt_table_lines wipes some)
-    tab_options(
+      # APA-style: top + bottom rules around the table, rule under header
       table.border.top.width            = px(2),
       table.border.top.color            = "black",
       table.border.bottom.width         = px(2),
@@ -122,16 +88,26 @@ eepa_theme <- function(gt_obj) {
       column_labels.border.top.color    = "black",
       column_labels.border.bottom.width = px(1),
       column_labels.border.bottom.color = "black",
+      # No internal hlines in body; rule before source notes
+      table_body.hlines.color           = "white",
+      table_body.border.top.color       = "white",
       table_body.border.bottom.width    = px(1),
-      table_body.border.bottom.color    = "black"
+      table_body.border.bottom.color    = "black",
+      # No row-group rules (italic label is the section break)
+      row_group.border.top.color        = "white",
+      row_group.border.bottom.color     = "white",
+      # No stub border, no header bottom border (keeps title/subtitle clean)
+      stub.border.color                 = "white",
+      heading.border.bottom.color       = "white",
+      # Bold title and column labels per APA
+      heading.title.font.weight         = "bold",
+      column_labels.font.weight         = "bold"
     ) |>
-    # Italicize row-group rows (where used as section headings)
+    # Italic row-group section headings
     tab_style(
       style = cell_text(style = "italic"),
       locations = cells_row_groups()
-    ) |>
-    # Tabular figures so columns of numbers align
-    opt_table_font(stack = "transitional")
+    )
 }
 
 # -----------------------------------------------------------------------------
@@ -270,14 +246,10 @@ table1 <- desc_combined |>
     subtitle = md("*Sample Descriptive Statistics for the Matched Treated and Comparison Groups*")
   ) |>
   tab_source_note(md(paste0(
-    "*Note.* Cell entries are weighted *M* (*SD*) for continuous covariates and weighted percentages for indicator covariates. ",
-    "Weights are MatchIt subclass weights from 1:3 nearest-neighbor propensity-score matching with replacement, ",
-    "caliper = 0.25 SD on the propensity-score logit. ",
-    "Continuous covariates carry an upstream zero-imputation with paired missing-indicator (used in the propensity-score model); ",
-    "descriptive means and SDs are computed on observed values only. ",
-    "PA public schools is the primary analytic sample; all-states is reported as a robustness check. ",
-    "School-level covariates are available only for PA public-school students. ",
-    "11th grade is the modal/reference grade in the regression model."
+    "*Note.* Weighted *M* (*SD*) for continuous covariates and weighted percentages for indicators. ",
+    "Weights are MatchIt subclass weights from 1:3 nearest-neighbor PSM with replacement (caliper = 0.25 *SD*). ",
+    "Means and SDs are computed on observed values; the propensity-score model uses paired zero-imputation with missing indicators. ",
+    "School-level covariates are available for PA public-school students only."
   ))) |>
   cols_align(align = "right", columns = c(pa_treated, pa_control, all_treated, all_control)) |>
   cols_align(align = "left",  columns = "label") |>
@@ -372,12 +344,10 @@ table2 <- bal_combined |>
     subtitle = md("*Standardized Mean Differences and Variance Ratios Before and After Matching*")
   ) |>
   tab_source_note(md(paste0(
-    "*Note.* For continuous covariates, SMD is the difference in means divided by the treated-group standard deviation (Stuart, 2010); ",
-    "for indicator covariates, the entry is the raw difference in proportions. ",
-    "Variance ratios (treated/comparison) are reported for continuous covariates only; values near 1.0 indicate balanced second moments (Austin, 2009). ",
-    "Conventional thresholds: |SMD| ≤ .10 and 0.5 ≤ variance ratio ≤ 2.0. ",
-    "1:3 nearest-neighbor matching with replacement, caliper = 0.25 SD on the propensity-score logit, ",
-    "exact-match on year (PA) or year × state of residence (all-states)."
+    "*Note.* For continuous covariates, SMD is the mean difference divided by the treated *SD* (Stuart, 2010); ",
+    "for indicators, the entry is the raw difference in proportions. ",
+    "Variance ratios (treated/comparison) are shown for continuous covariates only (Austin, 2009). ",
+    "Conventional thresholds: |SMD| ≤ .10; 0.5 ≤ variance ratio ≤ 2.0."
   ))) |>
   cols_align(align = "right", columns = c(pa_un, pa_adj, pa_vr, all_un, all_adj, all_vr)) |>
   cols_align(align = "left",  columns = "label") |>
@@ -483,11 +453,9 @@ table3 <- impact_wide |>
     subtitle = md("*Estimated Treatment Effects on College Enrollment, Institution Type, and Persistence*")
   ) |>
   tab_source_note(md(paste0(
-    "*Note.* Average treatment effects on the treated (ATT) estimated via g-computation on a weighted linear probability model ",
-    "with year fixed effects, robust (HC3) standard errors. ATT, *SE*, and confidence intervals reported in percentage points. ",
-    "Comparison-group means are matched-sample percentages. Panel C conditions on ever enrolling in any postsecondary institution. ",
-    "PA public schools is the primary analytic sample; all-states is reported as a robustness check. ",
-    "1:3 nearest-neighbor matching with replacement, caliper = 0.25 SD."
+    "*Note.* ATT estimated via g-computation on a weighted linear probability model with year fixed effects and HC3 standard errors. ",
+    "ATT, *SE*, and 95% CI reported in percentage points. Comparison-group means are matched-sample percentages. ",
+    "Panel C conditions on enrollment in any postsecondary institution."
   ))) |>
   tab_source_note(md("† *p* < .10. \\* *p* < .05. \\*\\* *p* < .01. \\*\\*\\* *p* < .001.")) |>
   cols_align(align = "right",
@@ -507,27 +475,17 @@ tables <- list(
 )
 
 png_ok <- TRUE
-# Per-table viewport widths for PNG. Tighter than the prior 1600 — the previous
-# `tab_options(table.width = px(1400))` was forcing all tables to a single
-# inflated width. Letting gt size by content gives a more EEPA-typical layout.
-png_vwidth <- c(
-  table1_descriptives = 1100,
-  table2_balance      = 1150,
-  table3_impact       = 1300
-)
-
 for (nm in names(tables)) {
   gt_obj <- tables[[nm]]
   saveRDS(gt_obj, file.path(out_dir, paste0(nm, ".rds")))
   gtsave(gt_obj,  file.path(out_dir, paste0(nm, ".html")))
   if (png_ok) {
+    # gt sizes the table to its content (width:auto). `vwidth` is webshot's
+    # browser canvas — set just wide enough to clear the natural rendered
+    # width so the right edge isn't clipped at webshot's 992-px default.
+    # Not a constraint on gt itself.
     res <- tryCatch(
-      gtsave(
-        gt_obj,
-        file.path(out_dir, paste0(nm, ".png")),
-        expand = 24, zoom = 2,
-        vwidth = png_vwidth[[nm]]
-      ),
+      gtsave(gt_obj, file.path(out_dir, paste0(nm, ".png")), vwidth = 1300),
       error = function(e) e
     )
     if (inherits(res, "error")) {
