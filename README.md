@@ -19,7 +19,7 @@ non-participants drawn from the applicant pool.
 │   ├── matched/                     # Matched datasets and MatchIt objects (script 5)
 │   └── files_for_danielle_nsc/      # NSC exchange files
 ├── output/
-│   ├── tables/                      # Publication-ready HTML tables
+│   ├── tables/                      # Publication-ready PNG tables (+ RDS)
 │   ├── figures/                     # Publication figures (PNG)
 │   └── counts/                      # Sample-size CSVs at each pipeline stage
 └── docs/                            # Stakeholder documents
@@ -47,7 +47,7 @@ Scripts execute in order:
 | `4_1d_merge_school_info.R` | Normalize school names; merge PA school-level covariates |
 | `5_1d_matching.R` | 1:3 propensity score matching (NN, with replacement, caliper = 0.25 SD, exact-on-year) |
 | `7_1d_impact.R` | ATT estimation via g-computation (LPM + `marginaleffects::avg_comparisons()`, HC3 SEs); pooled and heterogeneity |
-| `8_1d_tables.R` | EEPA-style publication tables via `gt` (descriptives, balance, impact); HTML + PNG + RDS outputs |
+| `8_1d_tables.R` | EEPA-style publication tables via `gt` (descriptives, balance, impact); PNG + RDS outputs |
 
 > Scripts use `here` package for paths. Open the `.Rproj` file to set the
 > project root before running.
@@ -124,8 +124,8 @@ Year-window degree outcomes (`deg_bach_6y` / 7-year window, `deg_any_stem_6y` / 
 ### Tables (`output/tables/`)
 
 EEPA-style publication tables produced by `8_1d_tables.R`. Each table is saved
-as `.html` (web/Quarto), `.png` (figures or slides; rendered via `webshot2` +
-Chromium-based browser), and `.rds` (gt object, for embedding into Quarto/Word):
+as `.png` (rendered via `webshot2` + Chromium-based browser) plus `.rds` (gt
+object, for re-rendering or embedding into Quarto/Word):
 
 - `table1_descriptives` — Sample Descriptive Statistics for the Matched Treated and Comparison Groups
 - `table2_balance` — Standardized Mean Differences and Variance Ratios Before and After Matching

@@ -133,9 +133,11 @@ ATTs are now produced inline by script 7's heterogeneity section.
 
 `8_1d_tables.R` (added 2026-04-29) regenerates the three EEPA-styled
 publication tables (descriptives, balance, impact) via `gt`, saving
-HTML, PNG (via `webshot2`), and RDS to `output/tables/`. PNG export
-auto-detects a Chromium-based browser (Chrome / Brave / Edge / Chromium)
-through `CHROMOTE_CHROME` and falls back to HTML-only if none is found.
+PNG (via `webshot2`) and RDS to `output/tables/`. PNG export auto-detects
+a Chromium-based browser (Chrome / Brave / Edge / Chromium) through
+`CHROMOTE_CHROME`. HTML output and source notes were removed (the
+target consumer is the publication PNG; notes belong in the manuscript
+text, not the table image).
 
 ## Outcome variable naming gotchas
 
@@ -234,13 +236,13 @@ Content notes:
 - Don't add a raw `p` column back to Table 3 — the stars convey the
   threshold; raw p-values for ns rows are clutter.
 
-PNG export gotchas:
-- `gtsave(..., vwidth = 1600)` + `tab_options(table.width = px(1400))`
-  are tuned for the current column count; if you add another column,
-  bump `vwidth` so the rightmost column doesn't clip.
-- `expand = 40, zoom = 2` gives a clean retina-resolution PNG.
-- The PNG step is wrapped in `tryCatch` so HTML output still saves
-  if Chrome/Brave is missing.
+PNG export:
+- `gtsave(..., file.png)` runs at webshot2's defaults (vwidth = 992,
+  zoom = 2). gt sizes the table to its content; with no source notes
+  the natural width of all three tables is well under 992 logical px,
+  so no `vwidth` override is needed. If you ever re-add long source
+  notes, the colspan'd note cell will force the table wider than the
+  default viewport — bump `vwidth` accordingly or keep notes short.
 
 ## Reproducibility
 
