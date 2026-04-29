@@ -74,8 +74,8 @@ pa_covariates         <- c(base_covariates, pa_extra_covariates)
 # =============================================================================
 # HELPER: PREPARE MATCHING DATA
 # =============================================================================
-# Applies exclusions (before imputation), casts gender to integer, adds grade
-# dummies, builds _miss indicators, then imputes remaining NAs to 0.
+# Applies exclusions (before imputation), adds grade dummies, builds _miss
+# indicators, then imputes remaining NAs to 0.
 #
 # Exclusions applied on true values before imputation:
 #   - treated_before_2017 == 1: would contaminate control group
@@ -85,6 +85,11 @@ pa_covariates         <- c(base_covariates, pa_extra_covariates)
 #     (a 2022 applicant graduates ≥ 2022 and is already filtered upstream);
 #     kept defensively here in case the upstream cap is loosened.
 #   - missing treated_in_year: data anomaly
+#   - has_nsc_record == 0: students not appearing in NSC have no observable
+#     outcomes, so including them in matching wastes PS-comparability
+#     budget on units that are dropped at the outcome stage anyway.
+#     Pre-filtering also keeps matching weights coherent through to
+#     estimation (no broken 1:k pairs from post-match outcome filtering).
 
 prepare_matching_data <- function(data, covariates, exclude_years = NULL) {
   # Brittle-coupling guard: pa_state below assumes script 4's lowercase-full-name
@@ -115,7 +120,8 @@ prepare_matching_data <- function(data, covariates, exclude_years = NULL) {
       !is.na(treated_in_year),
       !year %in% c(2022, exclude_years),
       us_citizen != 0 | is.na(us_citizen),
-      treated_before_2017 == 0
+      treated_before_2017 == 0,
+      has_nsc_record == 1
     )
 
   data <- data |>

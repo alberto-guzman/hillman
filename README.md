@@ -60,8 +60,9 @@ Scripts execute in order:
 - **Applicant cohorts (`year`):** 2017, 2018, 2019 — used for matching strata. 2020 excluded (program disrupted by COVID); 2021 excluded from matching (only 1 analytic-sample treated student all-states, 0 in PA); 2022/2023 application cohorts have no analyzable HS-grad windows yet.
 - **HS graduation cohorts (`hs_grad_year`):** 2018–2021 — drives outcome availability. 2022 cohort excluded (NSC partial coverage); 2023+ excluded (NSC has no enrollment data yet).
 - **Two analytic samples:**
-  - **All states** — pre-match 722 (159 T / 563 C); matched 347 (134 T / 213 unique C)
-  - **PA public schools only** — pre-match 388 (98 T / 290 C); matched 202 (77 T / 125 unique C)
+  - **All states** — pre-match 602 (136 T / 466 C, NSC-trackable, post script-5 exclusions); matched 327 (128 T / 199 unique C)
+  - **PA public schools only** — pre-match 327 (83 T / 244 C, NSC-trackable); matched 197 (72 T / 125 unique C)
+  - Pre-match samples are restricted to students with `has_nsc_record == 1` so matching weights stay coherent through to outcome estimation (no broken 1:k pairs from post-match outcome filtering).
 
 ### Propensity-score matching (script 5)
 
@@ -131,10 +132,10 @@ Year-window degree outcomes (`deg_bach_6y` / 7-year window, `deg_any_stem_6y` / 
 
 | | All states | PA public schools |
 |---|---:|---:|
-| Pre-match (analytic pool) | 722 (159 T / 563 C) | 388 (98 T / 290 C) |
-| Matched | 347 (134 T / 213 unique C) | 202 (77 T / 125 unique C) |
-| NSC-matched (Panels A/B regression sample) | 338 | 198 |
-| Enrolled (Panel C regression sample) | 295 | 180 |
+| Cleaned analytic sample (hs_grad 2018–2021) | 722 (159 T / 563 C) | 388 (98 T / 290 C) |
+| Pre-match (post-NSC + script-5 exclusions) | 602 (136 T / 466 C) | 327 (83 T / 244 C) |
+| Matched (Panels A/B regression sample) | 327 (128 T / 199 unique C) | 197 (72 T / 125 unique C) |
+| Enrolled (Panel C regression sample) | 280 | 177 |
 
 Identification rests on conditional ignorability given the matched covariate
 set, with doubly-robust adjustment via the outcome regression. The 2017 HS
