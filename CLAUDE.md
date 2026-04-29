@@ -208,38 +208,63 @@ recommends `makecell` and `multirow` for richer table features).
     within-state comparisons. PA sample is unchanged (pa_state is constant
     in PA). Don't unify the exact specs across samples.
 
-## Tables (script 8) — kableExtra LaTeX
+## Tables (script 8) — kableExtra LaTeX, Page et al. (2026) style
 
 The three tables are produced by `kableExtra::kbl()` with `format = "latex"`
 and `booktabs = TRUE`. Each is saved as a standalone `.tex` file containing
-`\begin{table}...\end{table}` with caption and label.
+`\begin{table}...\end{table}` with caption, label, and footnotes; rendered
+to PNG via `pdflatex` + `pdftoppm` for quick visual checks.
 
-Conventions:
+The table style mirrors Page, Mata, & Russell (2026) — Lindsay's
+EdWorkingPaper #26-1409 in `docs/`. The advisor's manuscript is the
+reference for these conventions; before editing, look at her tables.
+
+Visual conventions:
 - Booktabs rules (`\toprule`, `\midrule`, `\bottomrule`); no vertical rules
-- Italicized row-group section headings via `pack_rows(italic = TRUE)`
+- **Plain (non-italic) section/panel headers** via
+  `pack_rows(italic = FALSE, bold = FALSE)`
 - Multi-column spanners via `add_header_above()`
-- "Comparison" not "Control"; italicized `$n$` per APA convention
-- Three-tier significance stars + dagger:
-  `$^{\dagger}$` p < .10, `$^{*}$` p < .05, `$^{**}$` p < .01, `$^{***}$` p < .001
-- No source notes inside the table — notes belong in manuscript prose
+- "Comparison" not "Control"; italicized `$n$`
+- Significance markers (Lindsay's set):
+  `$^{\sim}$` p < .10, `$^{*}$` p < .05, `$^{**}$` p < .01, `$^{***}$` p < .001
+  (note: tilde, not dagger; matches her Table 2/3/4 footnotes)
+- **Vertical SE format in Table 3** — ATT on one line, `(SE)` on the next —
+  via `kableExtra::linebreak()` which emits `\makecell{est \\\\ (SE)}`. Host
+  document needs `\usepackage{makecell}`.
+- **Source + Notes** paragraphs below each table via `kableExtra::footnote()`,
+  with detailed prose describing the model, SE type, panel definitions, and
+  citations. Concatenated into a single `general =` vector (see footnote
+  gotchas below).
+- Significance legend is a third entry in the Table 3 footnote vector.
 
 Content notes:
-- Table 2 uses `cobalt::bal.tab()` defaults for `binary` (raw proportion
-  difference) and `s.d.denom` so SMD values match what `5_1d_matching.R`
-  prints to the run log. Variance ratios are reported only for continuous
-  covariates (Austin, 2009 — values in [0.5, 2.0] are balanced); binary-
-  covariate variance ratios are nonsense and shown as "--".
-- Table 3 reports ATT in percentage points with 95% CIs derived from
-  `marginaleffects::avg_comparisons()` `conf.low`/`conf.high`. The
-  Comparison-mean column is the matched-sample percentage so a +16pp ATT
-  reads against a counterfactual baseline.
+- Table 1 reports `M (SD)` for *every* covariate, including indicators. For
+  binary covariates, the SD is the binomial $\sqrt{p(1-p)}$.
+- Table 2 reports SMDs only (no variance ratio column). Uses
+  `cobalt::bal.tab()` defaults for `binary` (raw proportion difference) and
+  `s.d.denom` so values match what `5_1d_matching.R` prints to the run log.
+- Table 3 reports ATT and SE only — **no 95% CI column** (Lindsay's style).
+  Single model spec per outcome (covariates and year FE always on).
 - Continuous covariates carry an upstream zero-imputation paired with
   `_miss` indicators. Table 1 masks those rows to NA before computing
-  descriptive *M* (*SD*) so reported moments reflect the observed
-  distribution, not the imputation. PSAT Math is the most affected
-  (≈20% imputed in PA).
-- Don't re-add a raw `p` column to Table 3 — the stars convey the
-  threshold; raw p-values for ns rows are clutter.
+  descriptive moments (PSAT Math is the most affected — ≈20% imputed in PA).
+- Don't re-add a raw `p` column or 95% CI column to Table 3 — the stars
+  convey significance; (SE) lets the reader compute a CI.
+- All values reported as proportions in [0, 1], not percentages.
+
+`kableExtra::footnote()` gotchas (learned the hard way):
+1. **`threeparttable` can't nest.** Each `footnote()` call wraps the table
+   in a `threeparttable` environment. Calling `footnote()` more than once
+   per table compiles to nested environments and pdflatex errors. Use a
+   single `footnote()` call with a vector for `general =`.
+2. **Backslashes are silently stripped from `general =` even with
+   `escape = FALSE`.** To get `\textit{...}` in the rendered LaTeX, write
+   `\\\\textit{...}` in the R source (R parses `\\\\` to `\\`; kableExtra
+   strips one to `\`). Same for `\\\\sqrt`, `\\\\le`, `\\\\&`, `\\\\sim`,
+   `\\\\quad`, `\\\\times`, etc. Caption text is fine with single escapes.
+3. **The standalone wrapper for PNG rendering needs `amsmath`** (for
+   `\text{}`), `makecell` (for vertical SEs), and `threeparttable` (for
+   the Source/Notes block) — all loaded in `render_one()` in script 8.
 
 ## Reproducibility
 
@@ -247,8 +272,11 @@ Content notes:
   Don't change unless you want to invalidate the published matched sample.
 - The `marginaleffects` package is required for script 7. Install with
   `install.packages("marginaleffects")`.
-- Script 8 requires `kableExtra`, `knitr`, and `cobalt`. No browser or
-  rendering engine needed — output is plain LaTeX text.
+- Script 8 requires `kableExtra`, `knitr`, and `cobalt` for the `.tex`
+  files; PNG rendering additionally needs `pdflatex` (TeX Live) and
+  `pdftoppm` (poppler-utils) on PATH. The script falls back gracefully —
+  `.tex` always saves; PNG step is skipped with a warning if either tool
+  is missing.
 
 ## Useful commands
 
@@ -284,7 +312,10 @@ readRDS("output/att_results_all_states.rds") |>
 - Don't move the `has_nsc_record == 1` filter out of `prepare_matching_data`
 - Don't unify the exact-match specs (PA = year only; all-states = year + pa_state)
 - Don't promote all-states back to primary — PA-public is the headline
-- Don't add source notes back to the kableExtra tables — they belong
-  in manuscript prose, not the table image (see "Tables" section)
+- Tables follow Page et al. (2026) conventions (see `docs/ai26-1409.pdf`
+  and the "Tables" section above); don't quietly drift from them
+- Don't switch back to a `\dagger` or `+` for p<.10 — Lindsay uses `~`
+- Don't call `kableExtra::footnote()` more than once per table — nested
+  threeparttable environments fail to compile
 - Verify with `git log` what the most recent commit's intent was before
   reverting anything

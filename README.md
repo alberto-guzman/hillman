@@ -47,7 +47,7 @@ Scripts execute in order:
 | `4_1d_merge_school_info.R` | Normalize school names; merge PA school-level covariates |
 | `5_1d_matching.R` | 1:3 propensity score matching (NN, with replacement, caliper = 0.25 SD, exact-on-year) |
 | `7_1d_impact.R` | ATT estimation via g-computation (LPM + `marginaleffects::avg_comparisons()`, HC3 SEs); pooled and heterogeneity |
-| `8_1d_tables.R` | Booktabs LaTeX tables via `kableExtra` (descriptives, balance, impact); standalone `.tex` files |
+| `8_1d_tables.R` | Booktabs LaTeX tables via `kableExtra` in Page et al. (2026) style (descriptives, balance, impact); `.tex` + PNG outputs |
 
 > Scripts use `here` package for paths. Open the `.Rproj` file to set the
 > project root before running.
@@ -124,13 +124,32 @@ Year-window degree outcomes (`deg_bach_6y` / 7-year window, `deg_any_stem_6y` / 
 ### Tables (`output/tables/`)
 
 Booktabs-style LaTeX tables produced by `8_1d_tables.R` and saved as standalone
-`.tex` files. Each is wrapped in a `\begin{table}...\end{table}` environment
-with caption and label, ready to `\input{}` from a manuscript file. Required
-LaTeX preamble: `\usepackage{booktabs}` (and `makecell`, `multirow` if you
-later add multi-line cells):
+`.tex` files alongside rendered `.png` previews. Style mirrors Page, Mata,
+& Russell (2026), EdWorkingPaper #26-1409 (in `docs/`):
+
+- Plain (non-italic) section/panel headers
+- Vertical SE format in the impact table (ATT on one line, *(SE)* below)
+- Significance markers `~ * ** ***` for p<.10/.05/.01/.001
+- Source line and detailed Notes paragraph below each table
+
+Each `.tex` wraps a `\begin{table}...\end{table}` environment with caption
+and label, ready to `\input{}` from a manuscript. Required LaTeX preamble
+in the host document:
+
+```latex
+\usepackage{booktabs}
+\usepackage{makecell}        % vertical SEs in Table 3
+\usepackage{threeparttable}  % Source / Notes block
+\usepackage{amsmath}         % \text{} in math mode
+```
+
+PNG previews are produced by compiling each `.tex` in a `standalone`
+wrapper via the system `pdflatex` and converting with `pdftoppm` at 200
+DPI. The `.tex` always saves; the PNG step skips with a warning if either
+tool is missing on PATH.
 
 - `table1_descriptives.tex` — Sample Descriptive Statistics for the Matched Treated and Comparison Groups (`tab:descriptives`)
-- `table2_balance.tex` — Standardized Mean Differences and Variance Ratios Before and After Matching (`tab:balance`)
+- `table2_balance.tex` — Standardized Mean Differences Before and After Matching (`tab:balance`)
 - `table3_impact.tex` — Estimated Treatment Effects on College Enrollment, Institution Type, and Persistence (`tab:impact`)
 
 ### Counts (`output/counts/`)
