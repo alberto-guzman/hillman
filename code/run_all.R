@@ -22,6 +22,8 @@
 #   7_1d_impact.R               — doubly-robust ATT via weighted LPMs (HC3 SEs)
 #                                 → output/att_results_{all_states,pa}.rds
 #                                 → output/att_results_het.rds
+#   8_1d_tables.R               — publication-ready gt tables
+#                                 → output/tables/table{1,2,3}_*.{html,png,rds}
 #
 # Notes:
 #   - Requires the `here` package; project root is set by the .Rproj file.
@@ -44,7 +46,8 @@ scripts <- c(
   "3b_1d_merge_clean.R",
   "4_1d_merge_school_info.R",
   "5_1d_matching.R",
-  "7_1d_impact.R"
+  "7_1d_impact.R",
+  "8_1d_tables.R"
 )
 
 for (script in scripts) {
