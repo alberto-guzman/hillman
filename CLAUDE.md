@@ -4,6 +4,18 @@ This file gives Claude project-specific guidance for working in this repo.
 The README.md has the full methodological description; this file focuses on
 conventions and gotchas that have surfaced during code review.
 
+## Active framing (as of 2026-04-29)
+
+**PA public schools is the PRIMARY analytic sample.** Hillman is a Pittsburgh-
+based program; the matched all-states sample is ~80% PA-resident anyway, so
+PA-primary is the natural target population and avoids cross-state geographic
+confounding. The all-states sample is reported as a robustness/generalizability
+check.
+
+Strongest defensible result: PA Persisted-in-STEM-Y2 ATT = +16.0 pp (HC3 SE
+8.4, p = .058). All other STEM-related point estimates are positive but do
+not reach conventional significance.
+
 ## Core methodological conventions (do not break these)
 
 ### `year` vs `hs_grad_year` — they are NOT interchangeable
@@ -22,9 +34,8 @@ conventions and gotchas that have surfaced during code review.
   - CHECK 4 in script 3b (NA pattern by HS grad cohort)
 
 If you find code labeling cohort by `hs_grad_year`, **that's a bug** unless
-it's specifically about outcome follow-up windows. The cohort ATT in script
-7 was originally written using `hs_grad_year` and has been corrected to
-use `year`.
+it's specifically about outcome follow-up windows or right-censoring (e.g.,
+script 3b's `NSC_DATA_THROUGH_YEAR` check on year-window degree outcomes).
 
 ### NSC merge uses `.dta`'s authoritative `hs_grad_year`
 
@@ -37,7 +48,9 @@ and Danielle's value comes from registrar records. Don't revert this to a
 ### Cohort cap (2018–2021) is outcome-driven
 
 The analytic sample is restricted to `hs_grad_year ∈ [2018, 2021]` because:
-- 2017 HS grads: only 18 students; predates program scope
+- 2017 HS grads: n=18 students; seamless-STEM rate is 22% vs 41–52% for
+  2018–2021 (likely small-N noise or older-vintage NSC measurement
+  degradation; excluded out of conservatism on a headline outcome)
 - 2022 HS grads: NSC query has only ~57% seamless rate (vs ~80% for prior
   cohorts) — partial NSC coverage
 - 2023+ HS grads: NSC query returned 0% enrollment data
@@ -58,6 +71,32 @@ The caliper was tightened from 0.5 to 0.25 SD during code review (per
 Austin 2011 / Stuart 2010 standard). Don't loosen it without a substantive
 reason — PA balance materially improved at 0.25.
 
+### 1:3 nearest-neighbor matching with replacement
+
+Match ratio is 1:3 (each treated paired with up to 3 controls). The pre-
+match control:treated ratios (~3.5:1 all-states; ~3:1 PA) comfortably support
+this. Each kth match must still pass the caliper, so degenerate candidates
+are still rejected. Don't drop to 1:1 unless balance breaks.
+
+### Pre-match NSC filter
+
+`prepare_matching_data` in script 5 filters to `has_nsc_record == 1` before
+matching. This keeps matching weights coherent through to outcome estimation
+(no broken 1:k pairs from post-match outcome filtering). The estimand is
+explicit: ATT among Hillman applicants whose post-secondary trajectory is
+observable in NSC. Don't move this filter back to the outcome stage.
+
+### Exact-match specifications differ by sample
+
+- **PA sample:** exact on `year`. PA students are all in PA by construction,
+  so adding `pa_state` would be a constant.
+- **All-states sample:** exact on `(year, pa_state)`. Forces within-state-of-
+  residence comparisons. PA-treated cannot be paired with non-PA controls
+  (and vice versa) on PS distance alone — geographic confounding is too
+  large for the PS to fully adjust for.
+
+Don't unify the exact specs — the asymmetry is intentional.
+
 ### G-computation via `marginaleffects::avg_comparisons()` with HC3
 
 ATT extraction uses `avg_comparisons(fit, variables = "treated_in_year",
@@ -67,24 +106,32 @@ adds treatment-covariate interactions later.
 
 HC3 (not HC2 or cluster-on-subclass) is correct for matching with
 replacement per Hill & Reiter (2006) and the MatchIt vignette. There is
-**no HC1 fallback** — if HC3 fails (e.g., leverage = 1 in a tiny cell),
-that's a signal the cell is degenerate and the result should be suppressed
-(via the `n_treated < min_treated` rule for cohort ATT) rather than
-silently demoted to a less rigorous SE.
+**no HC1 fallback** — if HC3 fails (e.g., leverage = 1 in a tiny cell
+or rank-deficient model), `marginaleffects` will silently substitute
+classical OLS SEs and emit a warning. Two known causes of this
+fallback have been resolved upstream: `first_gen` (collinear with year
+FE) was removed from the covariate set, and the n=2 2021 cell in
+all-states was excluded from matching. For heterogeneity subgroups,
+the warnings persist for tiny cells and should be flagged in the
+writeup as right-censored / underpowered subgroup estimates.
 
 ## Pipeline structure
 
 `code/run_all.R` is the canonical entry point. Scripts pass objects via the
-shared R session. Scripts 5–8 also save/load RDS files so they can run
+shared R session. Scripts 5 and 7 also save/load RDS files so they can run
 standalone after a fresh matching run.
 
 ```
 helpers.R (sourced by 1, 2)
-  → 1 → 2 → 3a → 3b → 4 → 5 → 7 → 7_subgroup → 8
+  → 1 → 2 → 3a → 3b → 4 → 5 → 7
 ```
 
 Scripts 1–4 expect predecessor objects in the global environment.
-Scripts 5+ load from RDS files.
+Scripts 5+ load from RDS files. The previous `7_1d_impact_subgroup.R`
+and `8_1d_tables_figures.R` were deleted (commit 61f0637); subgroup
+ATTs are now produced inline by script 7's heterogeneity section, and
+publication tables/figures are not currently regenerated by the
+pipeline.
 
 ## Outcome variable naming gotchas
 
@@ -127,6 +174,32 @@ Scripts 5+ load from RDS files.
    the outcome LPM (contributes to HC3 SE failure on aliased cells).
    Dropped from the covariate set entirely. Only 1 of 237 matched students
    is coded first-generation, so within-sample variation is also negligible.
+7. **Silent OLS-classical SE fallback in `marginaleffects::avg_comparisons`.**
+   When the requested `vcov = "HC3"` cannot be computed (rank-deficient
+   model matrix or leverage = 1), it silently substitutes `vcov(fit)`
+   (classical OLS) and emits a warning. Earlier versions had p<.05 STEM
+   findings that were partly artifacts of this fallback — once `first_gen`
+   collinearity and the n=2 2021 cell were removed, the SEs are honest HC3
+   throughout the pooled fits. Heterogeneity subgroups can still trigger
+   the fallback in tiny cells; treat those subgroup p-values cautiously.
+8. **NA → 0 imputation for right-censored degree outcomes.** Year-window
+   degree variables (`deg_bach_6y` etc.) had NA → 0 applied uniformly to
+   all enrollees, treating "window not yet elapsed" the same as "did not
+   attain." Script 3b now gates the imputation on whether
+   `hs_grad_year + window <= NSC_DATA_THROUGH_YEAR`. With the current
+   Feb 2023 NSC pull, no 2018–2021 cohort has the full 6/7-year window,
+   so these outcomes are dropped from the headline panel.
+9. **Post-match outcome-stage NSC filtering breaking matching weights.**
+   Originally, matching ran on the full analytic sample and outcome
+   estimation filtered to `has_nsc_record == 1`, breaking 1:k matched
+   pairs whose units got dropped at the outcome stage. The filter is now
+   applied pre-match in `prepare_matching_data`. Don't move it back.
+10. **Cross-state matching in the all-states sample.** The all-states PSM
+    used to allow PA-treated to be paired with non-PA controls on PS
+    distance alone, which understates geographic-confounding adjustment.
+    The all-states match now uses `exact = ~ year + pa_state` to enforce
+    within-state comparisons. PA sample is unchanged (pa_state is constant
+    in PA). Don't unify the exact specs across samples.
 
 ## Reproducibility
 
@@ -161,7 +234,13 @@ readRDS("output/att_results_all_states.rds") |>
 - Don't change `year` to `hs_grad_year` in regression FE or matching strata
 - Don't add `cluster = subclass` to outcome SEs (HC3 is correct for
   with-replacement)
-- Don't restore `deg_bach_4y` to the published outcome set
+- Don't restore `deg_bach_4y` or any year-window degree outcome to the
+  headline (right-censored under current NSC pull)
 - Don't drop the `set.seed()` calls
+- Don't restore HC1 fallback or loosen the caliper from 0.25 SD
+- Don't add `first_gen` back to the covariate set
+- Don't move the `has_nsc_record == 1` filter out of `prepare_matching_data`
+- Don't unify the exact-match specs (PA = year only; all-states = year + pa_state)
+- Don't promote all-states back to primary — PA-public is the headline
 - Verify with `git log` what the most recent commit's intent was before
   reverting anything

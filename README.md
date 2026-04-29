@@ -102,7 +102,7 @@ Year-window degree outcomes (`deg_bach_6y` / 7-year window, `deg_any_stem_6y` / 
 ## Critical conventions
 
 **`year` vs `hs_grad_year`:**
-- `year` = year of Hillman attendance (application year). The cohort identifier; used for matching strata, regression FE, cohort ATT.
+- `year` = year of Hillman attendance (application year). The cohort identifier; used for matching strata and regression FE.
 - `hs_grad_year` = year student finished high school. The outcome time anchor; used for NSC join keys and analytic-sample cap.
 - They are derived (`hs_grad_year = year + 12 - grade` initially; overridden by NSC-authoritative value where available) but are NOT interchangeable. Each has a specific role.
 
