@@ -143,19 +143,19 @@ individual_vars <- tibble::tribble(
   ~var,                     ~label,                            ~group,
   "gpa",                    "GPA (4.0 scale)",                 "Academic preparation",
   "psat_math",              "PSAT Math",                       "Academic preparation",
-  "stipend",                "Received program stipend",        "Program participation",
-  "neg_school",             "Negative school experience",      "Program participation",
-  "gender",                 "Male",                            "Demographics",
+  "stipend",                "Received program stipend (%)",    "Program participation",
+  "neg_school",             "Negative school experience (%)",  "Program participation",
+  "gender",                 "Male (%)",                        "Demographics",
   "house_size",             "Household size",                  "Demographics",
-  "racially_marginalized",  "Racially marginalized",           "Demographics",
-  "bi_multi_racial",        "Bi/multi-racial",                 "Demographics",
-  "disability",             "Disability disclosed",            "Demographics",
-  "urban",                  "Urban locale",                    "School locale",
-  "suburban",               "Suburban locale",                 "School locale",
-  "rural",                  "Rural locale",                    "School locale",
-  "grade_9",                "9th grade",                       "Grade in program",
-  "grade_10",               "10th grade",                      "Grade in program",
-  "grade_12",               "12th grade",                      "Grade in program"
+  "racially_marginalized",  "Racially marginalized (%)",       "Demographics",
+  "bi_multi_racial",        "Bi/multi-racial (%)",             "Demographics",
+  "disability",             "Disability disclosed (%)",        "Demographics",
+  "urban",                  "Urban locale (%)",                "School locale",
+  "suburban",               "Suburban locale (%)",             "School locale",
+  "rural",                  "Rural locale (%)",                "School locale",
+  "grade_9",                "9th grade (%)",                   "Grade in program",
+  "grade_10",               "10th grade (%)",                  "Grade in program",
+  "grade_12",               "12th grade (%)",                  "Grade in program"
 )
 
 school_vars <- tibble::tribble(
@@ -200,24 +200,37 @@ format_cell <- function(x, w, binary, digits = 2) {
   m <- weighted_mean(x, w)
   if (is.na(m)) return("--")
   if (binary) {
-    sprintf("%.1f", 100 * m)  # percent without symbol; column header carries unit
+    sprintf("%.1f", 100 * m)
   } else {
     sprintf("%.2f (%.2f)", round(m, digits), round(weighted_sd(x, w), digits))
   }
 }
 
+# Continuous covariates carry an upstream "fill NA with 0 + add _miss indicator"
+# imputation so the PS logit can use them. Reporting raw means/SDs would treat
+# imputed zeros as real values (e.g., a missing PSAT becomes a 0 score).
+# Mask imputed-zero rows to NA on a per-row basis before summarizing.
+mask_imputed <- function(data, var) {
+  miss_col <- paste0(var, "_miss")
+  x <- data[[var]]
+  if (miss_col %in% names(data)) {
+    x[data[[miss_col]] == 1] <- NA_real_
+  }
+  x
+}
+
 build_descriptives <- function(data, var_spec) {
-  trt <- data |> filter(treated_in_year == 1)
-  ctl <- data |> filter(treated_in_year == 0)
+  trt_idx <- data$treated_in_year == 1
+  ctl_idx <- data$treated_in_year == 0
   var_spec |>
     mutate(
       treated = map_chr(var, ~ {
-        x <- data[[.x]]
-        format_cell(trt[[.x]], trt$weights, !(.x %in% continuous_vars))
+        x <- mask_imputed(data, .x)
+        format_cell(x[trt_idx], data$weights[trt_idx], !(.x %in% continuous_vars))
       }),
       control = map_chr(var, ~ {
-        x <- data[[.x]]
-        format_cell(ctl[[.x]], ctl$weights, !(.x %in% continuous_vars))
+        x <- mask_imputed(data, .x)
+        format_cell(x[ctl_idx], data$weights[ctl_idx], !(.x %in% continuous_vars))
       })
     )
 }
@@ -259,8 +272,11 @@ table1 <- desc_combined |>
   tab_source_note(md(paste0(
     "*Note.* Cell entries are weighted *M* (*SD*) for continuous covariates and weighted percentages for indicator covariates. ",
     "Weights are MatchIt subclass weights from 1:3 nearest-neighbor propensity-score matching with replacement, ",
-    "caliper = 0.25 SD on the propensity-score logit. PA public schools is the primary analytic sample; ",
-    "all-states is reported as a robustness check. School-level covariates are available only for PA public-school students. ",
+    "caliper = 0.25 SD on the propensity-score logit. ",
+    "Continuous covariates carry an upstream zero-imputation with paired missing-indicator (used in the propensity-score model); ",
+    "descriptive means and SDs are computed on observed values only. ",
+    "PA public schools is the primary analytic sample; all-states is reported as a robustness check. ",
+    "School-level covariates are available only for PA public-school students. ",
     "11th grade is the modal/reference grade in the regression model."
   ))) |>
   cols_align(align = "right", columns = c(pa_treated, pa_control, all_treated, all_control)) |>
@@ -344,10 +360,10 @@ table2 <- bal_combined |>
   cols_label(
     pa_un   = md("Unadjusted<br>SMD"),
     pa_adj  = md("Matched<br>SMD"),
-    pa_vr   = md("Matched<br>variance ratio"),
+    pa_vr   = md("Variance<br>ratio"),
     all_un  = md("Unadjusted<br>SMD"),
     all_adj = md("Matched<br>SMD"),
-    all_vr  = md("Matched<br>variance ratio")
+    all_vr  = md("Variance<br>ratio")
   ) |>
   tab_spanner(label = "PA public schools", columns = c(pa_un,  pa_adj,  pa_vr)) |>
   tab_spanner(label = "All states",        columns = c(all_un, all_adj, all_vr)) |>
@@ -449,14 +465,14 @@ table3 <- impact_wide |>
   gt(groupname_col = "panel_full", rowname_col = "label") |>
   cols_hide(columns = "panel") |>
   cols_label(
-    pa_n      = md("*n*"),
-    pa_ctrl_pct = md("Comparison<br>mean (%)"),
-    pa_att_se = md("ATT<br>(*SE*)"),
-    pa_ci     = "95% CI",
-    all_n     = md("*n*"),
-    all_ctrl_pct = md("Comparison<br>mean (%)"),
-    all_att_se = md("ATT<br>(*SE*)"),
-    all_ci    = "95% CI"
+    pa_n         = md("*n*"),
+    pa_ctrl_pct  = md("Comparison<br>(%)"),
+    pa_att_se    = md("ATT<br>(*SE*)"),
+    pa_ci        = "95% CI",
+    all_n        = md("*n*"),
+    all_ctrl_pct = md("Comparison<br>(%)"),
+    all_att_se   = md("ATT<br>(*SE*)"),
+    all_ci       = "95% CI"
   ) |>
   tab_spanner(label = "PA public schools",
               columns = c(pa_n,  pa_ctrl_pct,  pa_att_se,  pa_ci)) |>
@@ -491,6 +507,15 @@ tables <- list(
 )
 
 png_ok <- TRUE
+# Per-table viewport widths for PNG. Tighter than the prior 1600 — the previous
+# `tab_options(table.width = px(1400))` was forcing all tables to a single
+# inflated width. Letting gt size by content gives a more EEPA-typical layout.
+png_vwidth <- c(
+  table1_descriptives = 1100,
+  table2_balance      = 1150,
+  table3_impact       = 1300
+)
+
 for (nm in names(tables)) {
   gt_obj <- tables[[nm]]
   saveRDS(gt_obj, file.path(out_dir, paste0(nm, ".rds")))
@@ -498,9 +523,10 @@ for (nm in names(tables)) {
   if (png_ok) {
     res <- tryCatch(
       gtsave(
-        gt_obj |> tab_options(table.width = px(1400)),
+        gt_obj,
         file.path(out_dir, paste0(nm, ".png")),
-        expand = 40, zoom = 2, vwidth = 1600
+        expand = 24, zoom = 2,
+        vwidth = png_vwidth[[nm]]
       ),
       error = function(e) e
     )
