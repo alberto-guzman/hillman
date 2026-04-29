@@ -134,10 +134,13 @@ mask_imputed <- function(data, var) {
 format_cell <- function(x, w, binary, digits = 2) {
   m <- weighted_mean(x, w)
   if (is.na(m)) return("--")
+  s <- weighted_sd(x, w)
+  # Continuous covars: 2-decimal M (SD). Binary covars: 3-decimal proportion
+  # with its Bernoulli SD = sqrt(p(1-p)) for symmetry.
   if (binary) {
-    sprintf("%.3f", m)  # proportion in [0, 1]
+    sprintf("%.3f (%.3f)", m, s)
   } else {
-    sprintf("%.2f (%.2f)", round(m, digits), round(weighted_sd(x, w), digits))
+    sprintf("%.2f (%.2f)", round(m, digits), round(s, digits))
   }
 }
 
@@ -222,17 +225,11 @@ write_tex(table1_kbl, file.path(out_dir, "table1_descriptives.tex"))
 # -----------------------------------------------------------------------------
 
 bal_to_df <- function(matchit_obj) {
-  bt <- bal.tab(
-    matchit_obj,
-    un    = TRUE,
-    abs   = FALSE,
-    stats = c("mean.diffs", "variance.ratios")
-  )$Balance
+  bt <- bal.tab(matchit_obj, un = TRUE, abs = FALSE)$Balance
   tibble::tibble(
     var     = rownames(bt),
     smd_un  = bt[["Diff.Un"]],
-    smd_adj = bt[["Diff.Adj"]],
-    vr_adj  = bt[["V.Ratio.Adj"]]
+    smd_adj = bt[["Diff.Adj"]]
   )
 }
 
@@ -249,21 +246,15 @@ bal_combined <- label_lookup |>
 format_smd <- function(x) {
   ifelse(is.na(x), "--", formatC(x, digits = 3, format = "f"))
 }
-format_vr <- function(x, var) {
-  ifelse(is.na(x) | !(var %in% continuous_vars), "--",
-         formatC(x, digits = 2, format = "f"))
-}
 
 table2_df <- bal_combined |>
   mutate(
     pa_un   = format_smd(pa_smd_un),
     pa_adj  = format_smd(pa_smd_adj),
-    pa_vr   = format_vr(pa_vr_adj, var),
     all_un  = format_smd(all_smd_un),
-    all_adj = format_smd(all_smd_adj),
-    all_vr  = format_vr(all_vr_adj, var)
+    all_adj = format_smd(all_smd_adj)
   ) |>
-  select(label, group, pa_un, pa_adj, pa_vr, all_un, all_adj, all_vr)
+  select(label, group, pa_un, pa_adj, all_un, all_adj)
 
 table2_kbl <- table2_df |>
   select(-group) |>
@@ -271,17 +262,17 @@ table2_kbl <- table2_df |>
     format    = "latex",
     booktabs  = TRUE,
     escape    = FALSE,
-    align     = c("l", "r", "r", "r", "r", "r", "r"),
+    align     = c("l", "r", "r", "r", "r"),
     col.names = c(
       "",
-      "Unadj. SMD", "Matched SMD", "Var. ratio",
-      "Unadj. SMD", "Matched SMD", "Var. ratio"
+      "Unadj. SMD", "Matched SMD",
+      "Unadj. SMD", "Matched SMD"
     ),
-    caption  = "Standardized Mean Differences and Variance Ratios Before and After Matching",
+    caption  = "Standardized Mean Differences Before and After Matching",
     label    = "balance",
     linesep  = ""
   ) |>
-  add_header_above(c(" " = 1, "PA public schools" = 3, "All states" = 3)) |>
+  add_header_above(c(" " = 1, "PA public schools" = 2, "All states" = 2)) |>
   pack_rows(index = group_index(table2_df$group), italic = TRUE, bold = FALSE) |>
   kable_styling(latex_options = c("hold_position"))
 
@@ -384,7 +375,13 @@ table3_kbl <- impact_wide |>
   ) |>
   add_header_above(c(" " = 1, "PA public schools" = 4, "All states" = 4)) |>
   pack_rows(index = group_index(impact_wide$panel_full), italic = TRUE, bold = FALSE) |>
-  kable_styling(latex_options = c("hold_position"))
+  kable_styling(latex_options = c("hold_position")) |>
+  footnote(
+    general        = "$^{\\\\dagger}$ $p<.10$; $^{*}$ $p<.05$; $^{**}$ $p<.01$; $^{***}$ $p<.001$.",
+    general_title  = "",
+    escape         = FALSE,
+    threeparttable = FALSE
+  )
 
 write_tex(table3_kbl, file.path(out_dir, "table3_impact.tex"))
 
