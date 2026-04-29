@@ -418,42 +418,74 @@ message("  Outside 2018–2021:    ", removal_stats$outside_range)
 message("Remaining: ", nrow(merged_clean))
 
 # =============================================================================
-# NSC-CONDITIONAL OUTCOMES — recode NA → 0 within sample
+# NSC-CONDITIONAL OUTCOMES — recode NA → 0 within sample (cohort-aware)
 # =============================================================================
 # Retention/persistence and degree outcomes are conditional on enroll_ever == 1
-# (you cannot persist into year 2 or earn a degree if you never started). The
-# analytic sample is already capped at HS-grad cohorts 2018–2021, so no
-# additional cohort gating is needed here.
+# (you cannot persist into year 2 or earn a degree if you never started).
+#
+# Right-censoring rule:
+#   Danielle's `.do` file does NOT set a 0 baseline for the year-window degree
+#   variables — only positive cases (degree earned) are recorded; everyone
+#   else is NA. The previous code recoded NA → 0 for all enrolled students,
+#   which silently treated "not yet observable" (window hasn't elapsed) the
+#   same as "did not earn." For the year-windowed degree outcomes we now
+#   gate the NA → 0 step on whether the window has actually elapsed by the
+#   NSC pull date.
+#
+#   Time-1 outcomes (reten_1y, pers_1y, pers_1y_stem): observable for every
+#     cohort in the analytic sample (Y2 fall reported by NSC by Feb 2023 for
+#     all 2018–2021 grads). NA → 0 for enrolled is safe.
+#
+#   "Ever" outcomes (deg_any_ever, deg_bach_ever): the natural framing is
+#     "earned by NSC pull date." NA → 0 for enrolled is safe; the resulting
+#     mean is right-censored but the framing is honest.
+#
+#   Year-windowed outcomes (deg_any_6y is 6y; deg_bach_6y is a 7y window per
+#     Danielle's loop range; deg_any_stem_6y is 6y): NA → 0 only when the
+#     full window has elapsed at the pull date. Otherwise the NA stays —
+#     representing "not yet observable." With the current Feb 2023 pull
+#     (data through 2023-06-30), no 2018–2021 cohort has the full 6y or 7y
+#     window. These outcomes will therefore be all NA in the analytic
+#     sample and are dropped from the headline panel in script 7.
 #
 # pers_1y_stem: any fall entrant — measures whether the student is in a STEM
 #   major at any institution next fall. NOT conditional on entering as STEM.
-# Degree windows: deg_bach_6y is right-censored for cohorts younger than the
-#   nominal 7 years (e.g., 2021 grads have only 4 years observed). Treat as
-#   "earned within observed years" rather than imputing NA.
-# Danielle's .do file does NOT set a 0 baseline for bach_ever / degree-by-year
-#   variables — only positive cases are recorded. We recode NA → 0 here for
-#   enrolled students so non-graduates are correctly coded 0 within the sample.
+
+# NSC pull date controls right-censoring on year-window degree outcomes.
+# Update if the .dta is refreshed with newer NSC data.
+NSC_DATA_THROUGH_YEAR <- 2023L
 
 merged_clean <- merged_clean |>
   mutate(
-    # -- retention/persistence and degree outcomes are only meaningful for
-    #    enrolled students. Force NA for non-enrolled rows so any stale zeros
-    #    from the raw NSC file cannot leak into the analytic data.
-    #    All cohorts in the analytic sample (2018–2021) have ≥ 1 year of
-    #    fall-after follow-up, so no further cohort gating is needed for
-    #    persistence. Degree outcomes are right-censored for cohorts younger
-    #    than the nominal window (e.g., 2021 grads have only 4 years of
-    #    follow-up for the 7-year bachelor's window) — treat as observed-
-    #    within-window rather than imputing NA.
+    # Time-1 + ever-attainment outcomes: NA → 0 for enrollees.
     across(
-      c(reten_1y, pers_1y, pers_1y_stem,
-        deg_any_ever, deg_bach_ever, deg_any_6y,
-        deg_bach_6y, deg_any_stem_6y),
+      c(reten_1y, pers_1y, pers_1y_stem, deg_any_ever, deg_bach_ever),
       ~ case_when(
         is.na(enroll_ever) | enroll_ever != 1L ~ NA_integer_,
         is.na(.x)                              ~ 0L,
         TRUE                                   ~ .x
       )
+    ),
+    # Year-windowed degree outcomes: NA → 0 only when the window has fully
+    # elapsed at the NSC pull date. Otherwise the value stays NA (right-
+    # censored, not observable).
+    deg_any_6y = case_when(
+      is.na(enroll_ever) | enroll_ever != 1L          ~ NA_integer_,
+      hs_grad_year + 6L > NSC_DATA_THROUGH_YEAR        ~ NA_integer_,
+      is.na(deg_any_6y)                                 ~ 0L,
+      TRUE                                              ~ deg_any_6y
+    ),
+    deg_bach_6y = case_when(
+      is.na(enroll_ever) | enroll_ever != 1L          ~ NA_integer_,
+      hs_grad_year + 7L > NSC_DATA_THROUGH_YEAR        ~ NA_integer_,
+      is.na(deg_bach_6y)                                ~ 0L,
+      TRUE                                              ~ deg_bach_6y
+    ),
+    deg_any_stem_6y = case_when(
+      is.na(enroll_ever) | enroll_ever != 1L          ~ NA_integer_,
+      hs_grad_year + 6L > NSC_DATA_THROUGH_YEAR        ~ NA_integer_,
+      is.na(deg_any_stem_6y)                            ~ 0L,
+      TRUE                                              ~ deg_any_stem_6y
     )
   )
 

@@ -79,7 +79,7 @@ Scripts execute in order:
 - Year fixed effects via `factor(year)`
 - All panels condition on `has_nsc_record == 1` (per PI input on non-NSC institution reporting)
 
-### Reported outcomes (consolidated set of 8)
+### Reported outcomes (set of 6)
 
 | Panel | Outcome | Filter |
 |---|---|---|
@@ -89,8 +89,8 @@ Scripts execute in order:
 | B | Initial 2-year college entry | NSC-matched |
 | C | Persisted to 2nd year (any institution) | NSC-matched + enrolled |
 | C | Persisted in STEM (year 1) | NSC-matched + enrolled |
-| C | Bachelor's degree within 7 years | NSC-matched + enrolled |
-| C | Any STEM degree within 6 years | NSC-matched + enrolled |
+
+Year-window degree outcomes (`deg_bach_6y` / 7-year window, `deg_any_stem_6y` / 6-year window, `deg_any_6y` / 6-year window) are excluded from the headline because the current NSC pull (data through 2023-06-30) does not provide full follow-up for any 2018–2021 cohort. Script 3b sets these to NA in the analytic sample so they cannot be silently treated as "did not attain"; they will move into the headline once a future NSC refresh provides full follow-up.
 
 ### Additional analyses
 
@@ -105,9 +105,10 @@ Scripts execute in order:
 - `hs_grad_year` = year student finished high school. The outcome time anchor; used for NSC join keys and analytic-sample cap.
 - They are derived (`hs_grad_year = year + 12 - grade` initially; overridden by NSC-authoritative value where available) but are NOT interchangeable. Each has a specific role.
 
-**Year-window labels:**
-- `deg_bach_6y` is actually a **7-year window** (Danielle's NSC loop uses `0/6` inclusive of year 0). Reported as "Bachelor's within 7 years" in tables.
-- `deg_any_stem_6y` is a **6-year window** (`0/6` loop, but only year 1+ contributes degrees). Reported as "Any STEM degree within 6 years."
+**Year-window labels (for descriptive use only — not in current headline):**
+- `deg_bach_6y` is actually a **7-year window** (Danielle's NSC loop uses `0/6` inclusive of year 0).
+- `deg_any_stem_6y` is a **6-year window** (`0/6` loop, but only year 1+ contributes degrees).
+- These are set to NA in script 3b for any cohort where the window has not elapsed at the NSC pull date (`NSC_DATA_THROUGH_YEAR = 2023`). Update the constant when the .dta is refreshed.
 
 ---
 

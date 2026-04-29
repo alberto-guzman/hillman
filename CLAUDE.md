@@ -89,8 +89,14 @@ Scripts 5+ load from RDS files.
 ## Outcome variable naming gotchas
 
 - **`deg_bach_6y` is actually a 7-year window** (Danielle's loop range is
-  `0/6` inclusive of year 0). The variable is kept for historical reasons;
-  display labels in script 8 read "within 7 years."
+  `0/6` inclusive of year 0). Year-window degree outcomes are right-censored
+  in the current NSC pull (Feb 2023, data through 2023-06-30): no 2018–2021
+  cohort has 6 or 7 years of follow-up. Script 3b uses
+  `NSC_DATA_THROUGH_YEAR = 2023` to set these to NA when the window has not
+  elapsed; the analytic sample is therefore all-NA on `deg_bach_6y`,
+  `deg_any_stem_6y`, and `deg_any_6y`. They are dropped from script 7's
+  Panel C and will move back in once a future NSC refresh provides
+  sufficient follow-up.
 - **`deg_any_stem_6y` is a 6-year window.** Janitor cleans the source
   column name `STEMdegree_in6_grad` to `ste_mdegree_in6_grad` (awkward
   but stable).

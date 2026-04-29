@@ -15,7 +15,7 @@
 #           technically the average treatment in the matched (caliper-passing)
 #           sample (ATM); we interpret it as ATT for the matched cohort.
 #
-# Outcome panels (consolidated, policy-relevant set of 8):
+# Outcome panels:
 #   All panels condition on has_nsc_record == 1 — i.e., students with an NSC
 #   query record. Per PI input, students not appearing in NSC went to college
 #   per Hillman's own records but their institution did not report to NSC, so
@@ -26,21 +26,20 @@
 #             enroll_seamless, enroll_seamless_stem
 #   Panel B — Institution at entry (NSC-matched students)
 #             inst_4yr_entry, inst_2yr_entry
-#   Panel C — Persistence + degree (NSC-matched and enrolled, enroll_ever == 1)
-#             pers_1y, pers_1y_stem,
-#             deg_bach_6y (=7y window), deg_any_stem_6y
+#   Panel C — Persistence (NSC-matched and enrolled, enroll_ever == 1)
+#             pers_1y, pers_1y_stem
 #
-# Year-window naming caveat: deg_bach_6y is stored under the original variable
-# name but Danielle's loop range (0/6, inclusive of year 0) makes it a 7-year
-# window. The 5-year version (deg_bach_4y) was identical to the 7-year version
-# in the matched sample and was dropped from the consolidated set. Table
-# headers in script 8 read "within 7 years".
+# Degree outcomes excluded from the headline:
+#   The Feb 2023 NSC pull provides data through 2023-06-30, so no 2018–2021
+#   HS-grad cohort has 6 or 7 years of follow-up. Script 3b sets the year-
+#   windowed degree outcomes (deg_bach_6y, deg_any_stem_6y, deg_any_6y) to
+#   NA when the window has not elapsed at the pull date, so they would be
+#   all-NA in the analytic sample and unestimable here. They remain
+#   available in merged_clean for descriptive use and will move into the
+#   headline once a future NSC refresh provides full follow-up.
 #
 # Analytic sample is restricted to HS grad cohorts 2018–2021 in script 3b
-# (2022 partial NSC coverage; 2023+ no NSC enrollment data). Per-panel cohort
-# filters are therefore not needed here. Degree outcomes are right-censored
-# for cohorts younger than the full nominal window — interpret as observed
-# rates within the available follow-up.
+# (2022 partial NSC coverage; 2023+ no NSC enrollment data).
 #
 # Samples:
 #   All states:      matched_all_states_year_only.rds
@@ -104,12 +103,13 @@ panel_b_outcomes <- c(
   "inst_2yr_entry"
 )
 
-# Panel C: Persistence + degree — enroll_ever == 1; cohort restrictions apply
+# Panel C: Persistence — enroll_ever == 1
+# Year-window degree outcomes (deg_bach_6y, deg_any_stem_6y) are excluded
+# from the headline because the current NSC pull does not provide full
+# 6/7-year follow-up for any analytic cohort. See header note.
 panel_c_outcomes <- c(
   "pers_1y",
-  "pers_1y_stem",
-  "deg_bach_6y",      # actually 7-year window (see header note)
-  "deg_any_stem_6y"
+  "pers_1y_stem"
 )
 
 # ---------------------------------------------------------------------------
@@ -124,11 +124,9 @@ outcome_labels <- c(
   # Panel B — Institution at entry
   inst_4yr_entry = "Initial enrollment: any 4-year",
   inst_2yr_entry = "Initial enrollment: any 2-year",
-  # Panel C — Persistence + degree
+  # Panel C — Persistence
   pers_1y         = "Persisted to 2nd year (any inst.)",
-  pers_1y_stem    = "Persisted in STEM to 2nd year",
-  deg_bach_6y     = "Bachelor's degree within 7 years",
-  deg_any_stem_6y = "Any STEM degree within 6 years"
+  pers_1y_stem    = "Persisted in STEM to 2nd year"
 )
 
 # ---------------------------------------------------------------------------
@@ -290,10 +288,11 @@ run_all_outcomes <- function(matched, covars, sample_label) {
     list_rbind() |>
     mutate(panel = "B")
 
-  # Panel C: Persistence + degree — enroll_ever == 1.
-  # Analytic sample is already restricted to 2018–2021 in script 3b; no
-  # per-outcome cohort filters needed here.
-  message("\n--- ", sample_label, ": Panel C — persistence + degree ---")
+  # Panel C: Persistence — enroll_ever == 1.
+  # Analytic sample is already restricted to 2018–2021 in script 3b.
+  # Year-window degree outcomes are excluded — see header note on right-
+  # censoring under the current NSC pull date.
+  message("\n--- ", sample_label, ": Panel C — persistence ---")
   results_c <- map(panel_c_outcomes, \(out) {
     message("  Fitting: ", out)
 
