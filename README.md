@@ -19,7 +19,7 @@ non-participants drawn from the applicant pool.
 │   ├── matched/                     # Matched datasets and MatchIt objects (script 5)
 │   └── files_for_danielle_nsc/      # NSC exchange files
 ├── output/
-│   ├── tables/                      # Publication-ready PNG tables (+ RDS)
+│   ├── tables/                      # Publication-ready LaTeX tables (booktabs)
 │   ├── figures/                     # Publication figures (PNG)
 │   └── counts/                      # Sample-size CSVs at each pipeline stage
 └── docs/                            # Stakeholder documents
@@ -47,7 +47,7 @@ Scripts execute in order:
 | `4_1d_merge_school_info.R` | Normalize school names; merge PA school-level covariates |
 | `5_1d_matching.R` | 1:3 propensity score matching (NN, with replacement, caliper = 0.25 SD, exact-on-year) |
 | `7_1d_impact.R` | ATT estimation via g-computation (LPM + `marginaleffects::avg_comparisons()`, HC3 SEs); pooled and heterogeneity |
-| `8_1d_tables.R` | EEPA-style publication tables via `gt` (descriptives, balance, impact); PNG + RDS outputs |
+| `8_1d_tables.R` | Booktabs LaTeX tables via `kableExtra` (descriptives, balance, impact); standalone `.tex` files |
 
 > Scripts use `here` package for paths. Open the `.Rproj` file to set the
 > project root before running.
@@ -123,13 +123,15 @@ Year-window degree outcomes (`deg_bach_6y` / 7-year window, `deg_any_stem_6y` / 
 
 ### Tables (`output/tables/`)
 
-EEPA-style publication tables produced by `8_1d_tables.R`. Each table is saved
-as `.png` (rendered via `webshot2` + Chromium-based browser) plus `.rds` (gt
-object, for re-rendering or embedding into Quarto/Word):
+Booktabs-style LaTeX tables produced by `8_1d_tables.R` and saved as standalone
+`.tex` files. Each is wrapped in a `\begin{table}...\end{table}` environment
+with caption and label, ready to `\input{}` from a manuscript file. Required
+LaTeX preamble: `\usepackage{booktabs}` (and `makecell`, `multirow` if you
+later add multi-line cells):
 
-- `table1_descriptives` — Sample Descriptive Statistics for the Matched Treated and Comparison Groups
-- `table2_balance` — Standardized Mean Differences and Variance Ratios Before and After Matching
-- `table3_impact` — Estimated Treatment Effects on College Enrollment, Institution Type, and Persistence
+- `table1_descriptives.tex` — Sample Descriptive Statistics for the Matched Treated and Comparison Groups (`tab:descriptives`)
+- `table2_balance.tex` — Standardized Mean Differences and Variance Ratios Before and After Matching (`tab:balance`)
+- `table3_impact.tex` — Estimated Treatment Effects on College Enrollment, Institution Type, and Persistence (`tab:impact`)
 
 ### Counts (`output/counts/`)
 

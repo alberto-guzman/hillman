@@ -131,13 +131,14 @@ Scripts 5+ load from RDS files. The previous `7_1d_impact_subgroup.R`
 and `8_1d_tables_figures.R` were deleted (commit 61f0637); subgroup
 ATTs are now produced inline by script 7's heterogeneity section.
 
-`8_1d_tables.R` (added 2026-04-29) regenerates the three EEPA-styled
-publication tables (descriptives, balance, impact) via `gt`, saving
-PNG (via `webshot2`) and RDS to `output/tables/`. PNG export auto-detects
-a Chromium-based browser (Chrome / Brave / Edge / Chromium) through
-`CHROMOTE_CHROME`. HTML output and source notes were removed (the
-target consumer is the publication PNG; notes belong in the manuscript
-text, not the table image).
+`8_1d_tables.R` (added 2026-04-29) generates three booktabs-style LaTeX
+tables (descriptives, balance, impact) via `kableExtra`, saving standalone
+`.tex` files to `output/tables/`. Each file wraps a tabular in a
+`\begin{table}...\end{table}` environment with caption and label and is
+intended to be `\input{}` from a manuscript file. No source notes are
+emitted (notes belong in the manuscript prose, not the table). Required
+preamble in the host document: `\usepackage{booktabs}` (kableExtra also
+recommends `makecell` and `multirow` for richer table features).
 
 ## Outcome variable naming gotchas
 
@@ -207,42 +208,38 @@ text, not the table image).
     within-state comparisons. PA sample is unchanged (pa_state is constant
     in PA). Don't unify the exact specs across samples.
 
-## Tables (script 8) — EEPA conventions
+## Tables (script 8) — kableExtra LaTeX
 
-The three `gt` tables produced by `8_1d_tables.R` are styled to match
-*Educational Evaluation and Policy Analysis* typesetting. The conventions
-are bundled in the `eepa_theme()` helper inside script 8; don't break them
-without intent:
+The three tables are produced by `kableExtra::kbl()` with `format = "latex"`
+and `booktabs = TRUE`. Each is saved as a standalone `.tex` file containing
+`\begin{table}...\end{table}` with caption and label.
 
-- Times New Roman serif font (with system fallbacks)
-- White background; no zebra striping; no colored row-group bars
-- Top + bottom + header rules only (no internal hlines, no vlines)
-- Italicized row-group section labels
-- "Comparison" not "Control"; italicized *n* per APA
-- Three-tier APA stars: † p < .10, * p < .05, ** p < .01, *** p < .001
-- Source notes start with *Note.* (italicized)
+Conventions:
+- Booktabs rules (`\toprule`, `\midrule`, `\bottomrule`); no vertical rules
+- Italicized row-group section headings via `pack_rows(italic = TRUE)`
+- Multi-column spanners via `add_header_above()`
+- "Comparison" not "Control"; italicized `$n$` per APA convention
+- Three-tier significance stars + dagger:
+  `$^{\dagger}$` p < .10, `$^{*}$` p < .05, `$^{**}$` p < .01, `$^{***}$` p < .001
+- No source notes inside the table — notes belong in manuscript prose
 
 Content notes:
 - Table 2 uses `cobalt::bal.tab()` defaults for `binary` (raw proportion
-  difference) and `s.d.denom` so the SMD values match what
-  `5_1d_matching.R` already prints to the run log. Variance ratios are
-  reported only for continuous covariates (Austin, 2009 — values in
-  [0.5, 2.0] are balanced; binary-covariate variance ratios are nonsense
-  and shown as "--").
+  difference) and `s.d.denom` so SMD values match what `5_1d_matching.R`
+  prints to the run log. Variance ratios are reported only for continuous
+  covariates (Austin, 2009 — values in [0.5, 2.0] are balanced); binary-
+  covariate variance ratios are nonsense and shown as "--".
 - Table 3 reports ATT in percentage points with 95% CIs derived from
   `marginaleffects::avg_comparisons()` `conf.low`/`conf.high`. The
   Comparison-mean column is the matched-sample percentage so a +16pp ATT
   reads against a counterfactual baseline.
-- Don't add a raw `p` column back to Table 3 — the stars convey the
+- Continuous covariates carry an upstream zero-imputation paired with
+  `_miss` indicators. Table 1 masks those rows to NA before computing
+  descriptive *M* (*SD*) so reported moments reflect the observed
+  distribution, not the imputation. PSAT Math is the most affected
+  (≈20% imputed in PA).
+- Don't re-add a raw `p` column to Table 3 — the stars convey the
   threshold; raw p-values for ns rows are clutter.
-
-PNG export:
-- `gtsave(..., file.png)` runs at webshot2's defaults (vwidth = 992,
-  zoom = 2). gt sizes the table to its content; with no source notes
-  the natural width of all three tables is well under 992 logical px,
-  so no `vwidth` override is needed. If you ever re-add long source
-  notes, the colspan'd note cell will force the table wider than the
-  default viewport — bump `vwidth` accordingly or keep notes short.
 
 ## Reproducibility
 
@@ -250,8 +247,8 @@ PNG export:
   Don't change unless you want to invalidate the published matched sample.
 - The `marginaleffects` package is required for script 7. Install with
   `install.packages("marginaleffects")`.
-- Script 8 requires `gt`, `cobalt`, and (for PNG) `webshot2` + `chromote`
-  with a Chromium-based browser available on the system.
+- Script 8 requires `kableExtra`, `knitr`, and `cobalt`. No browser or
+  rendering engine needed — output is plain LaTeX text.
 
 ## Useful commands
 
@@ -287,7 +284,7 @@ readRDS("output/att_results_all_states.rds") |>
 - Don't move the `has_nsc_record == 1` filter out of `prepare_matching_data`
 - Don't unify the exact-match specs (PA = year only; all-states = year + pa_state)
 - Don't promote all-states back to primary — PA-public is the headline
-- Don't break the `eepa_theme()` styling without an intentional rationale —
-  the tables are tuned to match EEPA typesetting (see "Tables" section)
+- Don't add source notes back to the kableExtra tables — they belong
+  in manuscript prose, not the table image (see "Tables" section)
 - Verify with `git log` what the most recent commit's intent was before
   reverting anything
