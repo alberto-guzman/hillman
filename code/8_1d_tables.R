@@ -1,17 +1,23 @@
 # =============================================================================
-# 8_1d_tables.R — Publication-ready LaTeX tables (kableExtra)
+# 8_1d_tables.R — Publication-ready LaTeX tables (kableExtra) + PNG render
 #
 # Three booktabs-style tables from the matched samples + ATT results, written
-# as standalone .tex files that can be \input{} into a LaTeX document.
+# as standalone .tex files that can be \input{} into a LaTeX document. Each
+# .tex is also rendered to .png via pdflatex + pdftoppm so a quick visual
+# check is available without compiling the full manuscript.
 #
 #   Table 1: Sample descriptive statistics, matched samples
 #   Table 2: Pre- and post-matching covariate balance (SMD + variance ratio)
 #   Table 3: Estimated treatment effects (ATT, SE, 95% CI)
 #
+# All proportions are reported in their natural [0, 1] scale (no percentages).
+#
 # LaTeX preamble requirements (typical kableExtra defaults):
 #   \usepackage{booktabs}
-#   \usepackage{makecell}
-#   \usepackage{multirow}
+#
+# PNG rendering uses the system's pdflatex + pdftoppm (poppler-utils). If
+# either is missing, the .tex files are still produced and PNG rendering
+# is skipped with a warning.
 #
 # Inputs (from scripts 5 and 7):
 #   data/matched/matched_{pa,all_states}_year_only.rds
@@ -20,6 +26,7 @@
 #
 # Outputs:
 #   output/tables/table{1,2,3}_*.tex
+#   output/tables/table{1,2,3}_*.png
 # =============================================================================
 
 library(here)
@@ -55,34 +62,43 @@ individual_vars <- tibble::tribble(
   ~var,                     ~label,                            ~group,
   "gpa",                    "GPA (4.0 scale)",                 "Academic preparation",
   "psat_math",              "PSAT Math",                       "Academic preparation",
-  "stipend",                "Received program stipend (\\%)",  "Program participation",
-  "neg_school",             "Negative school experience (\\%)","Program participation",
-  "gender",                 "Male (\\%)",                      "Demographics",
+  "stipend",                "Received program stipend",        "Program participation",
+  "neg_school",             "Negative school experience",      "Program participation",
+  "gender",                 "Male",                            "Demographics",
   "house_size",             "Household size",                  "Demographics",
-  "racially_marginalized",  "Racially marginalized (\\%)",     "Demographics",
-  "bi_multi_racial",        "Bi/multi-racial (\\%)",           "Demographics",
-  "disability",             "Disability disclosed (\\%)",      "Demographics",
-  "urban",                  "Urban locale (\\%)",              "School locale",
-  "suburban",               "Suburban locale (\\%)",           "School locale",
-  "rural",                  "Rural locale (\\%)",              "School locale",
-  "grade_9",                "9th grade (\\%)",                 "Grade in program",
-  "grade_10",               "10th grade (\\%)",                "Grade in program",
-  "grade_12",               "12th grade (\\%)",                "Grade in program"
+  "racially_marginalized",  "Racially marginalized",           "Demographics",
+  "bi_multi_racial",        "Bi/multi-racial",                 "Demographics",
+  "disability",             "Disability disclosed",            "Demographics",
+  "urban",                  "Urban locale",                    "School locale",
+  "suburban",               "Suburban locale",                 "School locale",
+  "rural",                  "Rural locale",                    "School locale",
+  "grade_9",                "9th grade",                       "Grade in program",
+  "grade_10",               "10th grade",                      "Grade in program",
+  "grade_12",               "12th grade",                      "Grade in program"
 )
 
 school_vars <- tibble::tribble(
   ~var,                              ~label,                              ~group,
   "school_enrollment",               "Enrollment (count)",                "School characteristics (PA only)",
-  "school_pct_econ_disadvantaged",   "Economically disadvantaged (\\%)",  "School characteristics (PA only)",
-  "school_pct_english_learner",      "English learners (\\%)",            "School characteristics (PA only)",
-  "school_pct_special_ed",           "Special education (\\%)",           "School characteristics (PA only)",
-  "school_pct_white",                "White students (\\%)",              "School characteristics (PA only)"
+  "school_pct_econ_disadvantaged",   "Economically disadvantaged",        "School characteristics (PA only)",
+  "school_pct_english_learner",      "English learners",                  "School characteristics (PA only)",
+  "school_pct_special_ed",           "Special education",                 "School characteristics (PA only)",
+  "school_pct_white",                "White students",                    "School characteristics (PA only)"
 )
 
 continuous_vars <- c(
   "gpa", "psat_math", "house_size",
   "school_enrollment", "school_pct_econ_disadvantaged",
   "school_pct_english_learner", "school_pct_special_ed",
+  "school_pct_white"
+)
+
+# School-level "% of students who are X" covariates: source data is already
+# 0–100, not 0–1. Rescale to proportions for consistent reporting.
+school_pct_vars <- c(
+  "school_pct_econ_disadvantaged",
+  "school_pct_english_learner",
+  "school_pct_special_ed",
   "school_pct_white"
 )
 
@@ -119,15 +135,12 @@ format_cell <- function(x, w, binary, digits = 2) {
   m <- weighted_mean(x, w)
   if (is.na(m)) return("--")
   if (binary) {
-    sprintf("%.1f", 100 * m)
+    sprintf("%.3f", m)  # proportion in [0, 1]
   } else {
     sprintf("%.2f (%.2f)", round(m, digits), round(weighted_sd(x, w), digits))
   }
 }
 
-# Pack-rows helper: given a vector of group labels (one per row, in row order),
-# return a named index vector for kableExtra::pack_rows compatible with
-# `index = ...`. Preserves group order.
 group_index <- function(group_vec) {
   rle_g <- rle(group_vec)
   setNames(rle_g$lengths, rle_g$values)
@@ -148,10 +161,12 @@ build_descriptives <- function(data, var_spec) {
     mutate(
       treated = map_chr(var, ~ {
         x <- mask_imputed(data, .x)
+        if (.x %in% school_pct_vars) x <- x / 100  # 0-100 → 0-1
         format_cell(x[trt_idx], data$weights[trt_idx], !(.x %in% continuous_vars))
       }),
       control = map_chr(var, ~ {
         x <- mask_imputed(data, .x)
+        if (.x %in% school_pct_vars) x <- x / 100
         format_cell(x[ctl_idx], data$weights[ctl_idx], !(.x %in% continuous_vars))
       })
     )
@@ -203,7 +218,7 @@ table1_kbl <- table1_df |>
 write_tex(table1_kbl, file.path(out_dir, "table1_descriptives.tex"))
 
 # -----------------------------------------------------------------------------
-# Table 2 — Covariate balance
+# Table 2 — Covariate balance (already on standardized / ratio scales)
 # -----------------------------------------------------------------------------
 
 bal_to_df <- function(matchit_obj) {
@@ -273,7 +288,7 @@ table2_kbl <- table2_df |>
 write_tex(table2_kbl, file.path(out_dir, "table2_balance.tex"))
 
 # -----------------------------------------------------------------------------
-# Table 3 — Estimated treatment effects
+# Table 3 — Estimated treatment effects (proportions)
 # -----------------------------------------------------------------------------
 
 panel_label <- c(
@@ -282,8 +297,8 @@ panel_label <- c(
   C = "Panel C. Persistence (conditional on enrollment)"
 )
 
-format_pp <- function(x, digits = 1) {
-  ifelse(is.na(x), "--", formatC(100 * x, digits = digits, format = "f"))
+format_prop <- function(x, digits = 3) {
+  ifelse(is.na(x), "--", formatC(x, digits = digits, format = "f"))
 }
 
 format_att <- function(att, se) {
@@ -292,10 +307,10 @@ format_att <- function(att, se) {
     "--",
     ifelse(
       is.na(se),
-      formatC(100 * att, digits = 1, format = "f"),
+      formatC(att, digits = 3, format = "f"),
       sprintf("%s (%s)",
-              formatC(100 * att, digits = 1, format = "f"),
-              formatC(100 * se,  digits = 1, format = "f"))
+              formatC(att, digits = 3, format = "f"),
+              formatC(se,  digits = 3, format = "f"))
     )
   )
 }
@@ -304,11 +319,10 @@ format_ci <- function(lo, hi) {
   ifelse(
     is.na(lo) | is.na(hi),
     "--",
-    sprintf("[%.1f, %.1f]", 100 * lo, 100 * hi)
+    sprintf("[%.3f, %.3f]", lo, hi)
   )
 }
 
-# LaTeX-safe stars (no smart-typography substitution surprises)
 stars <- function(p) {
   case_when(
     is.na(p)  ~ "",
@@ -332,10 +346,10 @@ build_impact_block <- function(att_df) {
       panel,
       outcome,
       label,
-      n        = n_obs,
-      ctrl_pct = format_pp(ctrl_mean),
-      att_se   = paste0(format_att(att, se), stars(pval)),
-      ci       = format_ci(conf_lo, conf_hi)
+      n      = n_obs,
+      ctrl   = format_prop(ctrl_mean),
+      att_se = paste0(format_att(att, se), stars(pval)),
+      ci     = format_ci(conf_lo, conf_hi)
     )
 }
 
@@ -349,8 +363,8 @@ impact_wide <- left_join(impact_pa, impact_all, by = c("panel", "outcome", "labe
   ) |>
   arrange(panel, outcome) |>
   select(label, panel_full,
-         pa_n,  pa_ctrl_pct,  pa_att_se,  pa_ci,
-         all_n, all_ctrl_pct, all_att_se, all_ci)
+         pa_n,  pa_ctrl,  pa_att_se,  pa_ci,
+         all_n, all_ctrl, all_att_se, all_ci)
 
 table3_kbl <- impact_wide |>
   select(-panel_full) |>
@@ -361,8 +375,8 @@ table3_kbl <- impact_wide |>
     align     = c("l", "r", "r", "r", "r", "r", "r", "r", "r"),
     col.names = c(
       "",
-      "$n$", "Comparison (\\%)", "ATT ($SE$)", "95\\% CI",
-      "$n$", "Comparison (\\%)", "ATT ($SE$)", "95\\% CI"
+      "$n$", "Comparison", "ATT ($SE$)", "95\\% CI",
+      "$n$", "Comparison", "ATT ($SE$)", "95\\% CI"
     ),
     caption = "Estimated Treatment Effects on College Enrollment, Institution Type, and Persistence",
     label   = "impact",
@@ -374,7 +388,66 @@ table3_kbl <- impact_wide |>
 
 write_tex(table3_kbl, file.path(out_dir, "table3_impact.tex"))
 
-message("\n=== Tables saved ===")
-message("  ", file.path(out_dir, "table1_descriptives.tex"))
-message("  ", file.path(out_dir, "table2_balance.tex"))
-message("  ", file.path(out_dir, "table3_impact.tex"))
+message("\n=== LaTeX tables saved ===")
+for (f in c("table1_descriptives.tex", "table2_balance.tex", "table3_impact.tex")) {
+  message("  ", file.path(out_dir, f))
+}
+
+# -----------------------------------------------------------------------------
+# Render each .tex to .png via pdflatex + pdftoppm
+# -----------------------------------------------------------------------------
+# Wraps each table.tex in a `standalone` document with `\standaloneenv{table}`
+# so the PDF crops to the table content. `varwidth=30cm` allows the page to be
+# wider than letter so the dual-sample tables aren't cut off.
+
+render_one <- function(tex_path) {
+  pdflatex <- Sys.which("pdflatex")
+  pdftoppm <- Sys.which("pdftoppm")
+  if (!nzchar(pdflatex) || !nzchar(pdftoppm)) {
+    message("  Skipping PNG render: pdflatex or pdftoppm not on PATH.")
+    return(invisible(NULL))
+  }
+
+  base <- tools::file_path_sans_ext(basename(tex_path))
+  tmp  <- tempfile(pattern = paste0(base, "_"), fileext = "")
+  dir.create(tmp)
+  wrap_name <- paste0(base, "_wrap.tex")
+  wrap_path <- file.path(tmp, wrap_name)
+
+  writeLines(c(
+    "\\documentclass[border=8pt,varwidth=30cm]{standalone}",
+    "\\usepackage{booktabs}",
+    "\\standaloneenv{table}",
+    "\\begin{document}",
+    sprintf("\\input{%s}", normalizePath(tex_path)),
+    "\\end{document}"
+  ), wrap_path)
+
+  old_wd <- setwd(tmp)
+  on.exit(setwd(old_wd), add = TRUE)
+  status <- system2(pdflatex, c("-interaction=batchmode", wrap_name),
+                    stdout = FALSE, stderr = FALSE)
+  setwd(old_wd)
+
+  pdf_path <- file.path(tmp, paste0(base, "_wrap.pdf"))
+  if (status != 0 || !file.exists(pdf_path)) {
+    message("  pdflatex failed for ", basename(tex_path),
+            " (see ", file.path(tmp, paste0(base, "_wrap.log")), ")")
+    return(invisible(NULL))
+  }
+
+  png_prefix <- file.path(dirname(tex_path), base)
+  system2(pdftoppm,
+          c("-png", "-r", "200", shQuote(pdf_path), shQuote(png_prefix)),
+          stdout = FALSE, stderr = FALSE)
+  appended <- paste0(png_prefix, "-1.png")
+  final    <- paste0(png_prefix, ".png")
+  if (file.exists(appended)) file.rename(appended, final)
+  unlink(tmp, recursive = TRUE)
+  if (file.exists(final)) message("  ", final)
+}
+
+message("\n=== PNG renders ===")
+for (f in c("table1_descriptives.tex", "table2_balance.tex", "table3_impact.tex")) {
+  render_one(file.path(out_dir, f))
+}
