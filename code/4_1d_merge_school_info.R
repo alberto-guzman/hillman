@@ -19,6 +19,13 @@
 #          output/counts/n_merged_pa_by_year.csv
 # =============================================================================
 
+library(dplyr)
+library(tidyr)
+library(stringr)
+library(readr)
+library(haven)
+library(here)
+
 dir.create(here("data", "processed"), recursive = TRUE, showWarnings = FALSE)
 dir.create(here("output", "counts"), recursive = TRUE, showWarnings = FALSE)
 
@@ -151,7 +158,7 @@ if (nrow(crosswalk_dupes) > 0) {
 }
 
 merged_df_all <- merged_df_all |>
-  left_join(crosswalk, by = "hs_name_clean")
+  left_join(crosswalk, by = "hs_name_clean", relationship = "many-to-one")
 
 message("Students with AUN: ", sum(!is.na(merged_df_all$aun)))
 message("Students without AUN: ", sum(is.na(merged_df_all$aun)))
@@ -194,7 +201,11 @@ school_facts <- readxl::read_excel(here(
 message("School Fast Facts loaded: ", nrow(school_facts), " schools")
 
 merged_df_pa <- merged_df_pa |>
-  left_join(school_facts, by = c("aun", "schoolnumber" = "schl")) |>
+  left_join(
+    school_facts,
+    by = c("aun", "schoolnumber" = "schl"),
+    relationship = "many-to-one"
+  ) |>
   filter(!is.na(aun), !is.na(school_enrollment))
 
 # Two-step PA attrition diagnostic

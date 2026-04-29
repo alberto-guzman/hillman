@@ -4,17 +4,18 @@
 # Purpose: Load and clean Hillman Summer program applicant data across cohort
 #          years, standardize variables, and produce one analysis-ready dataset.
 #
-# Input:   data/ — year-specific Excel applicant files (2017–2023)
+# Input:   data/raw/applicants/ — year-specific Excel/CSV applicant files (2017–2023)
 # Output:  `applicants`  — cleaned long-format applicant data frame
 #          `applicant_n` — raw applicant counts by year
-#          output/n_applicants_by_year.csv
+#          output/counts/n_applicants_by_year.csv
 # =============================================================================
 
 library(tidyverse)
 library(readxl)
 library(here)
 library(janitor)
-library(tidylog)
+
+source(here("code", "helpers.R"))
 
 dir.create(here("output", "counts"), recursive = TRUE, showWarnings = FALSE)
 
@@ -661,35 +662,33 @@ applicants <- applicants |>
       low_income,
       middle_name
     )
-  ) |>
-  mutate(
-    first_name = str_to_lower(first_name) |> str_remove("\\(.*") |> str_trim(),
-    last_name = str_to_lower(last_name) |> str_trim()
   )
 
 # =============================================================================
 # STANDARDIZE VARIABLES
 # =============================================================================
 
-# Name cleaning: remove special characters, quotes, parentheses
+# Name cleaning via shared helper. strip_suffix = TRUE on last_name so e.g.
+# "Smith Jr" matches "Smith" in the alumni tracker (which strips suffixes).
 applicants <- applicants |>
   mutate(
-    first_name = first_name |>
-      str_to_lower() |>
-      str_replace_all("\"[^\"]*\"|\\([^)]*\\)", " ") |>
-      str_replace_all("[^a-z]", " ") |>
-      str_squish(),
-    last_name = last_name |>
-      str_to_lower() |>
-      str_replace_all("\"[^\"]*\"|\\([^)]*\\)", " ") |>
-      str_replace_all("[^a-z]", " ") |>
-      str_squish()
+    first_name = clean_person_name(first_name),
+    last_name  = clean_person_name(last_name, strip_suffix = TRUE)
   )
 
 # GPA standardization to 4.0 scale.
-# GPAs on other scales (5.0, 6.0, 10.0, 100-point) are converted
-# proportionally. Weighted GPAs above 4.0 use the scale denominator;
-# unweighted GPAs above 4.0 are set to NA.
+#
+# Conversion logic:
+#   ≤ 4.0           → assume valid 4.0-scale GPA, keep as-is
+#   4.0 < x ≤ 5.0   → if weighted, convert from 5.0 scale; otherwise NA
+#                     (a 4.5 unweighted GPA on a 4.0 scale is not possible)
+#   5.0 < x ≤ 6.0   → if weighted, convert from 6.0 scale; otherwise NA
+#   6.0 < x ≤ 10.0  → unconditionally convert from 10.0 scale
+#                     (no plausible 4.0-scale interpretation, so the weighted
+#                      flag is uninformative here)
+#   10.0 < x < 65.0 → no recognized scale mapping → NA
+#   65 ≤ x ≤ 100    → convert from 100-point scale via standard letter-grade
+#                     bands (A = 93+, A- = 90+, B+ = 87+, ...)
 applicants <- applicants |>
   mutate(
     gpa_old = gpa,
@@ -705,7 +704,6 @@ applicants <- applicants |>
       gpa_num > 5.0 & gpa_num <= 6.0 ~
         if_else(gpa_weight == 1, (gpa_num / 6.0) * 4.0, NA_real_),
       gpa_num > 6.0 & gpa_num <= 10.0 ~ (gpa_num / 10.0) * 4.0,
-      # Values 10.0 < gpa < 65.0 have no recognised scale mapping -> NA
       gpa_num >= 93 ~ 4.0,
       gpa_num >= 90 ~ 3.7 + (gpa_num - 90) * 0.1,
       gpa_num >= 87 ~ 3.3 + (gpa_num - 87) * 0.133,
@@ -725,7 +723,6 @@ applicants <- applicants |>
 # Out-of-range value cleaning
 applicants <- applicants |>
   mutate(
-    gpa = if_else(gpa == 0, NA_real_, gpa),
     grade = if_else(grade < 9 | grade > 12, NA_integer_, grade),
     house_size = if_else(
       house_size == 0 | house_size > 11,
@@ -740,44 +737,30 @@ applicants <- applicants |>
       zip
     ),
 
-    sat_math = if_else(sat_math == 0, NA_integer_, sat_math),
-    sat_verbal = if_else(sat_verbal == 0, NA_integer_, sat_verbal),
-    sat_writing = if_else(
-      sat_writing == 0 | sat_writing < 200 | sat_writing > 800,
-      NA_integer_,
-      sat_writing
-    ),
+    # SAT sections: 200-800; PSAT sections: 160-760; ACT sections: 1-36.
+    # Out-of-range (incl. zero) → NA.
+    sat_math = if_else(sat_math < 200 | sat_math > 800, NA_integer_, sat_math),
+    sat_verbal = if_else(sat_verbal < 200 | sat_verbal > 800, NA_integer_, sat_verbal),
+    sat_writing = if_else(sat_writing < 200 | sat_writing > 800, NA_integer_, sat_writing),
     sat_reading_writing = if_else(
-      sat_reading_writing == 0,
+      sat_reading_writing < 200 | sat_reading_writing > 800,
       NA_integer_,
       sat_reading_writing
     ),
 
-    psat_math = if_else(
-      psat_math < 160 | psat_math > 760,
-      NA_integer_,
-      psat_math
-    ),
-    psat_verbal = if_else(
-      psat_verbal < 160 | psat_verbal > 760,
-      NA_integer_,
-      psat_verbal
-    ),
-    psat_writing = if_else(
-      psat_writing < 160 | psat_writing > 760,
-      NA_integer_,
-      psat_writing
-    ),
+    psat_math = if_else(psat_math < 160 | psat_math > 760, NA_integer_, psat_math),
+    psat_verbal = if_else(psat_verbal < 160 | psat_verbal > 760, NA_integer_, psat_verbal),
+    psat_writing = if_else(psat_writing < 160 | psat_writing > 760, NA_integer_, psat_writing),
     psat_reading_writing = if_else(
       psat_reading_writing < 160 | psat_reading_writing > 760,
       NA_integer_,
       psat_reading_writing
     ),
 
-    act_math = if_else(act_math == 0, NA_integer_, act_math),
-    act_read = if_else(act_read == 0, NA_integer_, act_read),
-    act_science = if_else(act_science == 0, NA_integer_, act_science),
-    act_writing = if_else(act_writing == 0, NA_integer_, act_writing)
+    act_math = if_else(act_math < 1 | act_math > 36, NA_integer_, act_math),
+    act_read = if_else(act_read < 1 | act_read > 36, NA_integer_, act_read),
+    act_science = if_else(act_science < 1 | act_science > 36, NA_integer_, act_science),
+    act_writing = if_else(act_writing < 1 | act_writing > 36, NA_integer_, act_writing)
   ) |>
   select(-any_of(c(
     "date_of_birth",
@@ -812,8 +795,10 @@ applicants <- applicants |>
   filter(!is.na(first_name), !is.na(last_name))
 
 # Manually identified duplicate entries verified against source data.
-# For each flagged name/year, row_number() is used so only the duplicate
-# row(s) are removed -- the first (kept) record is never dropped.
+# For each flagged name/year, the row with non-NA stipend (then non-NA gpa)
+# is kept as row 1, and any subsequent rows are dropped. The deterministic
+# arrange before row_number() prevents the kept row from drifting if the
+# raw export reorders records on a re-pull.
 # year column ensures only the duplicate entry for that specific year is
 # removed — not all records for that student across all years.
 remove_duplicates <- tibble(
@@ -916,6 +901,11 @@ remove_duplicates <- tibble(
 # duplicates. This preserves the first (kept) record even if there are 3+ rows.
 applicants <- applicants |>
   group_by(first_name, last_name, year) |>
+  arrange(
+    desc(!is.na(stipend)),
+    desc(!is.na(gpa)),
+    .by_group = TRUE
+  ) |>
   mutate(.row_n = row_number()) |>
   ungroup() |>
   anti_join(
@@ -983,6 +973,40 @@ applicants <- applicants |>
         .default = s
       )
     }
+  )
+
+# =============================================================================
+# FINAL WHITELIST
+# =============================================================================
+# Per-year `select()` lists are inconsistent across cohorts, so the union
+# carried forward by `bind_rows` includes year-specific columns that no
+# downstream script consumes (admin form fields, unrenamed score columns,
+# decision codes, etc.). Restrict to the columns that 3a/3b/5 actually use,
+# plus all cleaned test-score variants for descriptive/sensitivity work.
+
+applicants <- applicants |>
+  select(
+    # identifiers & admin
+    first_name, last_name, year, hs_grad_year,
+    # demographics
+    gender, grade,
+    # academics
+    gpa, gpa_weight,
+    psat_math, psat_verbal, psat_writing, psat_reading_writing,
+    sat_math, sat_verbal, sat_writing, sat_reading_writing,
+    act_math, act_read, act_science, act_writing,
+    # geography
+    state, city, zip, high_school,
+    # self-reported (raw — cleaned in 3b into the analysis covariates)
+    self_identity,
+    geographic_location,
+    school_impact,
+    american_citizen,
+    documented_disability,
+    first_gen,
+    stipend,
+    house_size,
+    jkcf
   )
 
 # =============================================================================

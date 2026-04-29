@@ -1,807 +1,846 @@
 # =============================================================================
 # 8_1d_tables_figures.R
-# Publication-ready tables and figures, Meyer et al. (2024) conventions.
+#
+# Purpose: Produce all publication-ready tables and figures for the Hillman
+#          summer program impact study in EEPA (APA 7th) journal style.
+#
+# Style:   Three-rule tables (top/bottom/below column headers), no vertical
+#          lines, "Note." footnotes, *p < .05 **p < .01 ***p < .001 convention
+#          (EEPA uses .05/.01/.001, not .10). No shading except row-group bands.
+#
+# Tables:
+#   Table 1  — Descriptive statistics: treated vs. control, overall + by cohort
+#   Table 2  — Covariate balance: All States (before/after matching, SMDs)
+#   Table 3  — ATT results: All States (Panels A–D)
+#   Table 4  — ATT results: PA Public Schools (Panels A–D)
+#   App. A1  — Covariate balance: PA Public Schools
+#   App. A2  — Sample sizes by cohort (before/after matching)
+#
+# Figures:
+#   Figure 1 — Love plot: SMD before/after matching (All States)
+#   Figure 2 — Subgroup coefficient plots (seamless enrollment + STEM)
+#
+# Input:
+#   data/matched/matched_all_states_year_only.rds
+#   data/matched/matched_pa_year_only.rds
+#   data/matched/matchit_object_all_states.rds
+#   data/matched/matchit_object_pa.rds
+#   data/matched/matching_data_all_states.rds
+#   data/matched/matching_data_pa.rds
+#   output/att_results_all_states.rds
+#   output/att_results_pa.rds
+#   output/att_subgroup_all_states.rds
+#   output/att_subgroup_pa.rds
+#
+# Output:
+#   output/tables/table_1_descriptive.html
+#   output/tables/table_2_balance_all_states.html
+#   output/tables/table_3_att_all_states.html
+#   output/tables/table_4_att_pa.html
+#   output/tables/appendix_a1_balance_pa.html
+#   output/tables/appendix_a2_sample_sizes.html
+#   output/figures/figure_1_love_plot.png
+#   output/figures/figure_2_subgroup_effects.png
 # =============================================================================
+
 library(dplyr)
 library(tidyr)
-library(ggplot2)
-library(gt)
-library(here)
-library(cobalt)
 library(purrr)
-library(stringr)
-dir.create(here('output', 'tables'), recursive = TRUE, showWarnings = FALSE)
-dir.create(here('output', 'figures'), recursive = TRUE, showWarnings = FALSE)
+library(ggplot2)
+library(scales)
+library(gt)
+library(cobalt)
+library(here)
 
-focal_outcomes <- c(
-  "enroll_seamless_itt",
-  "enroll_seamless_stem_itt",
-  "inst_4yr_entry",
-  "inst_public4yr_entry",
-  "reten_1y",
-  "deg_any_6y"
-)
+dir.create(here("output", "tables"),  recursive = TRUE, showWarnings = FALSE)
+dir.create(here("output", "figures"), recursive = TRUE, showWarnings = FALSE)
 
-focal_labels <- c(
-  enroll_seamless_itt = "Seamless enrollment (ITT)",
-  enroll_seamless_stem_itt = "Seamless STEM enrollment (ITT)",
-  inst_4yr_entry = "Initial enrollment: any 4-year",
-  inst_public4yr_entry = "Initial enrollment: public 4-year",
-  reten_1y = "Retained into 2nd year",
-  deg_any_6y = "Any degree within 6 years"
-)
+# =============================================================================
+# 1. LOAD ALL INPUTS
+# =============================================================================
+
+matched_all      <- readRDS(here("data", "matched", "matched_all_states_year_only.rds"))
+matched_pa       <- readRDS(here("data", "matched", "matched_pa_year_only.rds"))
+m_out_all        <- readRDS(here("data", "matched", "matchit_object_all_states.rds"))
+m_out_pa         <- readRDS(here("data", "matched", "matchit_object_pa.rds"))
+pre_all          <- readRDS(here("data", "matched", "matching_data_all_states.rds"))
+pre_pa           <- readRDS(here("data", "matched", "matching_data_pa.rds"))
+results_all      <- readRDS(here("output", "att_results_all_states.rds"))
+results_pa       <- readRDS(here("output", "att_results_pa.rds"))
+results_sg_all   <- readRDS(here("output", "att_subgroup_all_states.rds"))
+results_sg_pa    <- readRDS(here("output", "att_subgroup_pa.rds"))
+
+# =============================================================================
+# 2. SHARED HELPERS
+# =============================================================================
 
 sig_stars <- function(p) {
-  dplyr::case_when(
-    p < 0.001 ~ '***',
-    p < 0.01 ~ '**',
-    p < 0.05 ~ '*',
-    p < 0.10 ~ '+',
-    TRUE ~ ''
+  case_when(
+    p < 0.001 ~ "***",
+    p < 0.01  ~ "**",
+    p < 0.05  ~ "*",
+    TRUE      ~ ""
   )
 }
-fmt_coef <- function(est, p, d = 3) {
-  paste0(sprintf(paste0('%.', d, 'f'), est), sig_stars(p))
-}
-fmt_se <- function(se, d = 3) {
-  paste0('(', sprintf(paste0('%.', d, 'f'), se), ')')
-}
-notes_main <- function(sn = NULL) {
-  base <- paste0(
-    'Notes: Standard errors in parentheses. All models include cohort fixed effects. ',
-    'ATT estimated via a doubly-robust linear probability model with propensity score ',
-    'matching weights, nearest-neighbor matching with replacement, caliper = 0.5 SD, ',
-    'exact match on application year. Models include controls for gender, grade, GPA, ',
-    'PSAT math, stipend eligibility, race/ethnicity, geography, disability status, ',
-    'negative school environment, and first-generation college student status, ',
-    'with missing-data indicators for all covariates.'
-  )
-  if (!is.null(sn)) paste0(base, ' ', sn) else base
-}
-notes_sig <- '+p<0.10, *p<0.05, **p<0.01, ***p<0.001'
 
-style_gt <- function(gt_tbl, n_rows) {
+fmt_pval <- function(p) {
+  case_when(
+    is.na(p)   ~ "—",
+    p < 0.001  ~ "<.001",
+    TRUE       ~ sub("^0\\.", ".", sprintf("%.3f", p))
+  )
+}
+
+# Shared gt table options — EEPA three-rule style
+eepa_options <- function(gt_tbl) {
+  gt_tbl |>
+    tab_options(
+      table.font.size              = px(11),
+      heading.title.font.size      = px(13),
+      heading.subtitle.font.size   = px(11),
+      heading.align                = "left",
+      column_labels.font.weight    = "bold",
+      column_labels.border.top.color    = "black",
+      column_labels.border.top.width    = px(2),
+      column_labels.border.bottom.color = "black",
+      column_labels.border.bottom.width = px(1),
+      table_body.border.bottom.color = "black",
+      table_body.border.bottom.width = px(2),
+      row_group.background.color   = "gray97",
+      row_group.border.top.color   = "black",
+      row_group.border.top.width   = px(1),
+      row_group.border.bottom.color = "gray80",
+      row_group.border.bottom.width = px(1),
+      table.border.top.color       = "white",
+      table.border.bottom.color    = "white",
+      source_notes.font.size       = px(10),
+      data_row.padding             = px(3)
+    )
+}
+
+# Add top/bottom rules to body rows
+add_body_rules <- function(gt_tbl, n_rows) {
   gt_tbl |>
     tab_style(
-      style = cell_borders(sides = 'top', color = 'black', weight = px(2)),
+      style     = cell_borders(sides = "top", color = "black", weight = px(2)),
       locations = cells_body(rows = 1)
     ) |>
     tab_style(
-      style = cell_borders(sides = 'bottom', color = 'black', weight = px(2)),
+      style     = cell_borders(sides = "bottom", color = "black", weight = px(2)),
       locations = cells_body(rows = n_rows)
-    ) |>
-    cols_align(align = 'left', columns = 1) |>
-    cols_align(align = 'center', columns = -1) |>
-    tab_options(
-      table.font.size = px(11),
-      heading.title.font.size = px(13),
-      heading.subtitle.font.size = px(11),
-      heading.align = 'left',
-      column_labels.font.weight = 'bold',
-      column_labels.border.top.color = 'black',
-      column_labels.border.top.width = px(2),
-      column_labels.border.bottom.color = 'black',
-      column_labels.border.bottom.width = px(1),
-      table_body.border.bottom.color = 'black',
-      table_body.border.bottom.width = px(2),
-      row_group.background.color = 'gray97',
-      row_group.border.top.color = 'black',
-      row_group.border.top.width = px(1),
-      row_group.border.bottom.color = 'gray80',
-      table.border.top.color = 'white',
-      table.border.bottom.color = 'white',
-      source_notes.font.size = px(10),
-      data_row.padding = px(3)
     )
 }
 
 # =============================================================================
-# TABLE 1: BALANCE
+# 3. TABLE 1 — DESCRIPTIVE STATISTICS
 # =============================================================================
-message('\n=== Building Table 1: Balance (All-States) ===')
+# Pre-match analytic sample. Rows = covariates + cohort composition.
+# Columns = N, Control Mean, Treated Mean, Standardized Difference.
+# Source: pre_all (matching_data_all_states.rds) — same exclusions as matching.
 
-bal_vars <- c(
-  'gender',
-  'grade',
-  'gpa',
-  'psat_math',
-  'stipend',
-  'racially_marginalized',
-  'bi_multi_racial',
-  'urban',
-  'suburban',
-  'rural',
-  'disability',
-  'neg_school',
-  'first_gen',
-  'us_citizen'
-)
-bal_labels <- c(
-  gender = 'Female',
-  grade = 'Grade',
-  gpa = 'High School GPA',
-  psat_math = 'PSAT Math Score',
-  stipend = 'Stipend Eligible',
-  racially_marginalized = 'Racially Marginalized',
-  bi_multi_racial = 'Bi/Multi-Racial',
-  urban = 'Urban',
-  suburban = 'Suburban',
-  rural = 'Rural',
-  disability = 'Documented Disability',
-  neg_school = 'Negative School Environment',
-  first_gen = 'First-Generation College Student',
-  us_citizen = 'U.S. Citizen'
+message("\n=== Table 1: Descriptive Statistics ===")
+
+desc_vars <- c(
+  "gender",
+  "grade_9", "grade_10", "grade_11", "grade_12",
+  "gpa",
+  "psat_math",
+  "stipend",
+  "house_size",
+  "racially_marginalized",
+  "bi_multi_racial",
+  "urban",
+  "suburban",
+  "rural",
+  "disability",
+  "neg_school",
+  "first_gen"
+  # us_citizen excluded: non-citizens are removed before matching, so the
+  # column is 1 or NA for everyone in pre_all — uninformative to display.
 )
 
-make_balance_table <- function(
-  pre_data,
-  matched_data,
-  m_out,
-  vars,
-  labels,
-  title_subtitle
-) {
-  # Pre-match means: one row per variable with control and treated side by side
-  pre_ctrl <- pre_data |>
-    filter(treated_in_year == 0) |>
-    summarise(across(all_of(vars), ~ mean(., na.rm = TRUE))) |>
-    pivot_longer(everything(), names_to = 'variable', values_to = 'pre_0')
+desc_labels <- c(
+  gender             = "Female (= 1)",
+  grade_9            = "Grade 9",
+  grade_10           = "Grade 10",
+  grade_11           = "Grade 11",
+  grade_12           = "Grade 12",
+  gpa                = "High school GPA",
+  psat_math          = "PSAT math score",
+  stipend            = "Stipend eligible",
+  house_size         = "Household size",
+  racially_marginalized = "Racially marginalized",
+  bi_multi_racial    = "Bi/multi-racial",
+  urban              = "Urban",
+  suburban           = "Suburban",
+  rural              = "Rural",
+  disability         = "Documented disability",
+  neg_school         = "Negative school environment",
+  first_gen          = "First-generation college student"
+)
 
-  pre_trt <- pre_data |>
-    filter(treated_in_year == 1) |>
-    summarise(across(all_of(vars), ~ mean(., na.rm = TRUE))) |>
-    pivot_longer(everything(), names_to = 'variable', values_to = 'pre_1')
+# Group labels used for row grouping
+desc_group <- c(
+  gender             = "Demographics",
+  grade_9            = "Grade Level",
+  grade_10           = "Grade Level",
+  grade_11           = "Grade Level",
+  grade_12           = "Grade Level",
+  gpa                = "Academic",
+  psat_math          = "Academic",
+  stipend            = "Socioeconomic",
+  house_size         = "Socioeconomic",
+  racially_marginalized = "Race/Ethnicity",
+  bi_multi_racial    = "Race/Ethnicity",
+  urban              = "Geography",
+  suburban           = "Geography",
+  rural              = "Geography",
+  disability         = "Student Background",
+  neg_school         = "Student Background",
+  first_gen          = "Student Background"
+)
 
-  pre_means <- pre_ctrl |> left_join(pre_trt, by = 'variable')
+make_desc_table <- function(pre_data, title_subtitle) {
+  ctrl <- pre_data |> filter(treated_in_year == 0)
+  trt  <- pre_data |> filter(treated_in_year == 1)
 
-  # Post-match weighted means
-  post_ctrl <- matched_data |>
-    filter(treated_in_year == 0) |>
-    summarise(across(
-      all_of(vars),
-      ~ weighted.mean(., w = weights, na.rm = TRUE)
-    )) |>
-    pivot_longer(everything(), names_to = 'variable', values_to = 'post_0')
+  n_ctrl <- nrow(ctrl)
+  n_trt  <- nrow(trt)
 
-  post_trt <- matched_data |>
-    filter(treated_in_year == 1) |>
-    summarise(across(
-      all_of(vars),
-      ~ weighted.mean(., w = weights, na.rm = TRUE)
-    )) |>
-    pivot_longer(everything(), names_to = 'variable', values_to = 'post_1')
+  means_ctrl <- ctrl |>
+    summarise(across(all_of(desc_vars), ~ mean(., na.rm = TRUE))) |>
+    pivot_longer(everything(), names_to = "variable", values_to = "ctrl_mean")
 
-  post_means <- post_ctrl |> left_join(post_trt, by = 'variable')
+  means_trt <- trt |>
+    summarise(across(all_of(desc_vars), ~ mean(., na.rm = TRUE))) |>
+    pivot_longer(everything(), names_to = "variable", values_to = "trt_mean")
 
-  # SMDs from cobalt
-  smds <- bal.tab(m_out, un = TRUE)$Balance |>
-    tibble::rownames_to_column('variable') |>
-    dplyr::select(variable, smd_pre = Diff.Un, smd_post = Diff.Adj) |>
-    filter(variable %in% vars)
+  sd_ctrl <- ctrl |>
+    summarise(across(all_of(desc_vars), ~ sd(., na.rm = TRUE))) |>
+    pivot_longer(everything(), names_to = "variable", values_to = "sd_ctrl")
 
-  tbl <- pre_means |>
-    left_join(post_means, by = 'variable') |>
-    left_join(smds, by = 'variable') |>
-    filter(variable %in% vars) |>
+  sd_trt <- trt |>
+    summarise(across(all_of(desc_vars), ~ sd(., na.rm = TRUE))) |>
+    pivot_longer(everything(), names_to = "variable", values_to = "sd_trt")
+
+  sd_pooled <- sd_ctrl |>
+    left_join(sd_trt, by = "variable") |>
+    mutate(sd_pool = sqrt((sd_ctrl^2 + sd_trt^2) / 2))
+
+  tbl_cov <- means_ctrl |>
+    left_join(means_trt,  by = "variable") |>
+    left_join(sd_pooled,  by = "variable") |>
     mutate(
-      label = coalesce(labels[variable], variable),
-      ctrl_mean = sprintf('%.3f', pre_0),
-      trt_mean = sprintf('%.3f', pre_1),
-      smd_pre_f = if_else(is.na(smd_pre), '—', sprintf('%.3f', smd_pre)),
-      ctrl_post = sprintf('%.3f', post_0),
-      trt_post = sprintf('%.3f', post_1),
-      smd_post_f = if_else(is.na(smd_post), '—', sprintf('%.3f', smd_post))
+      std_diff = (trt_mean - ctrl_mean) / sd_pool,
+      label    = desc_labels[variable],
+      group    = desc_group[variable],
+      ctrl_fmt = sprintf("%.3f", ctrl_mean),
+      trt_fmt  = sprintf("%.3f", trt_mean),
+      std_fmt  = if_else(is.na(std_diff), "—", sprintf("%.3f", std_diff))
     ) |>
-    # Preserve variable ordering
-    arrange(match(variable, vars)) |>
-    dplyr::select(
-      label,
-      ctrl_mean,
-      trt_mean,
-      smd_pre_f,
-      ctrl_post,
-      trt_post,
-      smd_post_f
-    )
+    arrange(match(variable, desc_vars)) |>
+    select(group, label, ctrl_fmt, trt_fmt, std_fmt)
 
+  # Cohort composition block
+  cohort_ctrl <- ctrl |>
+    count(year) |>
+    mutate(pct = n / sum(n) * 100, group = "Cohort", label = as.character(year),
+           ctrl_fmt = sprintf("%.1f%%", pct), trt_fmt = "", std_fmt = "") |>
+    select(group, label, ctrl_fmt, trt_fmt, std_fmt)
+
+  cohort_trt <- trt |>
+    count(year) |>
+    mutate(pct = n / sum(n) * 100, group = "Cohort", label = as.character(year)) |>
+    select(year, trt_pct = pct)
+
+  cohort_combined <- cohort_ctrl |>
+    left_join(
+      cohort_trt |> mutate(label = as.character(year)) |> select(label, trt_pct),
+      by = "label"
+    ) |>
+    mutate(trt_fmt = sprintf("%.1f%%", coalesce(trt_pct, 0))) |>
+    select(group, label, ctrl_fmt, trt_fmt, std_fmt)
+
+  tbl <- bind_rows(tbl_cov, cohort_combined)
   n_rows <- nrow(tbl)
 
+  header_note <- paste0(
+    "N (control) = ", n_ctrl, "; N (treated) = ", n_trt, "."
+  )
+
   tbl |>
-    gt(rowname_col = 'label') |>
+    gt(rowname_col = "label", groupname_col = "group") |>
     tab_header(
-      title = md(paste0('**', title_subtitle[1], '**')),
+      title    = md(paste0("**", title_subtitle[1], "**")),
       subtitle = title_subtitle[2]
     ) |>
-    tab_spanner(
-      label = 'Before Matching',
-      columns = c(ctrl_mean, trt_mean, smd_pre_f)
-    ) |>
-    tab_spanner(
-      label = 'After Matching',
-      columns = c(ctrl_post, trt_post, smd_post_f)
-    ) |>
     cols_label(
-      ctrl_mean = 'Control',
-      trt_mean = 'Treated',
-      smd_pre_f = 'SMD',
-      ctrl_post = 'Control',
-      trt_post = 'Treated',
-      smd_post_f = 'SMD'
+      ctrl_fmt = md(paste0("Control<br>(*n* = ", n_ctrl, ")")),
+      trt_fmt  = md(paste0("Treated<br>(*n* = ", n_trt, ")")),
+      std_fmt  = "Std. Diff."
     ) |>
-    tab_source_note(
-      source_note = md(paste0(
-        '*Notes:* SMD = standardized mean difference. |SMD| < 0.1 indicates good balance. ',
-        'N before: ',
-        nrow(pre_data),
-        ' (',
-        sum(pre_data$treated_in_year == 1),
-        ' treated, ',
-        sum(pre_data$treated_in_year == 0),
-        ' control). ',
-        'N after: ',
-        nrow(matched_data),
-        ' (',
-        sum(matched_data$treated_in_year == 1),
-        ' treated, ',
-        sum(matched_data$treated_in_year == 0),
-        ' control). ',
-        'Post-match means weighted by matching weights.'
-      ))
+    cols_align(align = "left",   columns = label) |>
+    cols_align(align = "center", columns = c(ctrl_fmt, trt_fmt, std_fmt)) |>
+    tab_style(
+      style     = cell_text(style = "italic"),
+      locations = cells_row_groups()
     ) |>
-    tab_source_note(source_note = md(notes_sig)) |>
-    style_gt(n_rows)
+    tab_source_note(source_note = md(paste0(
+      "*Note.* GPA, PSAT math score, and household size are reported as means; ",
+      "all other variables are binary (0/1) and reported as proportions. ",
+      "Std. Diff. = (treated mean − control mean) / pooled SD, where pooled SD = ",
+      "√[(SD²_ctrl + SD²_trt) / 2]. ",
+      "Sample is the pre-match analytic sample after applying exclusions ",
+      "(year 2022, confirmed non-citizens, treated before 2017). ",
+      header_note
+    ))) |>
+    add_body_rules(n_rows) |>
+    eepa_options()
 }
-table_1 <- make_balance_table(
-  matching_data_all,
-  matched_data_all,
-  m.out_all,
-  bal_vars,
-  bal_labels,
+
+table_1 <- make_desc_table(
+  pre_all,
   c(
-    'Table 1: Analytic Sample and Matching Balance',
-    'All States - Propensity Score Matched Sample'
+    "Table 1",
+    "Descriptive Statistics by Treatment Status — All States, Pre-Match Analytic Sample"
   )
 )
 table_1
 
 # =============================================================================
-# TABLES 2 & 3: MAIN ATT
+# 4. TABLE 2 / APPENDIX A1 — COVARIATE BALANCE
 # =============================================================================
-# ctrl_mean comes directly from results (fit_att computed it within the correct
-# subsample), so Panel C control means are denominated in the degree-eligible
-# subsample — not the full matched sample.
+# Covariate means before and after matching with SMDs.
 
-make_main_table <- function(results, matched, title_subtitle, sn = NULL) {
-  prep <- function(data, panel_label) {
-    data |>
-      mutate(
-        coef_fmt = fmt_coef(att_pp / 100, pval),
-        se_fmt = fmt_se(se_pp / 100),
-        n_fmt = format(n_obs, big.mark = ',')
-      ) |>
-      rowwise() |>
-      reframe(
-        label = c(label, ''),
-        ctrl_mean = c(sprintf('%.3f', ctrl_mean), ''),
-        att = c(coef_fmt, se_fmt),
-        n = c(n_fmt, ''),
-        panel = panel_label
-      )
-  }
+message("\n=== Table 2: Balance (All States) ===")
+message("\n=== Appendix A1: Balance (PA) ===")
 
-  tbl <- bind_rows(
-    results |> filter(sample == 'full') |> prep('A'),
-    results |> filter(sample == 'nsc_matched') |> prep('B'),
-    results |> filter(sample == 'degree_eligible') |> prep('C')
-  )
+bal_labels <- c(
+  gender                        = "Female",
+  gpa                           = "High school GPA",
+  psat_math                     = "PSAT math score",
+  stipend                       = "Stipend eligible",
+  house_size                    = "Household size",
+  racially_marginalized         = "Racially marginalized",
+  bi_multi_racial               = "Bi/multi-racial",
+  urban                         = "Urban",
+  suburban                      = "Suburban",
+  rural                         = "Rural",
+  disability                    = "Documented disability",
+  neg_school                    = "Negative school environment",
+  us_citizen                    = "U.S. citizen",
+  first_gen                     = "First-generation college student",
+  grade_9                       = "Grade 9",
+  grade_10                      = "Grade 10",
+  grade_11                      = "Grade 11",
+  grade_12                      = "Grade 12",
+  school_enrollment             = "School enrollment",
+  school_pct_econ_disadvantaged = "School % economically disadvantaged",
+  school_pct_english_learner    = "School % English learner",
+  school_pct_special_ed         = "School % special education",
+  school_pct_white              = "School % white"
+)
+
+make_balance_table <- function(m_out, pre_data, matched_data, display_vars, title_subtitle) {
+  bal <- bal.tab(m_out, un = TRUE, disp = "means")$Balance |>
+    tibble::rownames_to_column("variable") |>
+    filter(variable %in% display_vars) |>
+    select(variable,
+           pre_ctrl = M.0.Un, pre_trt = M.1.Un, smd_pre = Diff.Un,
+           post_ctrl = M.0.Adj, post_trt = M.1.Adj, smd_post = Diff.Adj)
+
+  n_pre_ctrl  <- sum(pre_data$treated_in_year == 0)
+  n_pre_trt   <- sum(pre_data$treated_in_year == 1)
+  n_post_ctrl <- sum(matched_data$treated_in_year == 0)
+  n_post_trt  <- sum(matched_data$treated_in_year == 1)
+
+  tbl <- bal |>
+    mutate(
+      label        = coalesce(bal_labels[variable], variable),
+      pre_ctrl_f   = sprintf("%.3f", pre_ctrl),
+      pre_trt_f    = sprintf("%.3f", pre_trt),
+      smd_pre_f    = sprintf("%.3f", smd_pre),
+      post_ctrl_f  = sprintf("%.3f", post_ctrl),
+      post_trt_f   = sprintf("%.3f", post_trt),
+      smd_post_f   = sprintf("%.3f", smd_post)
+    ) |>
+    arrange(match(variable, display_vars)) |>
+    select(label, pre_ctrl_f, pre_trt_f, smd_pre_f,
+           post_ctrl_f, post_trt_f, smd_post_f)
 
   n_rows <- nrow(tbl)
 
   tbl |>
-    gt(rowname_col = 'label') |>
+    gt(rowname_col = "label") |>
     tab_header(
-      title = md(paste0('**', title_subtitle[1], '**')),
+      title    = md(paste0("**", title_subtitle[1], "**")),
       subtitle = title_subtitle[2]
     ) |>
-    tab_row_group(
-      label = md(
-        '**Panel C: Degree and Persistence Outcomes** *(non-censored subsample)*'
-      ),
-      rows = panel == 'C'
+    tab_spanner(
+      label   = md(paste0("Before Matching<br>Control *n* = ", n_pre_ctrl,
+                           ", Treated *n* = ", n_pre_trt)),
+      columns = c(pre_ctrl_f, pre_trt_f, smd_pre_f)
     ) |>
-    tab_row_group(
-      label = md(
-        '**Panel B: Enrollment Outcomes** *(NSC-matched students only)*'
-      ),
-      rows = panel == 'B'
+    tab_spanner(
+      label   = md(paste0("After Matching<br>Control *n* = ", n_post_ctrl,
+                           ", Treated *n* = ", n_post_trt)),
+      columns = c(post_ctrl_f, post_trt_f, smd_post_f)
     ) |>
-    tab_row_group(
-      label = md('**Panel A: Enrollment Outcomes** *(full matched sample)*'),
-      rows = panel == 'A'
+    cols_label(
+      pre_ctrl_f  = "Control",
+      pre_trt_f   = "Treated",
+      smd_pre_f   = "SMD",
+      post_ctrl_f = "Control",
+      post_trt_f  = "Treated",
+      smd_post_f  = "SMD"
     ) |>
-    cols_hide(panel) |>
-    cols_label(ctrl_mean = 'Control Mean', att = 'ATT', n = 'N') |>
-    cols_align(align = 'left', columns = label) |>
-    cols_align(align = 'center', columns = c(ctrl_mean, att, n)) |>
-    tab_style(
-      style = cell_text(color = 'gray50', size = px(10)),
-      locations = cells_body(rows = grepl('^\\(', att), columns = att)
-    ) |>
-    tab_style(
-      style = cell_borders(sides = 'top', color = 'black', weight = px(2)),
-      locations = cells_body(rows = 1)
-    ) |>
-    tab_style(
-      style = cell_borders(sides = 'bottom', color = 'black', weight = px(2)),
-      locations = cells_body(rows = n_rows)
-    ) |>
-    tab_source_note(source_note = md(paste0('*', notes_main(sn), '*'))) |>
-    tab_source_note(source_note = md(notes_sig)) |>
-    tab_source_note(
-      source_note = md(paste0(
-        'Panel A: all matched students (N treated = ',
-        sum(matched$treated_in_year == 1),
-        '); students without NSC records coded as not enrolled. ',
-        'Panel B: NSC-matched students only (robustness check). ',
-        'Panel C: non-missing outcome subsample; sample size varies by outcome. ',
-        'Control means in Panel C are computed within the non-censored subsample.'
-      ))
-    ) |>
-    tab_options(
-      table.font.size = px(11),
-      heading.title.font.size = px(13),
-      heading.subtitle.font.size = px(11),
-      heading.align = 'left',
-      column_labels.font.weight = 'bold',
-      column_labels.border.top.color = 'black',
-      column_labels.border.top.width = px(2),
-      column_labels.border.bottom.color = 'black',
-      column_labels.border.bottom.width = px(1),
-      table_body.border.bottom.color = 'black',
-      table_body.border.bottom.width = px(2),
-      row_group.background.color = 'gray97',
-      row_group.border.top.color = 'black',
-      row_group.border.top.width = px(1),
-      table.border.top.color = 'white',
-      table.border.bottom.color = 'white',
-      source_notes.font.size = px(10),
-      data_row.padding = px(2)
-    )
+    cols_align(align = "left",   columns = label) |>
+    cols_align(align = "center", columns = -label) |>
+    tab_source_note(source_note = md(paste0(
+      "*Note.* SMD = standardized mean difference computed by cobalt::bal.tab(). ",
+      "|SMD| < 0.10 indicates adequate balance. Post-match means weighted by ",
+      "matching weights. Matching: nearest-neighbor with replacement, caliper = 0.5 SD, ",
+      "exact match on application year."
+    ))) |>
+    add_body_rules(n_rows) |>
+    eepa_options()
 }
-message('\n=== Building Table 2 ===')
-table_2 <- make_main_table(
-  results_all,
-  matched_all,
-  c(
-    'Table 2: Effects of the Hillman Summer Program on College Outcomes',
-    'All States - Propensity Score Matched Sample'
-  )
+
+display_vars_all <- c(
+  "gender", "gpa", "psat_math", "stipend", "house_size",
+  "racially_marginalized", "bi_multi_racial",
+  "urban", "suburban", "rural",
+  "disability", "neg_school", "us_citizen", "first_gen",
+  paste0("grade_", 9:12)
+)
+
+display_vars_pa <- c(
+  display_vars_all,
+  "school_enrollment", "school_pct_econ_disadvantaged",
+  "school_pct_english_learner", "school_pct_special_ed", "school_pct_white"
+)
+
+table_2 <- make_balance_table(
+  m_out_all, pre_all, matched_all, display_vars_all,
+  c("Table 2",
+    "Covariate Balance Before and After Matching — All States")
 )
 table_2
 
-message('\n=== Building Table 3 ===')
-table_3 <- make_main_table(
-  results_pa,
-  matched_pa,
-  c(
-    'Table 3: Effects of the Hillman Summer Program on College Outcomes',
-    'PA Public Schools - Propensity Score Matched Sample'
-  ),
-  sn = 'PA model additionally controls for school enrollment, % economically disadvantaged, % English learner, % special education, and % white.'
-)
-table_3
-
-# =============================================================================
-# FIGURES 1-3: SUBGROUP COEFFICIENT PLOTS
-# =============================================================================
-sg_cap <- paste0(
-  'Notes: Each row reports the ATT from a separate regression limited to that subgroup, ',
-  'including all baseline covariates and cohort fixed effects. ',
-  'Filled circles indicate p < 0.10; open circles indicate p >= 0.10. ',
-  'Horizontal bars are 95% confidence intervals. ',
-  'Standard errors clustered by matched subclass. ',
-  'Subgroups with fewer than 20 treated students suppressed.'
-)
-
-plot_coef <- function(
-  data,
-  outcome_var,
-  sample_filter,
-  title,
-  subtitle,
-  caption
-) {
-  df <- data |>
-    filter(outcome == outcome_var, !suppressed, sample == sample_filter) |>
-    mutate(
-      subgroup = factor(subgroup, levels = rev(sort(unique(subgroup)))),
-      sig = as.character(pval < 0.10),
-      xmin_plot = pmax(conf_lo_pp, -65),
-      xmax_plot = pmin(conf_hi_pp, 65)
-    )
-
-  x_lo <- floor(min(df$xmin_plot, na.rm = TRUE) / 10) * 10 - 5
-  x_hi <- ceiling(max(df$xmax_plot, na.rm = TRUE) / 10) * 10 + 5
-
-  ggplot(df, aes(x = att_pp, y = subgroup)) +
-    geom_vline(
-      xintercept = 0,
-      linetype = 'dashed',
-      color = 'gray50',
-      linewidth = 0.5
-    ) +
-    geom_errorbarh(
-      aes(xmin = xmin_plot, xmax = xmax_plot),
-      height = 0.2,
-      color = '#2c6e9e',
-      linewidth = 0.7
-    ) +
-    geom_point(aes(shape = sig, fill = sig), size = 3.5, color = '#2c6e9e') +
-    scale_shape_manual(values = c('FALSE' = 21, 'TRUE' = 19), guide = 'none') +
-    scale_fill_manual(
-      values = c('FALSE' = 'white', 'TRUE' = '#2c6e9e'),
-      guide = 'none'
-    ) +
-    scale_x_continuous(
-      limits = c(x_lo, x_hi),
-      breaks = scales::pretty_breaks(n = 5),
-      labels = function(x) paste0(ifelse(x > 0, '+', ''), round(x), ' pp'),
-      expand = expansion(mult = 0)
-    ) +
-    labs(
-      title = title,
-      subtitle = subtitle,
-      x = 'Treatment effect (percentage points)',
-      y = NULL,
-      caption = caption
-    ) +
-    theme_minimal(base_size = 12) +
-    theme(
-      plot.title = element_text(
-        face = 'bold',
-        size = 11,
-        margin = margin(b = 4)
-      ),
-      plot.subtitle = element_text(
-        color = 'gray40',
-        size = 9,
-        margin = margin(b = 8)
-      ),
-      plot.caption = element_text(
-        color = 'gray40',
-        size = 7.5,
-        hjust = 0,
-        margin = margin(t = 8),
-        lineheight = 1.3
-      ),
-      axis.text.y = element_text(size = 11),
-      axis.text.x = element_text(size = 9),
-      axis.title.x = element_text(size = 9),
-      panel.grid.minor = element_blank(),
-      panel.grid.major.y = element_blank(),
-      panel.grid.major.x = element_line(color = 'gray90'),
-      plot.margin = margin(10, 10, 10, 10)
-    )
-}
-
-sg_cap <- paste0(
-  'Notes: Each row reports the ATT from a separate regression limited to that subgroup, ',
-  'including all baseline covariates and cohort fixed effects. ',
-  'Filled circles indicate p < 0.10; open circles indicate p >= 0.10. ',
-  'Horizontal bars are 95% confidence intervals. ',
-  'Standard errors clustered by matched subclass. ',
-  'Subgroups with fewer than 20 treated students suppressed.'
-)
-
-message('\n=== Building Figures 1-3 ===')
-
-figure_1 <- plot_coef(
-  results_subgroup_all,
-  'seamless_enroll',
-  'full',
-  title = 'Figure 1: Subgroup Effects on Seamless College Enrollment',
-  subtitle = 'All States - ATT with 95% confidence intervals',
-  caption = sg_cap
-)
-figure_1
-
-figure_2 <- plot_coef(
-  results_subgroup_all,
-  'seamless_enroll_stem',
-  'full',
-  title = 'Figure 2: Subgroup Effects on Seamless STEM Enrollment',
-  subtitle = 'All States - ATT with 95% confidence intervals',
-  caption = sg_cap
-)
-figure_2
-
-figure_3 <- plot_coef(
-  results_subgroup_all,
-  'reten_fall_enter2',
-  'degree_eligible',
-  title = 'Figure 3: Subgroup Effects on Retention into 2nd Year',
-  subtitle = 'All States - ATT with 95% confidence intervals',
-  caption = sg_cap
-)
-figure_3
-
-# =============================================================================
-# FIGURE 4: GPA HETEROGENEITY
-# =============================================================================
-message('\n=== Building Figure 4: GPA Heterogeneity ===')
-
-gpa_fig_data <- results_gpa_het |>
-  filter(!is.na(att_pp)) |>
-  mutate(
-    gpa_bin = str_replace_all(gpa_bin, '\u2013', '-'),
-    subsample = factor(
-      subsample,
-      levels = c('All States', 'PA Public Schools')
-    ),
-    outcome_label = factor(
-      outcome_label,
-      levels = c('Seamless STEM Enrollment', 'Retained into 2nd Year')
-    ),
-    sig = as.character(pval < 0.10)
-  )
-
-gpa_levels <- c('3.0 - 3.4', '3.5 - 3.9', '4.0+')
-gpa_levels_present <- gpa_levels[gpa_levels %in% unique(gpa_fig_data$gpa_bin)]
-
-gpa_fig_data <- gpa_fig_data |>
-  mutate(
-    gpa_bin = factor(gpa_bin, levels = rev(gpa_levels_present)),
-    y_num = as.numeric(gpa_bin),
-    y_dodge = y_num + if_else(subsample == 'All States', 0.18, -0.18)
-  )
-
-y_breaks <- seq_along(gpa_levels_present)
-y_labels <- rev(gpa_levels_present)
-
-figure_4 <- ggplot(
-  gpa_fig_data,
-  aes(x = att_pp, y = y_dodge, color = subsample)
-) +
-  geom_vline(
-    xintercept = 0,
-    linetype = 'dashed',
-    color = 'gray50',
-    linewidth = 0.5
-  ) +
-  geom_errorbarh(
-    aes(xmin = conf_lo_pp, xmax = conf_hi_pp),
-    height = 0.15,
-    linewidth = 0.7
-  ) +
-  geom_point(aes(shape = sig, fill = interaction(subsample, sig)), size = 3.5) +
-  scale_color_manual(
-    values = c('All States' = '#2c6e9e', 'PA Public Schools' = '#e07b39'),
-    name = NULL
-  ) +
-  scale_shape_manual(values = c('FALSE' = 21, 'TRUE' = 19), guide = 'none') +
-  scale_fill_manual(
-    values = c(
-      'All States.FALSE' = 'white',
-      'All States.TRUE' = '#2c6e9e',
-      'PA Public Schools.FALSE' = 'white',
-      'PA Public Schools.TRUE' = '#e07b39'
-    ),
-    guide = 'none'
-  ) +
-  scale_x_continuous(
-    breaks = scales::pretty_breaks(n = 5),
-    labels = function(x) paste0(ifelse(x > 0, '+', ''), round(x), ' pp'),
-    expand = expansion(mult = 0.2)
-  ) +
-  scale_y_continuous(
-    breaks = y_breaks,
-    labels = y_labels,
-    expand = expansion(add = 0.6)
-  ) +
-  facet_wrap(~outcome_label, ncol = 2, scales = 'free_x') +
-  labs(
-    title = 'Figure 4: Heterogeneous Treatment Effects by High School GPA',
-    subtitle = 'ATT with 95% confidence intervals - All States vs. PA Public Schools',
-    x = 'Treatment effect (percentage points)',
-    y = 'High School GPA',
-    caption = paste0(
-      'Notes: Each point reports the ATT from a separate regression limited to students ',
-      'in that GPA bin, including all baseline covariates and cohort fixed effects. ',
-      'Filled circles indicate p < 0.10; open circles p >= 0.10. ',
-      'PA 4.0+ bin suppressed (fewer than 20 treated). ',
-      'Standard errors clustered by matched subclass where identified; HC3 otherwise. ',
-      'Points dodged vertically for legibility.'
-    )
-  ) +
-  theme_minimal(base_size = 12) +
-  theme(
-    plot.title = element_text(face = 'bold', size = 11, margin = margin(b = 4)),
-    plot.subtitle = element_text(
-      color = 'gray40',
-      size = 9,
-      margin = margin(b = 8)
-    ),
-    plot.caption = element_text(
-      color = 'gray40',
-      size = 7.5,
-      hjust = 0,
-      margin = margin(t = 8),
-      lineheight = 1.3
-    ),
-    legend.position = 'bottom',
-    legend.text = element_text(size = 10),
-    axis.text = element_text(size = 10),
-    axis.title.x = element_text(size = 9),
-    axis.title.y = element_text(size = 9),
-    panel.grid.minor = element_blank(),
-    panel.grid.major.y = element_blank(),
-    panel.grid.major.x = element_line(color = 'gray90'),
-    strip.text = element_text(face = 'bold', size = 10),
-    strip.background = element_rect(fill = 'gray95', color = NA),
-    plot.margin = margin(10, 10, 10, 10)
-  )
-figure_4
-
-# =============================================================================
-# APPENDIX TABLE A1: BALANCE (PA)
-# =============================================================================
-message('\n=== Building Appendix Table A1: Balance (PA) ===')
-
-pa_bal_vars <- c(
-  bal_vars,
-  'school_enrollment',
-  'school_pct_econ_disadvantaged',
-  'school_pct_english_learner',
-  'school_pct_special_ed',
-  'school_pct_white'
-)
-pa_bal_labels <- c(
-  bal_labels,
-  school_enrollment = 'School Enrollment',
-  school_pct_econ_disadvantaged = 'School % Economically Disadvantaged',
-  school_pct_english_learner = 'School % English Learner',
-  school_pct_special_ed = 'School % Special Education',
-  school_pct_white = 'School % White'
-)
 appendix_a1 <- make_balance_table(
-  matching_data_pa,
-  matched_data_pa,
-  m.out_pa,
-  pa_bal_vars,
-  pa_bal_labels,
-  c(
-    'Appendix Table A1: Analytic Sample and Matching Balance',
-    'PA Public Schools - Propensity Score Matched Sample'
-  )
+  m_out_pa, pre_pa, matched_pa, display_vars_pa,
+  c("Appendix Table A1",
+    "Covariate Balance Before and After Matching — PA Public Schools")
 )
 appendix_a1
 
 # =============================================================================
-# APPENDIX TABLE A2: SAMPLE SIZES BY COHORT
+# 5. TABLE 3 / TABLE 4 — MAIN ATT RESULTS
 # =============================================================================
-message('\n=== Building Appendix Table A2: Sample Sizes by Cohort ===')
+# Three panels: A (ITT enrollment, incl. STEM), B (institution at entry),
+# C (persistence + degree, incl. STEM). 9 outcomes total. ATT reported as
+# proportions.
+
+message("\n=== Table 3: ATT All States ===")
+message("\n=== Table 4: ATT PA ===")
+
+make_att_table <- function(results, matched, title_subtitle, pa_note = NULL) {
+  tbl <- results |>
+    mutate(
+      att_fmt  = paste0(sprintf("%.3f", att), sig_stars(pval)),
+      se_fmt   = paste0("(", sprintf("%.3f", se), ")"),
+      ci_fmt   = paste0("[", sprintf("%.3f", conf_lo), ", ",
+                         sprintf("%.3f", conf_hi), "]"),
+      pval_fmt = fmt_pval(pval),
+      ctrl_fmt = sprintf("%.3f", ctrl_mean),
+      trt_fmt  = sprintf("%.3f", trt_mean)
+    )
+
+  panel_labels <- c(
+    A = "**Panel A: Enrollment Outcomes** *(NSC-matched students)*",
+    B = "**Panel B: Institution at Entry** *(NSC-matched students)*",
+    C = "**Panel C: Persistence and Degree Outcomes** *(NSC-matched and enrolled students)*"
+  )
+
+  n_rows   <- nrow(tbl)
+  n_trt    <- sum(matched$treated_in_year == 1)
+  n_ctrl   <- sum(matched$treated_in_year == 0)
+
+  gt_tbl <- tbl |>
+    select(panel, label, n_obs, n_treated, ctrl_fmt, trt_fmt,
+           att_fmt, se_fmt, ci_fmt, pval_fmt) |>
+    gt(rowname_col = "label") |>
+    tab_header(
+      title    = md(paste0("**", title_subtitle[1], "**")),
+      subtitle = title_subtitle[2]
+    )
+
+  for (p in rev(c("A", "B", "C"))) {
+    gt_tbl <- gt_tbl |>
+      tab_row_group(
+        label = md(panel_labels[p]),
+        rows  = panel == p
+      )
+  }
+
+  gt_tbl <- gt_tbl |>
+    cols_hide(panel) |>
+    cols_label(
+      n_obs     = "*N*",
+      n_treated = "Treated",
+      ctrl_fmt  = "Control",
+      trt_fmt   = "Treated",
+      att_fmt   = "ATT",
+      se_fmt    = "(*SE*)",
+      ci_fmt    = "95% CI",
+      pval_fmt  = "*p*"
+    ) |>
+    tab_spanner(label = "Sample Size",    columns = c(n_obs, n_treated)) |>
+    tab_spanner(label = "Mean Outcome",   columns = c(ctrl_fmt, trt_fmt)) |>
+    tab_spanner(label = "Treatment Effect", columns = c(att_fmt, se_fmt, ci_fmt, pval_fmt)) |>
+    cols_align(align = "left",   columns = label) |>
+    cols_align(align = "center", columns = -label) |>
+    tab_style(
+      style     = cell_text(style = "italic"),
+      locations = cells_row_groups()
+    ) |>
+    tab_source_note(source_note = md(paste0(
+      "*Note.* ATT = average treatment effect on the treated estimated via a ",
+      "linear probability model (LPM) with matching weights and cohort fixed effects. ",
+      "Standard errors (in parentheses) are HC2 heteroskedasticity-robust (HC1 fallback ",
+      "if HC2 is undefined due to leverage = 1). ",
+      "All outcomes are binary (0/1); ATT and means are proportions. ",
+      "95% CIs in brackets. ",
+      if (!is.null(pa_note)) paste0(pa_note, " ") else "",
+      "Matched sample: N treated = ", n_trt, ", N control = ", n_ctrl, "."
+    ))) |>
+    tab_source_note(source_note = md(
+      "\\*p < .05. \\*\\*p < .01. \\*\\*\\*p < .001."
+    )) |>
+    tab_source_note(source_note = md(paste0(
+      "Analytic sample is restricted to HS graduating cohorts 2018–2021. The 2022 ",
+      "and 2023 cohorts are excluded because the NSC query that produced the ",
+      "outcome data has incomplete (2022) or no (2023) enrollment coverage. ",
+      "All panels condition on has_nsc_record = 1 (the student appears in the NSC ",
+      "query). Students not appearing in NSC went to college per Hillman's program ",
+      "records but their institutions do not report to NSC, so enrollment cannot ",
+      "be reliably inferred for them. ",
+      "Panel C additionally conditions on enroll_ever = 1 (NSC-recorded enrollment). ",
+      "Bachelor's window reflects Danielle's NSC loop range (0/6 inclusive of ",
+      "year 0): deg_bach_6y captures any bachelor's earned within 7 years of HS ",
+      "graduation. Degree outcomes are right-censored for cohorts younger than ",
+      "the full window."
+    ))) |>
+    add_body_rules(n_rows) |>
+    eepa_options()
+
+  gt_tbl
+}
+
+table_3 <- make_att_table(
+  results_all, matched_all,
+  c("Table 3",
+    "Effects of the Hillman Summer Program on College Outcomes — All States")
+)
+table_3
+
+table_4 <- make_att_table(
+  results_pa, matched_pa,
+  c("Table 4",
+    "Effects of the Hillman Summer Program on College Outcomes — PA Public Schools"),
+  pa_note = "PA model additionally controls for school enrollment, % economically disadvantaged, % English learner, % special education, and % white."
+)
+table_4
+
+# =============================================================================
+# 6. APPENDIX TABLE A2 — SAMPLE SIZES BY COHORT
+# =============================================================================
+
+message("\n=== Appendix A2: Sample Sizes by Cohort ===")
 
 make_cohort_table <- function(pre_all, pre_pa, matched_all, matched_pa) {
   sc <- function(pre, matched, label) {
     pre |>
       group_by(year) |>
       summarise(
-        pre_trt = sum(treated_in_year == 1),
+        pre_trt  = sum(treated_in_year == 1),
         pre_ctrl = sum(treated_in_year == 0),
-        .groups = 'drop'
+        .groups = "drop"
       ) |>
       left_join(
         matched |>
           group_by(year) |>
           summarise(
-            post_trt = sum(treated_in_year == 1),
+            post_trt  = sum(treated_in_year == 1),
             post_ctrl = sum(treated_in_year == 0),
-            .groups = 'drop'
+            .groups = "drop"
           ),
-        by = 'year'
+        by = "year"
       ) |>
       mutate(sample = label, year = as.character(year))
   }
-  tbl_all <- sc(pre_all, matched_all, 'All States')
-  tbl_pa <- sc(pre_pa, matched_pa, 'PA Public Schools')
+
+  tbl_all <- sc(pre_all, matched_all, "All States")
+  tbl_pa  <- sc(pre_pa,  matched_pa,  "PA Public Schools")
+
   totals <- bind_rows(tbl_all, tbl_pa) |>
     group_by(sample) |>
     summarise(
-      year = 'Total',
+      year = "Total",
       across(c(pre_trt, pre_ctrl, post_trt, post_ctrl), sum),
-      .groups = 'drop'
+      .groups = "drop"
     )
+
   tbl <- bind_rows(tbl_all, tbl_pa, totals) |>
-    mutate(
-      # 2020 excluded (COVID), 2022 excluded (insufficient NSC follow-up),
-      # 2023 excluded (no outcome data yet)
-      year = factor(year, levels = c('2017', '2018', '2019', '2021', 'Total'))
-    )
+    mutate(year = factor(year, levels = c("2017", "2018", "2019", "2021", "2023", "Total")))
+
   n_rows <- nrow(tbl)
+
   tbl |>
-    gt(rowname_col = 'year', groupname_col = 'sample') |>
+    gt(rowname_col = "year", groupname_col = "sample") |>
     tab_header(
-      title = md('**Appendix Table A2: Sample Sizes by Application Cohort**'),
-      subtitle = 'Before and after propensity score matching, by sample'
+      title    = md("**Appendix Table A2**"),
+      subtitle = "Sample Sizes Before and After Propensity Score Matching, by Cohort"
     ) |>
-    tab_spanner(label = 'Before Matching', columns = c(pre_trt, pre_ctrl)) |>
-    tab_spanner(label = 'After Matching', columns = c(post_trt, post_ctrl)) |>
+    tab_spanner(label = "Before Matching", columns = c(pre_trt,  pre_ctrl)) |>
+    tab_spanner(label = "After Matching",  columns = c(post_trt, post_ctrl)) |>
     cols_label(
-      pre_trt = 'Treated',
-      pre_ctrl = 'Control',
-      post_trt = 'Treated',
-      post_ctrl = 'Control'
+      pre_trt   = "Treated",
+      pre_ctrl  = "Control",
+      post_trt  = "Treated",
+      post_ctrl = "Control"
     ) |>
     tab_style(
-      style = cell_text(weight = 'bold'),
-      locations = cells_body(rows = year == 'Total')
+      style     = cell_text(weight = "bold"),
+      locations = cells_body(rows = year == "Total")
     ) |>
     tab_style(
-      style = cell_borders(sides = 'top', color = 'black', weight = px(1.5)),
-      locations = cells_body(rows = year == 'Total')
+      style     = cell_borders(sides = "top", color = "black", weight = px(1.5)),
+      locations = cells_body(rows = year == "Total")
     ) |>
-    tab_source_note(
-      source_note = md(paste0(
-        '*Notes:* Before-matching counts exclude year 2020 (COVID), year 2022 ',
-        '(insufficient follow-up), confirmed non-citizens, and students treated before 2017. ',
-        'After-matching counts are unique matched units; with replacement matching, ',
-        'the effective sample size of controls is lower than shown.'
-      ))
+    tab_style(
+      style     = cell_text(style = "italic"),
+      locations = cells_row_groups()
     ) |>
-    cols_align(align = 'center', columns = everything()) |>
-    style_gt(n_rows)
+    cols_align(align = "center", columns = everything()) |>
+    cols_align(align = "left",   columns = year) |>
+    tab_source_note(source_note = md(paste0(
+      "*Note.* Before-matching counts exclude year 2022 (insufficient NSC follow-up), ",
+      "confirmed non-citizens, and students treated before 2017. Year 2023 excluded from ",
+      "PA matching (only 1 treated student). After-matching counts are unique matched units; ",
+      "with-replacement matching yields an effective sample size of controls lower than shown."
+    ))) |>
+    add_body_rules(n_rows) |>
+    eepa_options()
 }
 
-appendix_a2 <- make_cohort_table(
-  matching_data_all,
-  matching_data_pa,
-  matched_data_all,
-  matched_data_pa
-)
+appendix_a2 <- make_cohort_table(pre_all, pre_pa, matched_all, matched_pa)
 appendix_a2
 
 # =============================================================================
-# SAVE ALL
+# 7. FIGURE 1 — LOVE PLOT (All States)
 # =============================================================================
-message('\n=== Saving Tables ===')
-tbl_names <- list(
-  table_1 = 'table_1_balance',
-  table_2 = 'table_2_att_all_states',
-  table_3 = 'table_3_att_pa',
-  appendix_a1 = 'appendix_table_a1_balance_pa',
-  appendix_a2 = 'appendix_table_a2_sample_by_cohort'
-)
-for (nm in names(tbl_names)) {
-  gtsave(get(nm), here('output', 'tables', paste0(tbl_names[[nm]], '.html')))
-  gtsave(get(nm), here('output', 'tables', paste0(tbl_names[[nm]], '.tex')))
+# SMD before and after matching for each covariate. EEPA-friendly:
+# black-and-white friendly, minimal grid, reference line at 0 and ±0.10.
+
+message("\n=== Figure 1: Love Plot ===")
+
+make_love_plot <- function(m_out, display_vars, var_labels, title) {
+  bal_wide <- bal.tab(m_out, un = TRUE)$Balance |>
+    tibble::rownames_to_column("variable") |>
+    filter(variable %in% display_vars) |>
+    select(variable, smd_before = Diff.Un, smd_after = Diff.Adj) |>
+    mutate(label = coalesce(var_labels[variable], variable)) |>
+    # Sort by pre-match |SMD| descending (standard Love plot convention)
+    arrange(abs(smd_before)) |>
+    mutate(label = factor(label, levels = unique(label)))
+
+  x_lim <- max(abs(c(bal_wide$smd_before, bal_wide$smd_after)), na.rm = TRUE) * 1.15
+  x_lim <- max(x_lim, 0.15)   # always show the ±0.10 threshold lines
+
+  bal <- bal_wide |>
+    pivot_longer(c(smd_before, smd_after), names_to = "timing", values_to = "smd") |>
+    mutate(
+      timing = factor(timing,
+                      levels = c("smd_before", "smd_after"),
+                      labels = c("Before matching", "After matching"))
+    )
+
+  ggplot(bal, aes(x = smd, y = label, shape = timing, color = timing)) +
+    geom_vline(xintercept = 0,     linetype = "solid",  color = "gray80", linewidth = 0.4) +
+    geom_vline(xintercept =  0.10, linetype = "dashed", color = "gray60", linewidth = 0.4) +
+    geom_vline(xintercept = -0.10, linetype = "dashed", color = "gray60", linewidth = 0.4) +
+    geom_point(size = 2.5, stroke = 0.8) +
+    scale_color_manual(
+      values = c("Before matching" = "gray50", "After matching" = "black"),
+      name   = NULL
+    ) +
+    scale_shape_manual(
+      values = c("Before matching" = 1, "After matching" = 16),
+      name   = NULL
+    ) +
+    scale_x_continuous(
+      limits = c(-x_lim, x_lim),
+      breaks = pretty_breaks(n = 6),
+      labels = function(x) sprintf("%.2f", x)
+    ) +
+    labs(
+      title   = title,
+      x       = "Standardized Mean Difference",
+      y       = NULL,
+      caption = paste0(
+        "Note. Dashed lines at ±0.10 mark the conventional balance threshold. ",
+        "Open circles = before matching; filled circles = after matching."
+      )
+    ) +
+    theme_minimal(base_size = 11) +
+    theme(
+      plot.title      = element_text(face = "bold", size = 11, margin = margin(b = 6)),
+      plot.caption    = element_text(color = "gray40", size = 8, hjust = 0,
+                                     margin = margin(t = 8), lineheight = 1.3),
+      axis.text.y     = element_text(size = 9),
+      axis.text.x     = element_text(size = 9),
+      axis.title.x    = element_text(size = 9),
+      legend.position = "bottom",
+      legend.text     = element_text(size = 9),
+      panel.grid.minor   = element_blank(),
+      panel.grid.major.y = element_blank(),
+      panel.grid.major.x = element_line(color = "gray92"),
+      plot.margin = margin(10, 15, 10, 10)
+    )
 }
-message('Saved all tables.')
-message('\n=== Saving Figures ===')
-figs <- list(
-  figure_1_subgroup_enrollment = figure_1,
-  figure_2_subgroup_stem = figure_2,
-  figure_3_subgroup_retention = figure_3,
-  figure_4_gpa_heterogeneity = figure_4
+
+figure_1 <- make_love_plot(
+  m_out_all, display_vars_all, bal_labels,
+  "Figure 1. Covariate Balance Before and After Propensity Score Matching — All States"
 )
-dims <- list(c(7, 4.5), c(7, 4.5), c(7, 4.5), c(8, 5.5))
-for (i in seq_along(figs)) {
-  nm <- names(figs)[i]
-  fig <- figs[[i]]
-  d <- dims[[i]]
-  ggsave(
-    here('output', 'figures', paste0(nm, '.pdf')),
-    fig,
-    width = d[1],
-    height = d[2],
-    dpi = 300
-  )
-  ggsave(
-    here('output', 'figures', paste0(nm, '.png')),
-    fig,
-    width = d[1],
-    height = d[2],
-    dpi = 300
-  )
+figure_1
+
+# =============================================================================
+# 8. FIGURE 2 — SUBGROUP COEFFICIENT PLOTS
+# =============================================================================
+# Two panels: seamless enrollment (ITT) and seamless STEM enrollment (ITT).
+# Subgroup estimates from results_sg_all; suppressed subgroups excluded.
+# ATT plotted in percentage points for readability.
+
+message("\n=== Figure 2: Subgroup Effects ===")
+
+sg_order <- c(
+  "Stipend Eligible",
+  "Racially Marginalized",
+  "Urban",
+  "Suburban"
+)
+
+make_subgroup_plot <- function(results_sg, outcomes, outcome_labels_map,
+                               sample_filter, title, caption) {
+  df <- results_sg |>
+    filter(outcome %in% outcomes, !suppressed, sample == sample_filter) |>
+    mutate(
+      att_pp    = att * 100,
+      lo_pp     = conf_lo * 100,
+      hi_pp     = conf_hi * 100,
+      sig       = pval < 0.05,
+      out_label = outcome_labels_map[outcome],
+      out_label = factor(out_label, levels = outcome_labels_map),
+      subgroup  = factor(subgroup, levels = rev(sg_order))
+    ) |>
+    filter(!is.na(subgroup))
+
+  ggplot(df, aes(x = att_pp, y = subgroup)) +
+    geom_vline(xintercept = 0, linetype = "dashed",
+               color = "gray50", linewidth = 0.5) +
+    geom_errorbarh(
+      aes(xmin = lo_pp, xmax = hi_pp),
+      height = 0.2, color = "gray30", linewidth = 0.7
+    ) +
+    geom_point(aes(shape = sig, fill = sig), size = 3, color = "black") +
+    scale_shape_manual(values = c(`TRUE` = 21, `FALSE` = 21), guide = "none") +
+    scale_fill_manual(
+      values = c(`TRUE` = "black", `FALSE` = "white"), guide = "none"
+    ) +
+    facet_wrap(~ out_label, ncol = 2) +
+    scale_x_continuous(
+      labels = function(x) paste0(ifelse(x > 0, "+", ""), round(x, 1), " pp"),
+      breaks = scales::pretty_breaks(n = 5)
+    ) +
+    labs(
+      title    = title,
+      x        = "Treatment effect (percentage points)",
+      y        = NULL,
+      caption  = caption
+    ) +
+    theme_minimal(base_size = 11) +
+    theme(
+      plot.title       = element_text(face = "bold", size = 11, margin = margin(b = 4)),
+      plot.caption     = element_text(color = "gray40", size = 8, hjust = 0,
+                                      margin = margin(t = 8), lineheight = 1.3),
+      axis.text.y      = element_text(size = 10),
+      axis.text.x      = element_text(size = 9),
+      axis.title.x     = element_text(size = 9),
+      strip.text       = element_text(face = "bold", size = 10),
+      strip.background = element_rect(fill = "gray95", color = NA),
+      panel.grid.minor   = element_blank(),
+      panel.grid.major.y = element_blank(),
+      panel.grid.major.x = element_line(color = "gray92"),
+      plot.margin = margin(10, 10, 10, 10)
+    )
 }
-message('Saved all figures.')
-message('\n=== All tables and figures complete ===')
+
+sg_outcomes <- c("enroll_seamless", "enroll_seamless_stem")
+sg_out_labels <- c(
+  enroll_seamless      = "Seamless Enrollment",
+  enroll_seamless_stem = "Seamless STEM Enrollment"
+)
+
+figure_2 <- make_subgroup_plot(
+  results_sg_all,
+  sg_outcomes,
+  sg_out_labels,
+  sample_filter = "nsc_matched",
+  title   = "Figure 2. Subgroup Treatment Effects on Enrollment — All States",
+  caption = paste0(
+    "Note. Each row reports the ATT from a separate LPM limited to that subgroup, ",
+    "including all baseline covariates and cohort fixed effects. ",
+    "Filled circles = p < .05; open circles = p ≥ .05. ",
+    "Bars are 95% confidence intervals (HC2 SEs). ",
+    "Subgroups with fewer than 20 treated students are suppressed."
+  )
+)
+figure_2
+
+# =============================================================================
+# 9. SAVE ALL TABLES AND FIGURES
+# =============================================================================
+
+message("\n=== Saving tables ===")
+
+tbl_list <- list(
+  table_1_descriptive         = table_1,
+  table_2_balance_all_states  = table_2,
+  table_3_att_all_states      = table_3,
+  table_4_att_pa              = table_4,
+  appendix_a1_balance_pa      = appendix_a1,
+  appendix_a2_sample_sizes    = appendix_a2
+)
+
+for (nm in names(tbl_list)) {
+  gtsave(tbl_list[[nm]], here("output", "tables", paste0(nm, ".html")))
+  message("  Saved: ", nm, ".html")
+}
+
+message("\n=== Saving figures ===")
+
+ggsave(
+  here("output", "figures", "figure_1_love_plot.png"),
+  figure_1, width = 7, height = 6, dpi = 300
+)
+message("  Saved: figure_1_love_plot.png")
+
+ggsave(
+  here("output", "figures", "figure_2_subgroup_effects.png"),
+  figure_2, width = 9, height = 5, dpi = 300
+)
+message("  Saved: figure_2_subgroup_effects.png")
+
+message("\n=== All tables and figures complete ===")

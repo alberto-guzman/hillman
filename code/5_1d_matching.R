@@ -5,29 +5,33 @@
 #            1. All states (merged_df_all)
 #            2. PA public schools (merged_df_pa) — adds school-level covariates
 #
-# Method:  Nearest-neighbor matching with replacement (caliper = 0.5 SD),
+# Method:  Nearest-neighbor matching with replacement (caliper = 0.25 SD),
 #          logistic propensity score, exact match on application year.
-#          Missing covariates are mean-imputed; missing indicators are added.
+#          Missing covariates are imputed to 0; missing indicators are added.
 #
 # Input:   `merged_df_all` — all-states cleaned dataset (from script 4)
 #          `merged_df_pa`  — PA public school dataset (from script 4)
 # Output:  data/matched/matched_all_states_year_only.rds
 #          data/matched/matched_pa_year_only.rds
-#          output/balance_table_all_states.html/.tex
-#          output/balance_table_pa.html/.tex
+#          data/matched/matchit_object_all_states.rds
+#          data/matched/matchit_object_pa.rds
+#          data/matched/matching_data_all_states.rds
+#          data/matched/matching_data_pa.rds
 # =============================================================================
 
 library(dplyr)
+library(tidyr)
 library(MatchIt)
 library(cobalt)
-library(gt)
 library(here)
 
 # =============================================================================
-# SHARED COVARIATES
+# COVARIATES
 # =============================================================================
-# Base covariates used in both samples. The PA model adds school-level
-# covariates on top of these.
+# `base_covariates` are shared by both samples. The all-states PS adds
+# `pa_state` (selection into Hillman is geographically concentrated in PA);
+# the PA PS adds school-level covariates instead. `pa_state` would be a
+# constant in the PA sample so it's excluded there.
 # house_size included as SES proxy alongside stipend.
 # gender cast to integer here — sourced as dbl from applicant clean script.
 
@@ -48,6 +52,8 @@ base_covariates <- c(
   "first_gen"
 )
 
+all_states_extra_covariates <- c("pa_state")
+
 pa_extra_covariates <- c(
   "school_enrollment",
   "school_pct_econ_disadvantaged",
@@ -57,128 +63,9 @@ pa_extra_covariates <- c(
   # school_title_i excluded — high collinearity with school_pct_econ_disadvantaged
 )
 
-# Display names for balance tables — derived from covariate vectors so
-# adding a covariate to base_covariates automatically appears in the table.
-display_covars_all <- c(base_covariates, paste0("grade_", 9:12))
-display_covars_pa  <- c(display_covars_all, pa_extra_covariates)
-
-# =============================================================================
-# HELPER: BUILD BALANCE TABLE (gt)
-# =============================================================================
-# Compares covariate means before and after matching. Reports standardized
-# mean differences (SMD) for each covariate. Sample sizes (N treated / N
-# control) before and after matching are included in the table header.
-
-build_balance_gt <- function(
-  m.out,
-  display_covars,
-  title_subtitle
-) {
-  bal <- bal.tab(
-    m.out,
-    un = TRUE,
-    disp = c("means", "sds"),
-    thresholds = c(m = 0.1)
-  )$Balance
-
-  bal <- bal |>
-    tibble::rownames_to_column("covariate") |>
-    filter(covariate %in% display_covars) |>
-    select(
-      covariate,
-      mean_un_control = M.0.Un,
-      mean_un_treated = M.1.Un,
-      smd_before = Diff.Un,
-      mean_adj_control = M.0.Adj,
-      mean_adj_treated = M.1.Adj,
-      smd_after = Diff.Adj
-    ) |>
-    mutate(across(where(is.numeric), ~ round(.x, 3)))
-
-  # sample sizes before and after matching
-  md_pre <- m.out$model$data
-  md_post <- match.data(m.out)
-
-  n_pre_treated <- sum(md_pre$treated_in_year == 1, na.rm = TRUE)
-  n_pre_control <- sum(md_pre$treated_in_year == 0, na.rm = TRUE)
-  n_post_treated <- sum(md_post$treated_in_year == 1, na.rm = TRUE)
-  n_post_control <- sum(md_post$treated_in_year == 0, na.rm = TRUE)
-
-  n_note <- paste0(
-    "Before matching: N treated = ",
-    n_pre_treated,
-    ", N control = ",
-    n_pre_control,
-    " | After matching: N treated = ",
-    n_post_treated,
-    ", N control = ",
-    n_post_control
-  )
-
-  n_rows <- nrow(bal)
-
-  bal |>
-    gt(rowname_col = "covariate") |>
-    tab_header(
-      title = md(paste0("**", title_subtitle[1], "**")),
-      subtitle = title_subtitle[2]
-    ) |>
-    tab_spanner(
-      label = "Before Matching",
-      columns = c(mean_un_control, mean_un_treated, smd_before)
-    ) |>
-    tab_spanner(
-      label = "After Matching",
-      columns = c(mean_adj_control, mean_adj_treated, smd_after)
-    ) |>
-    cols_label(
-      mean_un_treated = "Treated",
-      mean_un_control = "Control",
-      smd_before = "SMD",
-      mean_adj_treated = "Treated",
-      mean_adj_control = "Control",
-      smd_after = "SMD"
-    ) |>
-    cols_align(align = "center", columns = everything()) |>
-    cols_align(align = "left", columns = "covariate") |>
-    tab_style(
-      style = cell_text(weight = "bold"),
-      locations = cells_body(rows = n_rows)
-    ) |>
-    tab_style(
-      style = cell_borders(sides = "top", color = "black", weight = px(2)),
-      locations = cells_body(rows = 1)
-    ) |>
-    tab_style(
-      style = cell_borders(sides = "bottom", color = "black", weight = px(2)),
-      locations = cells_body(rows = n_rows)
-    ) |>
-    tab_source_note(source_note = md(n_note)) |>
-    tab_source_note(
-      source_note = md(paste0(
-        "*Notes:* SMD = standardized mean difference. ",
-        "Matching: nearest-neighbor with replacement, caliper = 0.5 SD, ",
-        "exact match on application year."
-      ))
-    ) |>
-    tab_options(
-      table.font.size = px(11),
-      heading.title.font.size = px(13),
-      heading.subtitle.font.size = px(11),
-      heading.align = "left",
-      column_labels.font.weight = "bold",
-      column_labels.border.top.color = "black",
-      column_labels.border.top.width = px(2),
-      column_labels.border.bottom.color = "black",
-      column_labels.border.bottom.width = px(1),
-      table_body.border.bottom.color = "black",
-      table_body.border.bottom.width = px(2),
-      table.border.top.color = "white",
-      table.border.bottom.color = "white",
-      source_notes.font.size = px(10),
-      data_row.padding = px(3)
-    )
-}
+# Per-sample full covariate vectors used by the PS model and balance tables.
+all_states_covariates <- c(base_covariates, all_states_extra_covariates)
+pa_covariates         <- c(base_covariates, pa_extra_covariates)
 
 # =============================================================================
 # HELPER: PREPARE MATCHING DATA
@@ -190,9 +77,9 @@ build_balance_gt <- function(
 #   - treated_before_2017 == 1: would contaminate control group
 #   - us_citizen == 0 (confirmed non-citizen): NA citizenship retained and
 #     handled via us_citizen_miss in the PS model
-#   - year == 2022: excluded because reten_1y/pers_1y are all NA for this
-#     cohort (no fall 2023 follow-up in NSC file). Keeps analytic sample
-#     consistent with outcome availability.
+#   - year == 2022: redundant under script 3b's hs_grad_year ≤ 2021 cap
+#     (a 2022 applicant graduates ≥ 2022 and is already filtered upstream);
+#     kept defensively here in case the upstream cap is loosened.
 #   - missing treated_in_year: data anomaly
 
 prepare_matching_data <- function(data, covariates, exclude_years = NULL) {
@@ -202,7 +89,11 @@ prepare_matching_data <- function(data, covariates, exclude_years = NULL) {
       grade_9 = if_else(grade == 9, 1L, 0L),
       grade_10 = if_else(grade == 10, 1L, 0L),
       grade_11 = if_else(grade == 11, 1L, 0L),
-      grade_12 = if_else(grade == 12, 1L, 0L)
+      grade_12 = if_else(grade == 12, 1L, 0L),
+      # PA-residence indicator — selection into Hillman is geographically
+      # concentrated in PA. Only used in the all-states PS model; constant
+      # within the PA sample so excluded from pa_covariates.
+      pa_state = if_else(state == "pennsylvania", 1L, 0L, missing = NA_integer_)
     )
 
   data <- data |>
@@ -229,15 +120,43 @@ prepare_matching_data <- function(data, covariates, exclude_years = NULL) {
 # =============================================================================
 # HELPER: RUN MATCHING
 # =============================================================================
+# A _miss indicator is included in the PS formula whenever the underlying
+# covariate has any missingness in the matching sample. Indicators with 0%
+# missingness are dropped because an all-zero column is collinear with the
+# intercept and adds no information.
 
 run_matching <- function(data, covariates) {
-  miss_vars <- paste0(covariates, "_miss")
+  miss_counts <- vapply(
+    paste0(covariates, "_miss"),
+    function(v) sum(data[[v]]),
+    integer(1)
+  )
+  miss_vars <- paste0(covariates[miss_counts > 0], "_miss")
+
+  # grade_11 (modal grade, ~60% of pool) is the reference category — including
+  # all four grade dummies plus the implicit intercept makes the design matrix
+  # rank-deficient and glm() drops one arbitrarily.
+  message(
+    "  PS model: ",
+    length(covariates) + length(miss_vars) + 3,
+    " terms (3 grade dummies + ",
+    length(covariates),
+    " covars + ",
+    length(miss_vars),
+    " _miss)"
+  )
+  if (length(miss_vars) < length(covariates)) {
+    dropped <- setdiff(paste0(covariates, "_miss"), miss_vars)
+    message(
+      "  Dropped _miss indicators (no missingness): ",
+      paste(sub("_miss$", "", dropped), collapse = ", ")
+    )
+  }
 
   ps_formula <- reformulate(
     termlabels = c(
       "grade_9",
       "grade_10",
-      "grade_11",
       "grade_12",
       covariates,
       miss_vars
@@ -251,9 +170,46 @@ run_matching <- function(data, covariates) {
     method = "nearest",
     exact = ~year,
     distance = "glm",
-    caliper = 0.5,          # 0.5 pooled SDs of the propensity score
+    caliper = 0.25,         # 0.25 pooled SDs of the propensity score
+                            # (Austin 2011, Stuart 2010 standard)
     caliper.d = "pooled SD",
     replace = TRUE
+  )
+}
+
+# =============================================================================
+# HELPER: COMMON-SUPPORT DIAGNOSTIC
+# =============================================================================
+# Reports the propensity score distribution by treatment status and any units
+# that fall outside the overlap region. Reviewers expect this for any PSM paper.
+
+report_common_support <- function(m_out, sample_label) {
+  ps <- m_out$distance
+  trt <- m_out$treat == 1
+
+  ps_t <- ps[trt]
+  ps_c <- ps[!trt]
+
+  message(
+    "\n  Common support (", sample_label, "):",
+    "\n    Treated PS range:  [", sprintf("%.3f, %.3f", min(ps_t), max(ps_t)), "]",
+    "\n    Control PS range:  [", sprintf("%.3f, %.3f", min(ps_c), max(ps_c)), "]",
+    "\n    Treated below min(control PS): ", sum(ps_t < min(ps_c)),
+    "\n    Treated above max(control PS): ", sum(ps_t > max(ps_c)),
+    "\n    Control below min(treated PS): ", sum(ps_c < min(ps_t)),
+    "\n    Control above max(treated PS): ", sum(ps_c > max(ps_t))
+  )
+
+  # m_out$caliper stores the absolute caliper width (caliper * sd(ps) already
+  # applied). Recover the standardized value as caliper_abs / sd(ps).
+  caliper_abs <- as.numeric(m_out$caliper)
+  caliper_std <- caliper_abs / sd(ps)
+  message(
+    "    Caliper (", sprintf("%.2f", caliper_std), " SD = ",
+    sprintf("%.3f", caliper_abs),
+    " on PS scale) eliminated ",
+    sum(m_out$weights == 0 & trt),
+    " treated unit(s)"
   )
 }
 
@@ -263,7 +219,12 @@ run_matching <- function(data, covariates) {
 
 message("\n=== ALL-STATES MATCHING ===\n")
 
-matching_data_all <- prepare_matching_data(merged_df_all, base_covariates)
+# Reproducibility: nearest-neighbor matching with replacement is mostly
+# deterministic, but ties in propensity score are broken by row order. A seed
+# locks the matched set against any future upstream reordering.
+set.seed(20260428)
+
+matching_data_all <- prepare_matching_data(merged_df_all, all_states_covariates)
 
 message(
   "Matching sample: ",
@@ -275,7 +236,9 @@ message(
   " control)"
 )
 
-m.out_all <- run_matching(matching_data_all, base_covariates)
+m.out_all <- run_matching(matching_data_all, all_states_covariates)
+
+report_common_support(m.out_all, "All states")
 
 summary(m.out_all)
 bal.tab(m.out_all, un = TRUE, thresholds = c(m = 0.1))
@@ -294,22 +257,7 @@ message(
 )
 
 # =============================================================================
-# 2. BALANCE TABLE — ALL STATES
-# =============================================================================
-
-balance_gt_all <- build_balance_gt(
-  m.out = m.out_all,
-  display_covars = display_covars_all,
-  title_subtitle = c(
-    "Table 1: Covariate Balance Before and After Propensity Score Matching",
-    "All States, Year-Only Matching"
-  )
-)
-
-balance_gt_all
-
-# =============================================================================
-# 3. PA PUBLIC SCHOOL MATCH
+# 2. PA PUBLIC SCHOOL MATCH
 # =============================================================================
 # Adds school-level covariates (enrollment, % econ. disadvantaged, etc.) to
 # the PS model. school_title_i excluded due to high collinearity with
@@ -317,13 +265,18 @@ balance_gt_all
 
 message("\n=== PA PUBLIC SCHOOL MATCHING ===\n")
 
-pa_covariates <- c(base_covariates, pa_extra_covariates)
-# PA: exclude 2023 — only 1 treated student matched, no degree/persistence
-# outcomes available for this cohort
+set.seed(20260428)
+
+# PA exclusions:
+#   2021 — 0 PA treated students with HS grad <= 2021 (after the cohort cap
+#          in script 3b, application year 2021 corresponds to HS-grad-2021
+#          seniors, of whom none in PA were treated). Exact-on-year matching
+#          fails without both treatment levels in every year cluster.
+#   2023 — only 1 treated student, insufficient for matching.
 matching_data_pa <- prepare_matching_data(
   merged_df_pa,
   pa_covariates,
-  exclude_years = 2023
+  exclude_years = c(2021, 2023)
 )
 
 message(
@@ -337,6 +290,8 @@ message(
 )
 
 m.out_pa <- run_matching(matching_data_pa, pa_covariates)
+
+report_common_support(m.out_pa, "PA public schools")
 
 summary(m.out_pa)
 bal.tab(m.out_pa, un = TRUE, thresholds = c(m = 0.1))
@@ -355,165 +310,28 @@ message(
 )
 
 # =============================================================================
-# 4. BALANCE TABLE — PA PUBLIC SCHOOLS
+# 3. SAVE OUTPUTS
 # =============================================================================
 
-balance_gt_pa <- build_balance_gt(
-  m.out = m.out_pa,
-  display_covars = display_covars_pa,
-  title_subtitle = c(
-    "Table 1: Covariate Balance Before and After Propensity Score Matching",
-    "PA Public Schools, Year-Only Matching"
-  )
-)
-
-balance_gt_pa
-
-# =============================================================================
-# 5. SAMPLE SIZE TABLES BY YEAR
-# =============================================================================
-# Shows how many treated and control students were retained or dropped by
-# matching in each cohort.
-
-make_sample_table <- function(pre_data, matched_data, title_subtitle) {
-  pre <- pre_data |>
-    group_by(year) |>
-    summarise(
-      pre_treated = sum(treated_in_year == 1),
-      pre_control = sum(treated_in_year == 0),
-      .groups = "drop"
-    )
-
-  post <- matched_data |>
-    group_by(year) |>
-    summarise(
-      post_treated = sum(treated_in_year == 1),
-      post_control = sum(treated_in_year == 0),
-      .groups = "drop"
-    )
-
-  tbl <- pre |>
-    left_join(post, by = "year") |>
-    mutate(year = as.character(year))
-
-  totals <- tbl |>
-    summarise(
-      year = "Total",
-      pre_treated = sum(pre_treated),
-      pre_control = sum(pre_control),
-      post_treated = sum(post_treated),
-      post_control = sum(post_control)
-    )
-
-  tbl <- bind_rows(tbl, totals)
-  n_data_rows <- nrow(tbl)
-
-  tbl |>
-    gt(rowname_col = "year") |>
-    tab_header(
-      title = md(paste0("**", title_subtitle[1], "**")),
-      subtitle = title_subtitle[2]
-    ) |>
-    tab_spanner(
-      label = "Before Matching",
-      columns = c(pre_treated, pre_control)
-    ) |>
-    tab_spanner(
-      label = "After Matching",
-      columns = c(post_treated, post_control)
-    ) |>
-    cols_label(
-      pre_treated = "Treated",
-      pre_control = "Control",
-      post_treated = "Treated",
-      post_control = "Control"
-    ) |>
-    cols_align(align = "center", columns = everything()) |>
-    cols_align(align = "left", columns = "year") |>
-    tab_style(
-      style = cell_text(weight = "bold"),
-      locations = cells_body(rows = n_data_rows)
-    ) |>
-    tab_style(
-      style = cell_borders(sides = "top", color = "black", weight = px(2)),
-      locations = cells_body(rows = 1)
-    ) |>
-    tab_style(
-      style = cell_borders(sides = "top", color = "black", weight = px(1.5)),
-      locations = cells_body(rows = n_data_rows)
-    ) |>
-    tab_style(
-      style = cell_borders(sides = "bottom", color = "black", weight = px(2)),
-      locations = cells_body(rows = n_data_rows)
-    ) |>
-    tab_source_note(
-      source_note = md(paste0(
-        "*Notes:* Before-matching counts are after applying pre-match exclusions ",
-        "(year 2022, confirmed non-citizens, treated before 2017). ",
-        "After-matching counts are unique matched units; with replacement matching ",
-        "the effective sample size (ESS) of controls is lower than shown."
-      ))
-    ) |>
-    tab_options(
-      table.font.size = px(11),
-      heading.title.font.size = px(13),
-      heading.subtitle.font.size = px(11),
-      heading.align = "left",
-      column_labels.font.weight = "bold",
-      column_labels.border.top.color = "black",
-      column_labels.border.top.width = px(2),
-      column_labels.border.bottom.color = "black",
-      column_labels.border.bottom.width = px(1),
-      table_body.border.bottom.color = "black",
-      table_body.border.bottom.width = px(2),
-      table.border.top.color = "white",
-      table.border.bottom.color = "white",
-      source_notes.font.size = px(10),
-      data_row.padding = px(3)
-    )
-}
-
-sample_gt_all <- make_sample_table(
-  pre_data = matching_data_all,
-  matched_data = matched_data_all,
-  title_subtitle = c(
-    "Table: Sample Sizes Before and After Matching by Year",
-    "All States"
-  )
-)
-
-sample_gt_pa <- make_sample_table(
-  pre_data = matching_data_pa,
-  matched_data = matched_data_pa,
-  title_subtitle = c(
-    "Table: Sample Sizes Before and After Matching by Year",
-    "PA Public Schools"
-  )
-)
-
-sample_gt_all
-sample_gt_pa
-
-# =============================================================================
-# 6. SAVE OUTPUTS
-# =============================================================================
-
-dir.create(here("output", "tables"), recursive = TRUE, showWarnings = FALSE)
 dir.create(here("data", "matched"), recursive = TRUE, showWarnings = FALSE)
 
+# Matched datasets (used by scripts 7 and 8)
 saveRDS(matched_data_all, here("data", "matched", "matched_all_states_year_only.rds"))
-saveRDS(matched_data_pa, here("data", "matched", "matched_pa_year_only.rds"))
+saveRDS(matched_data_pa,  here("data", "matched", "matched_pa_year_only.rds"))
 
-gtsave(balance_gt_all, here("output", "tables", "balance_table_all_states.html"))
-gtsave(balance_gt_all, here("output", "tables", "balance_table_all_states.tex"))
-gtsave(balance_gt_pa, here("output", "tables", "balance_table_pa.html"))
-gtsave(balance_gt_pa, here("output", "tables", "balance_table_pa.tex"))
+# MatchIt objects (used by script 8 for balance tables + Love plot)
+saveRDS(m.out_all, here("data", "matched", "matchit_object_all_states.rds"))
+saveRDS(m.out_pa,  here("data", "matched", "matchit_object_pa.rds"))
+
+# Pre-match analytic samples (used by script 8 for descriptive table + A2)
+saveRDS(matching_data_all, here("data", "matched", "matching_data_all_states.rds"))
+saveRDS(matching_data_pa,  here("data", "matched", "matching_data_pa.rds"))
 
 message("\n=== Matching complete ===")
-message(
-  "Saved: matched_all_states_year_only.rds (",
-  nrow(matched_data_all),
-  " rows)"
-)
+message("Saved: matched_all_states_year_only.rds (", nrow(matched_data_all), " rows)")
 message("Saved: matched_pa_year_only.rds (", nrow(matched_data_pa), " rows)")
+message("Saved: matchit_object_all_states.rds")
+message("Saved: matchit_object_pa.rds")
+message("Saved: matching_data_all_states.rds (", nrow(matching_data_all), " rows)")
+message("Saved: matching_data_pa.rds (", nrow(matching_data_pa), " rows)")
 # =============================================================================

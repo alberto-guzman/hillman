@@ -5,13 +5,20 @@
 #          merge NSC college outcome data, and restrict to the analytic sample.
 #
 # Outcome strategy:
+#   Analytic cohorts: HS grad years 2018–2021 only. The 2022 and 2023 cohorts
+#     are excluded because the NSC query that produced clean_Hillman_2017_2025
+#     returned no enrollment records for 2023 grads and only partial coverage
+#     for 2022 controls (~54% seamless vs ~80% for prior cohorts), so any
+#     reported rates would understate true outcomes.
 #   ITT enrollment outcomes  — all students in analytic sample; students with
 #     no NSC record OR enroll_seamless == 0 both coded as non-enrolled (0).
-#     Cohorts: 2018–2023.
 #   NSC-conditional outcomes — students with an NSC record only (has_nsc_record
 #     == 1). Post-enrollment outcomes (persistence, degree) further conditioned
 #     on enroll_ever == 1. Non-attainers recoded NA → 0 within sample.
-#     Cohorts: 2018–2022 (insufficient follow-up for 2023 degree outcomes).
+#     Note: degree-by-year-window outcomes are right-censored for cohorts with
+#     less than the full window of follow-up (e.g., 7y bach for 2019–2021
+#     grads). Treat these as "earned within observed years," not within the
+#     full nominal window.
 #
 # Naming scheme:
 #   Prefix:  enroll_    enrollment outcomes
@@ -25,52 +32,63 @@
 #            _Xy        within X years of HS graduation
 #            _ever      any time observed
 #
-# Policy-relevant outcomes:
-#   ITT:  enroll_seamless_itt, enroll_ever_itt,
-#         enroll_seamless_stem_itt, enroll_ever_stem_itt
-#   NSC:  enroll_seamless, enroll_ever, enroll_delayed, enroll_firsttime_fulltime,
-#         enroll_seamless_stem, enroll_ever_stem,
-#         inst_public4yr_entry, inst_private4yr_entry, inst_4yr_entry,
-#         inst_instate_entry,
-#         reten_1y, pers_1y, pers_1y_stem,
-#         deg_any_ever, deg_bach_ever,
-#         deg_any_6y, deg_bach_4y, deg_bach_6y
+# Reported outcomes (consolidated set used in scripts 7 and 8):
+#   Panel A — enroll_seamless, enroll_seamless_stem
+#             (raw NSC outcomes; conditioned on has_nsc_record == 1)
+#   Panel B — inst_4yr_entry, inst_2yr_entry
+#             (conditioned on has_nsc_record == 1)
+#   Panel C — pers_1y, pers_1y_stem, deg_bach_6y, deg_any_stem_6y
+#             (conditioned on enroll_ever == 1)
 #
-# NOTE: deg_any_4y dropped — confirmed identical to deg_any_6y in raw NSC file
+# Other NSC outcomes (enroll_ever, enroll_delayed, enroll_firsttime_fulltime,
+# inst_public4yr_entry, inst_private4yr_entry, inst_instate_entry, reten_1y,
+# deg_any_ever, deg_bach_ever, deg_any_6y) are carried in merged_clean for
+# diagnostics and sensitivity work but are not included in the published
+# panels. ITT versions (enroll_*_itt) are also retained for reference.
+#
+# NOTE: deg_any_4y dropped — identical to deg_any_6y in the raw NSC file
 #       (degree_4years_all_nsc == degree_6years_all_nsc for all cohorts).
-#       deg_bach_4y retained — distinct from deg_bach_6y for 2018 cohort.
-#       reten_1y/pers_1y restricted to cohorts <= 2021 — 2022 cohort has no
-#       follow-up year in the NSC file; all zeros would reflect missing data,
-#       not true non-retention.
-#       pers_1y_stem: persistence in a STEM major at any institution next fall.
-#         NOT conditional on STEM entry — any fall entrant coded 0/1.
-#         See 4c PSE persistence.do for coding details.
+#       deg_bach_4y dropped — identical to deg_bach_6y in the matched 2018–2021
+#       sample (no bachelor's earned in years 5-7).
+#       deg_bach_6y is actually a 7-year window: Danielle's loop range is 0/6
+#       (inclusive of year 0). Original variable name retained; script 8's
+#       table header reads "within 7 years".
+#       pers_1y_stem: persistence in a STEM major at any institution next fall;
+#       NOT conditional on STEM entry. See 4c PSE persistence.do.
 #
 # Input:   `merged_df` — one row per student (from script 3a)
 #          data/files_for_danielle_nsc/clean_Hillman_2017_2025.dta — NSC data
 # Output:  `merged_clean`   — analysis-ready dataset
 #          `merged_clean_n` — applicant and alumni counts by year
-#          output/n_merged_clean_by_year.csv
+#          output/counts/n_merged_clean_by_year.csv
 # =============================================================================
+
+library(dplyr)
+library(tidyr)
+library(stringr)
+library(readr)
+library(haven)
+library(janitor)
+library(here)
+
+dir.create(here("output", "counts"), recursive = TRUE, showWarnings = FALSE)
 
 # =============================================================================
 # STANDARDIZE COVARIATES
 # =============================================================================
 merged_clean <- merged_df |>
   mutate(
-    gpa = na_if(gpa, 0),
-    psat_math = na_if(psat_math, 0),
-
+    # Stipend: NA → 0 (not eligible) per data dictionary. Keyword set covers
+    # all observed positive-response values (Y/1/Yes/Eligible/Stipend Eligible/
+    # Yes Student); anything else (incl. "No" and NA) → 0.
     stipend = case_when(
       str_detect(
         stipend,
-        regex("\\b(yes|stipend eligible|yes student)\\b", ignore_case = TRUE)
+        regex("\\b(yes|y|1|eligible|stipend eligible|yes student)\\b",
+              ignore_case = TRUE)
       ) ~ 1L,
       TRUE ~ 0L
     ),
-
-    house_size = suppressWarnings(as.integer(house_size)),
-    house_size = if_else(between(house_size, 1L, 11L), house_size, NA_integer_),
 
     first_gen = case_when(
       str_detect(tolower(as.character(first_gen)), "yes|1|true") ~ 1L,
@@ -78,14 +96,23 @@ merged_clean <- merged_df |>
       TRUE ~ NA_integer_
     ),
 
+    # Racially marginalized: Black, African, Latino/Hispanic, Native American /
+    # American Indian, Pacific Islander. "indian" alone is intentionally
+    # excluded — that keyword would also match Asian Indian, who are not
+    # classified as marginalized under the framework used in this study.
     racially_marginalized = case_when(
       str_detect(
         tolower(self_identity),
-        "black|african|latino|latinx|hispanic|native|indian|pacific"
+        "black|african|latino|latinx|hispanic|native|american indian|pacific"
       ) ~ 1L,
       is.na(self_identity) ~ NA_integer_,
       TRUE ~ 0L
     ),
+    # bi_multi_racial only catches literal "multi", "bi-racial", "biracial",
+    # or "two or more". Students who write multiple races separated by
+    # commas/slashes (e.g., "Black/Hispanic") are NOT detected here — this
+    # is a known limitation of free-text race fields and is consistent with
+    # how the EEPA paper classifies these responses.
     bi_multi_racial = case_when(
       str_detect(tolower(self_identity), "multi|bi-?racial|two or more") ~ 1L,
       is.na(self_identity) ~ NA_integer_,
@@ -97,9 +124,9 @@ merged_clean <- merged_df |>
     # Normalize valid values first, then derive mutually exclusive indicators
     # anchored at start of string so "Suburban" cannot match "^urban".
     geographic_location = case_when(
-      str_detect(tolower(geographic_location), "^urban") ~ "Urban",
-      str_detect(tolower(geographic_location), "^suburban") ~ "Suburban",
-      str_detect(tolower(geographic_location), "^rural") ~ "Rural/Small Town",
+      str_detect(tolower(geographic_location), "^\\s*urban") ~ "Urban",
+      str_detect(tolower(geographic_location), "^\\s*suburban") ~ "Suburban",
+      str_detect(tolower(geographic_location), "^\\s*rural") ~ "Rural/Small Town",
       TRUE ~ NA_character_ # catches dirty values, "Do not wish to answer", NA
     ),
 
@@ -122,16 +149,33 @@ merged_clean <- merged_df |>
       missing = NA_integer_
     ),
 
+    # disability / neg_school logic:
+    #   "Do not wish to answer", "N/A", "Not applicable" → NA (informative
+    #     non-response; ~3-5% of applicants — coding as 1 would inflate the
+    #     "has disability / negative school env" rate).
+    #   "No...", "None..." → 0
+    #   any other non-NA, non-decline → 1 (free-text describing the condition)
     disability = case_when(
       str_detect(
         documented_disability,
-        regex("^\\s*no\\b", ignore_case = TRUE)
+        regex("^\\s*(do not wish|n/?a|not applicable)", ignore_case = TRUE)
+      ) ~ NA_integer_,
+      str_detect(
+        documented_disability,
+        regex("^\\s*(no|none)\\b", ignore_case = TRUE)
       ) ~ 0L,
       !is.na(documented_disability) ~ 1L,
       TRUE ~ NA_integer_
     ),
     neg_school = case_when(
-      str_detect(school_impact, regex("^\\s*no\\b", ignore_case = TRUE)) ~ 0L,
+      str_detect(
+        school_impact,
+        regex("^\\s*(do not wish|n/?a|not applicable)", ignore_case = TRUE)
+      ) ~ NA_integer_,
+      str_detect(
+        school_impact,
+        regex("^\\s*(no|none)\\b", ignore_case = TRUE)
+      ) ~ 0L,
       !is.na(school_impact) ~ 1L,
       TRUE ~ NA_integer_
     ),
@@ -146,20 +190,22 @@ merged_clean <- merged_df |>
 # =============================================================================
 # MERGE NSC OUTCOME DATA
 # =============================================================================
+# Load once into `outcomes_raw` (preserved for CHECK 1, which references the
+# pre-rename column names) and produce the analysis-ready `outcomes` from it.
+# All integer-coded outcome columns are cast to plain integer at load so the
+# rest of the pipeline does not need inline `as.integer()` calls.
 
-library(haven)
-
-dir.create(here("output", "counts"), recursive = TRUE, showWarnings = FALSE)
-
-outcomes <- read_dta(here(
+outcomes_raw <- read_dta(here(
   "data/files_for_danielle_nsc",
   "clean_Hillman_2017_2025.dta"
 )) |>
-  janitor::clean_names() |>
+  clean_names() |>
   rename(
     first_name = firstname,
     last_name = lastname
-  ) |>
+  )
+
+outcomes <- outcomes_raw |>
   select(
     first_name,
     last_name,
@@ -175,6 +221,7 @@ outcomes <- read_dta(here(
     public4yr_initial,
     private4yr_initial,
     x4yr_initial,
+    inst_sector_initial_nsc,    # raw 1–9 sector code, used to derive inst_2yr_entry
     instate_initial_nsc,
     # retention & persistence
     reten_fall_enter,
@@ -184,11 +231,19 @@ outcomes <- read_dta(here(
     degree_ever_nsc,
     bach_ever_nsc,
     # degree — by year window
-    # NOTE: degree_4years_all_nsc confirmed identical to degree_6years_all_nsc
-    #       for all cohorts — only the 6yr variable is retained
+    # NOTE 1: degree_4years_all_nsc confirmed identical to degree_6years_all_nsc
+    #         for all cohorts — only the 6yr variable is retained.
+    # NOTE 2: Danielle's loop range in 4b PSE degree attainment new.do uses 0/6
+    #         (inclusive of year 0), so bachdegree_6years_all_nsc is actually
+    #         "Bachelor's within 7 years". The original variable name is
+    #         preserved; script 8's table header reflects the actual span.
+    #         The 5-year window (bachdegree_4years_all_nsc) was identical to
+    #         the 7-year window in the matched sample for current cohorts and
+    #         was dropped from the consolidated outcome set.
     degree_6years_all_nsc,
-    bachdegree_4years_all_nsc,
-    bachdegree_6years_all_nsc
+    bachdegree_6years_all_nsc,
+    # STEM degree (any) within 6 years post-HS — janitor mangles "STEM" to "ste_m"
+    ste_mdegree_in6_grad
   ) |>
   rename(
     enroll_seamless = seamless_enroll,
@@ -207,9 +262,21 @@ outcomes <- read_dta(here(
     deg_any_ever = degree_ever_nsc,
     deg_bach_ever = bach_ever_nsc,
     deg_any_6y = degree_6years_all_nsc,
-    deg_bach_4y = bachdegree_4years_all_nsc,
-    deg_bach_6y = bachdegree_6years_all_nsc
-  )
+    deg_bach_6y = bachdegree_6years_all_nsc,
+    deg_any_stem_6y = ste_mdegree_in6_grad
+  ) |>
+  mutate(
+    across(
+      -c(first_name, last_name, hs_grad_year, inst_sector_initial_nsc),
+      as.integer
+    ),
+    # 2-year college entry = sectors 4 (Pub 2yr), 5 (PrNP 2yr), 6 (PrFP 2yr).
+    # Never-enrolled students have inst_sector_initial_nsc = NA; %in% returns
+    # FALSE, so they are coded 0 — matching how inst_4yr_entry treats them
+    # (Stata's `==` returns 0 when comparing to missing).
+    inst_2yr_entry = as.integer(inst_sector_initial_nsc %in% c(4L, 5L, 6L))
+  ) |>
+  select(-inst_sector_initial_nsc)
 
 message("Loaded NSC outcome data: ", nrow(outcomes), " records")
 
@@ -240,9 +307,22 @@ if (nrow(outcomes_dupes) > 0) {
   message("No duplicate NSC records found")
 }
 
+# Join on names only and use the .dta's hs_grad_year as authoritative when
+# present. Our hs_grad_year is computed from grade at application time
+# (year + 12 - grade); Danielle's is sourced from registrar/NSC records
+# and reflects actual graduation, accounting for held-back/skipped grades.
+# Joining on the 3-key (first_name, last_name, hs_grad_year) silently
+# drops 3+ in-sample students whose grade-derived hs_grad_year disagrees.
+stopifnot(!any(duplicated(outcomes[, c("first_name", "last_name")])))
+
 merged_clean <- merged_clean |>
-  left_join(outcomes, by = c("first_name", "last_name", "hs_grad_year")) |>
-  mutate(enroll_delayed = as.integer(enroll_delayed))
+  left_join(
+    outcomes |> rename(hs_grad_year_nsc = hs_grad_year),
+    by = c("first_name", "last_name"),
+    relationship = "many-to-one"
+  ) |>
+  mutate(hs_grad_year = coalesce(hs_grad_year_nsc, hs_grad_year)) |>
+  select(-hs_grad_year_nsc)
 
 # =============================================================================
 # FLAG NSC MATCH (before dropping unmatched students)
@@ -265,35 +345,29 @@ message("NSC match rates by treatment status:")
 print(match_by_treatment)
 
 # =============================================================================
-# ITT ENROLLMENT OUTCOMES (all students, cohorts 2018–2023)
+# ITT ENROLLMENT OUTCOMES (all students in analytic sample)
 # =============================================================================
 # No NSC record AND enroll_seamless == 0 both treated as non-enrolled (0).
-# Explicit as.integer() cast — source .dta variables are dbl.
 # STEM ITT outcomes follow same logic: no NSC record OR not in STEM = 0.
+# These are kept for reference; the published panels use raw NSC outcomes
+# conditioned on has_nsc_record == 1 (per PI input — students missing from
+# NSC went to college per Hillman records, just at non-reporting institutions).
 
 merged_clean <- merged_clean |>
   mutate(
-    enroll_seamless_itt = as.integer(replace_na(
-      as.integer(enroll_seamless),
-      0L
-    )),
-    enroll_ever_itt = as.integer(replace_na(as.integer(enroll_ever), 0L)),
-    enroll_seamless_stem_itt = as.integer(replace_na(
-      as.integer(enroll_seamless_stem),
-      0L
-    )),
-    enroll_ever_stem_itt = as.integer(replace_na(
-      as.integer(enroll_ever_stem),
-      0L
-    ))
+    enroll_seamless_itt      = replace_na(enroll_seamless,      0L),
+    enroll_ever_itt          = replace_na(enroll_ever,          0L),
+    enroll_seamless_stem_itt = replace_na(enroll_seamless_stem, 0L),
+    enroll_ever_stem_itt     = replace_na(enroll_ever_stem,     0L)
   )
 
 # =============================================================================
-# FILTER TO ANALYTIC SAMPLE (graduation cohorts 2018–2023)
+# FILTER TO ANALYTIC SAMPLE (graduation cohorts 2018–2021)
 # =============================================================================
 # 2017: only 18 students, predates program — excluded
-# 2024/2025: too recent even for enrollment outcomes — excluded
-# 2023: included for ITT enrollment; degree/persistence NA by design
+# 2022: NSC query has only ~54% control seamless rate (vs ~80% prior cohorts),
+#       suggesting partial NSC coverage — excluded to avoid biased denominators
+# 2023+: NSC query returned 0% enrollment — no data, excluded
 
 pre_filter_n <- nrow(merged_clean)
 
@@ -307,7 +381,7 @@ removal_stats <- merged_clean |>
         !is.na(grade) &
         grade >= 9 &
         grade <= 12 &
-        (hs_grad_year < 2018 | hs_grad_year > 2023)
+        (hs_grad_year < 2018 | hs_grad_year > 2021)
     )
   )
 
@@ -318,7 +392,7 @@ merged_clean <- merged_clean |>
     grade >= 9,
     grade <= 12,
     hs_grad_year >= 2018,
-    hs_grad_year <= 2023
+    hs_grad_year <= 2021
   )
 
 message(
@@ -329,42 +403,45 @@ message(
 message("  Missing hs_grad_year: ", removal_stats$missing_grad_year)
 message("  Missing grade:        ", removal_stats$missing_grade)
 message("  Invalid grade:        ", removal_stats$invalid_grade)
-message("  Outside 2018–2023:    ", removal_stats$outside_range)
+message("  Outside 2018–2021:    ", removal_stats$outside_range)
 message("Remaining: ", nrow(merged_clean))
 
 # =============================================================================
 # NSC-CONDITIONAL OUTCOMES — recode NA → 0 within sample
 # =============================================================================
-# Retention/persistence: conditional on enroll_ever == 1, cohorts 2018–2021.
-#   2022 cohort excluded — NSC file has no fall 2023 follow-up records so
-#   all 2022 reten/pers values would be 0 (missing data, not true dropout).
-# pers_1y_stem: same conditioning as pers_1y — any fall entrant, 2018–2021.
-#   Measures whether student is in a STEM major at any institution next fall.
-#   NOT conditional on having entered as STEM (see header note).
-# Degree: conditional on enroll_ever == 1, cohorts 2018–2022.
-#   deg_bach_ever: coded only when bach degree record exists in NSC — no 0
-#   baseline in Danielle's .do file. Recode NA → 0 for all enrolled students
-#   in 2018–2022 to ensure non-bach-graduates are correctly coded 0.
-# 2023 cohort intentionally left NA — insufficient follow-up.
+# Retention/persistence and degree outcomes are conditional on enroll_ever == 1
+# (you cannot persist into year 2 or earn a degree if you never started). The
+# analytic sample is already capped at HS-grad cohorts 2018–2021, so no
+# additional cohort gating is needed here.
+#
+# pers_1y_stem: any fall entrant — measures whether the student is in a STEM
+#   major at any institution next fall. NOT conditional on entering as STEM.
+# Degree windows: deg_bach_6y is right-censored for cohorts younger than the
+#   nominal 7 years (e.g., 2021 grads have only 4 years observed). Treat as
+#   "earned within observed years" rather than imputing NA.
+# Danielle's .do file does NOT set a 0 baseline for bach_ever / degree-by-year
+#   variables — only positive cases are recorded. We recode NA → 0 here for
+#   enrolled students so non-graduates are correctly coded 0 within the sample.
 
 merged_clean <- merged_clean |>
   mutate(
-    # -- retention & persistence: only enrolled students, 2018–2021 only
+    # -- retention/persistence and degree outcomes are only meaningful for
+    #    enrolled students. Force NA for non-enrolled rows so any stale zeros
+    #    from the raw NSC file cannot leak into the analytic data.
+    #    All cohorts in the analytic sample (2018–2021) have ≥ 1 year of
+    #    fall-after follow-up, so no further cohort gating is needed for
+    #    persistence. Degree outcomes are right-censored for cohorts younger
+    #    than the nominal window (e.g., 2021 grads have only 4 years of
+    #    follow-up for the 7-year bachelor's window) — treat as observed-
+    #    within-window rather than imputing NA.
     across(
-      c(reten_1y, pers_1y, pers_1y_stem),
-      ~ if_else(
-        as.integer(enroll_ever) == 1L & hs_grad_year <= 2021 & is.na(.x),
-        0L,
-        as.integer(.x)
-      )
-    ),
-    # -- degree outcomes: only enrolled students, 2018–2022
-    across(
-      c(deg_any_ever, deg_bach_ever, deg_any_6y, deg_bach_4y, deg_bach_6y),
-      ~ if_else(
-        as.integer(enroll_ever) == 1L & hs_grad_year <= 2022 & is.na(.x),
-        0L,
-        as.integer(.x)
+      c(reten_1y, pers_1y, pers_1y_stem,
+        deg_any_ever, deg_bach_ever, deg_any_6y,
+        deg_bach_6y, deg_any_stem_6y),
+      ~ case_when(
+        is.na(enroll_ever) | enroll_ever != 1L ~ NA_integer_,
+        is.na(.x)                              ~ 0L,
+        TRUE                                   ~ .x
       )
     )
   )
@@ -420,8 +497,9 @@ merged_clean <- merged_clean |>
     has_nsc_record,
 
     # -------------------------------------------------------------------------
-    # ITT ENROLLMENT OUTCOMES (all students, 2018–2023)
-    # NA → 0: non-NSC-matched and non-enrolled both coded 0
+    # ITT ENROLLMENT OUTCOMES (all students in analytic sample, 2018–2021)
+    # NA → 0: non-NSC-matched and non-enrolled both coded 0.
+    # Retained for reference; published panels use raw NSC outcomes.
     # -------------------------------------------------------------------------
     enroll_seamless_itt,
     enroll_ever_itt,
@@ -444,25 +522,31 @@ merged_clean <- merged_clean |>
     inst_public4yr_entry,
     inst_private4yr_entry,
     inst_4yr_entry,
+    inst_2yr_entry,
     inst_instate_entry,
 
-    # -- retention: same institution, year 1 (enroll_ever == 1, 2018–2021)
+    # -- retention: same institution, year 1 (enroll_ever == 1)
     reten_1y,
 
-    # -- persistence: any institution, year 1 (enroll_ever == 1, 2018–2021)
+    # -- persistence: any institution, year 1 (enroll_ever == 1)
     # pers_1y_stem: in a STEM major at any institution next fall
     pers_1y,
     pers_1y_stem,
 
-    # -- degree attainment: ever (enroll_ever == 1, 2018–2022)
+    # -- degree attainment: ever (enroll_ever == 1)
     deg_any_ever,
     deg_bach_ever,
 
-    # -- degree attainment: by year window (enroll_ever == 1, 2018–2022)
-    # deg_any_4y dropped: confirmed identical to deg_any_6y in raw NSC file
+    # -- degree attainment: by year window (enroll_ever == 1)
+    # deg_any_4y dropped: identical to deg_any_6y in raw NSC file.
+    # deg_bach_4y dropped: identical to deg_bach_6y in matched sample for
+    # current cohorts (no bachelor's earned in years 5-7).
+    # NOTE: deg_bach_6y is actually a 7-year window (Danielle's loop range is
+    # 0/6, inclusive of year 0). Original variable name retained; script 8's
+    # table header reads "within 7 years".
     deg_any_6y,
-    deg_bach_4y,
-    deg_bach_6y
+    deg_bach_6y,
+    deg_any_stem_6y
   )
 
 # =============================================================================
@@ -494,16 +578,9 @@ merged_clean_n
 
 # -----------------------------------------------------------------------------
 # CHECK 1: RAW NSC — non-seamless students with post-enrollment outcomes
-# Expected: small n, all delayed enrollees
+# Expected: small n, all delayed enrollees. Uses outcomes_raw (pre-rename).
 # -----------------------------------------------------------------------------
-outcomes_check <- read_dta(here(
-  "data/files_for_danielle_nsc",
-  "clean_Hillman_2017_2025.dta"
-)) |>
-  janitor::clean_names() |>
-  rename(first_name = firstname, last_name = lastname)
-
-nsc_anomalies <- outcomes_check |>
+nsc_anomalies <- outcomes_raw |>
   filter(seamless_enroll == 0) |>
   filter(
     reten_fall_enter == 1 |
@@ -523,7 +600,7 @@ if (nrow(nsc_anomalies) > 0) {
     count(enrolled_ever_nsc, delayed_enrollment_nsc) |>
     print()
 }
-rm(outcomes_check, nsc_anomalies)
+rm(nsc_anomalies)
 
 # -----------------------------------------------------------------------------
 # CHECK 2: ITT outcomes — no NAs, must be integer
@@ -559,8 +636,8 @@ merged_clean |>
   print()
 
 # -----------------------------------------------------------------------------
-# CHECK 3: NSC-conditional NAs only for has_nsc_record == 0
-# and 2023 cohort on degree/persistence
+# CHECK 3: NSC-conditional NAs only for has_nsc_record == 0 and for
+# students with enroll_ever != 1 (post-enrollment outcomes are NA there).
 # -----------------------------------------------------------------------------
 message("CHECK 3 — NSC-conditional NAs by has_nsc_record:")
 merged_clean |>
@@ -579,8 +656,9 @@ merged_clean |>
   print()
 
 # -----------------------------------------------------------------------------
-# CHECK 4: Degree/persistence NAs by cohort for enrolled students
-# 2018–2022 should be 0 for degree; 2018–2021 for reten/pers; 2023 NA by design
+# CHECK 4: Degree/persistence NAs by cohort for enrolled students.
+# Analytic sample is 2018–2021; all rows here should have non-NA outcomes
+# (enroll_ever == 1 ensures the conditional-NA recoding fired).
 # -----------------------------------------------------------------------------
 message("CHECK 4 — Degree/persistence NAs for enrolled students by cohort:")
 merged_clean |>
@@ -651,20 +729,14 @@ message(
 message("CHECK 7 — Sample sizes by outcome set:")
 tibble(
   outcome_set = c(
-    "Full analytic sample",
-    "ITT enrollment (2018–2023)",
+    "Full analytic sample (2018–2021)",
     "NSC-matched (has_nsc_record == 1)",
-    "NSC-enrolled (enroll_ever == 1)",
-    "Degree outcomes (enrolled, 2018–2022)",
-    "Persistence/retention (enrolled, 2018–2021)"
+    "NSC-enrolled (enroll_ever == 1)"
   ),
   n = c(
     nrow(merged_clean),
-    merged_clean |> filter(hs_grad_year <= 2023) |> nrow(),
     merged_clean |> filter(has_nsc_record == 1) |> nrow(),
-    merged_clean |> filter(enroll_ever == 1) |> nrow(),
-    merged_clean |> filter(enroll_ever == 1, hs_grad_year <= 2022) |> nrow(),
-    merged_clean |> filter(enroll_ever == 1, hs_grad_year <= 2021) |> nrow()
+    merged_clean |> filter(enroll_ever == 1) |> nrow()
   )
 ) |>
   print()
@@ -676,7 +748,7 @@ message(
   "CHECK 8 — reten_1y/pers_1y/pers_1y_stem for non-enrollees (all should be NA):"
 )
 merged_clean |>
-  filter(has_nsc_record == 1, enroll_ever == 0, hs_grad_year <= 2021) |>
+  filter(has_nsc_record == 1, enroll_ever == 0) |>
   summarise(
     n = n(),
     reten_0 = sum(reten_1y == 0, na.rm = TRUE),
@@ -693,7 +765,7 @@ merged_clean |>
 # -----------------------------------------------------------------------------
 message("CHECK 9 — deg_any_6y >= deg_bach_6y for all enrolled students:")
 n_violated <- merged_clean |>
-  filter(enroll_ever == 1, hs_grad_year <= 2022) |>
+  filter(enroll_ever == 1) |>
   filter(!is.na(deg_any_6y), !is.na(deg_bach_6y)) |>
   filter(deg_any_6y < deg_bach_6y) |>
   nrow()

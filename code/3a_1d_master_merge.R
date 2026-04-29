@@ -8,10 +8,18 @@
 # Input:   `applicants` — cleaned applicant data (from script 1)
 #          `alum`       — wide treatment indicators (from script 2)
 # Output:  `merged_df`  — one row per student, one record per first-treatment
-#                         year (treated) or last application year (control)
-#          `merged_n`   — applicant and alumni counts by year
-#          output/n_merged_by_year.csv
+#                         year (treated) or last application year (control).
+#                         Application years span 2017-2019, 2021-2023 (2020
+#                         excluded for COVID); script 3b further restricts the
+#                         analytic sample to HS-grad cohorts 2018-2021.
+#          `merged_n`   — applicant and alumni counts by application year
+#          output/counts/n_merged_by_year.csv
 # =============================================================================
+
+library(dplyr)
+library(tidyr)
+library(readr)
+library(here)
 
 dir.create(here("output", "counts"), recursive = TRUE, showWarnings = FALSE)
 
@@ -24,6 +32,13 @@ dir.create(here("output", "counts"), recursive = TRUE, showWarnings = FALSE)
 # conflict with applicant columns (e.g. gender) or are not needed downstream.
 # first_treatment_year / total_times_treated are recalculated below from
 # applicant records so they reflect application-year timing.
+
+# Guardrail: alum must be unique on (first_name, last_name) for the join to
+# behave as 1:m. If two distinct students collapse to the same cleaned-name
+# pair (or script 2's structure changes), the join would silently duplicate
+# applicant rows.
+stopifnot(!any(duplicated(alum[, c("first_name", "last_name")])))
+
 merged_df <- applicants |>
   left_join(
     alum |> select(
@@ -31,7 +46,8 @@ merged_df <- applicants |>
       treated_ever, treated_before_2017,
       starts_with("treated_20")
     ),
-    by = c("first_name", "last_name")
+    by = c("first_name", "last_name"),
+    relationship = "many-to-one"
   ) |>
   mutate(
     across(
@@ -42,7 +58,18 @@ merged_df <- applicants |>
     treated_before_2017 = if_else(is.na(treated_before_2017), 0L, treated_before_2017)
   )
 
-# Flag whether the student was treated in their application year
+# Flag whether the student was treated in their application year.
+# The case_when below enumerates 2017-2023; if a future cohort year appears,
+# the script must be updated alongside script 2's pivot range. This guardrail
+# raises a clear error rather than silently coding such students as untreated.
+unhandled_years <- setdiff(unique(merged_df$year), 2017:2023)
+if (length(unhandled_years) > 0) {
+  stop(
+    "Unhandled application years (extend the case_when below + script 2's pivot range): ",
+    paste(sort(unhandled_years), collapse = ", ")
+  )
+}
+
 merged_df <- merged_df |>
   mutate(
     treated_in_year = case_when(
@@ -57,34 +84,12 @@ merged_df <- merged_df |>
     )
   )
 
-# Identify each treated student's first program year
-first_treatment <- merged_df |>
-  filter(treated_in_year == 1) |>
-  group_by(first_name, last_name) |>
-  summarise(
-    first_treatment_year = min(year[treated_in_year == 1], na.rm = TRUE),
-    total_times_treated = sum(treated_in_year == 1, na.rm = TRUE),
-    .groups = "drop"
-  ) |>
-  mutate(
-    first_treatment_year = if_else(
-      is.infinite(first_treatment_year),
-      NA_real_,
-      first_treatment_year
-    )
-  )
-
-merged_df <- merged_df |>
-  left_join(first_treatment, by = c("first_name", "last_name")) |>
-  mutate(
-    first_treatment_year = if_else(is.na(first_treatment_year), 0L, as.integer(first_treatment_year)),
-    total_times_treated  = if_else(is.na(total_times_treated),  0L, total_times_treated)
-  )
-
 # =============================================================================
 # DROP 2020 (COVID)
 # =============================================================================
 # Program disruption in 2020 invalidates treatment/control comparability.
+# Filter happens before first_treatment_year is computed so that timing
+# reflects only in-sample (post-COVID) cohorts.
 
 pre_year_filter <- nrow(merged_df)
 
@@ -98,10 +103,38 @@ message(
 )
 
 # =============================================================================
+# IDENTIFY EACH TREATED STUDENT'S FIRST PROGRAM YEAR
+# =============================================================================
+# Recomputed from applicant records (post-COVID filter) so first_treatment_year
+# reflects application-year timing for cohorts 2017–2019, 2021–2023.
+# Students with no in-sample treatment year (pre-2017 alumni or 2020-only)
+# get first_treatment_year = 0; they are dropped explicitly in the dedup
+# step below.
+
+first_treatment <- merged_df |>
+  filter(treated_in_year == 1) |>
+  group_by(first_name, last_name) |>
+  summarise(
+    first_treatment_year = min(year),
+    total_times_treated  = n(),
+    .groups = "drop"
+  )
+
+merged_df <- merged_df |>
+  left_join(first_treatment, by = c("first_name", "last_name")) |>
+  mutate(
+    first_treatment_year = if_else(is.na(first_treatment_year), 0L, as.integer(first_treatment_year)),
+    total_times_treated  = if_else(is.na(total_times_treated),  0L, total_times_treated)
+  )
+
+# =============================================================================
 # DEDUPLICATE TO ONE ROW PER STUDENT
 # =============================================================================
 # Treated students: keep the row for their FIRST treatment year.
 # Control students: keep the row for their MOST RECENT application year.
+# Treated students with no in-sample treatment year (first_treatment_year = 0)
+# are pre-2017 alumni or 2020-only treated; both are excluded from the analysis
+# by design and dropped here with an explicit count.
 #
 # NOTE — timing asymmetry: treated covariates are measured at first treatment
 # (earlier on average); control covariates at last application (later on
@@ -111,13 +144,17 @@ message(
 
 pre_duplicate_filter <- nrow(merged_df)
 
+n_orphan_treated <- merged_df |>
+  filter(treated_ever == 1, first_treatment_year == 0) |>
+  distinct(first_name, last_name) |>
+  nrow()
+
 merged_df_clean <- merged_df |>
   group_by(first_name, last_name) |>
   filter(
-    (treated_ever == 1 & year == first_treatment_year) |
+    (treated_ever == 1 & first_treatment_year > 0 & year == first_treatment_year) |
       (treated_ever == 0 & year == max(year))
   ) |>
-  slice(1) |>
   ungroup()
 
 message(
@@ -126,6 +163,12 @@ message(
   " duplicate applications — ",
   nrow(merged_df_clean),
   " students remaining"
+)
+message(
+  "Excluded ",
+  n_orphan_treated,
+  " treated students with no in-sample treatment year ",
+  "(pre-2017 alumni or 2020-only treated)"
 )
 
 # Verify no duplicates remain

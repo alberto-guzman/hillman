@@ -3,29 +3,44 @@
 #
 # Purpose: Estimate ATT (average treatment effect on the treated) of the
 #          Hillman summer program on college outcomes using doubly-robust
-#          linear probability models with matching weights and HC2 robust SEs.
+#          linear probability models with matching weights.
 #
 # Reference: https://kosukeimai.github.io/MatchIt/articles/estimating-effects.html
 #
-# Estimand: ATT via lm_robust() (estimatr) with matching weights and HC2 SEs.
-#           HC2 chosen over subclass clustering given ~1.7 students/school
-#           ratio in matched sample (near 1:1 student-to-cluster).
+# Estimand: ATT, recovered via g-computation (average marginal effects over
+#           treated units) using marginaleffects::avg_comparisons() with HC3
+#           robust SEs. HC3 is the recommended SE for matching with
+#           replacement (Hill & Reiter 2006; MatchIt vignette 2026).
+#           NOTE — caliper drops some treated units, so the estimand is
+#           technically the average treatment in the matched (caliper-passing)
+#           sample (ATM); we interpret it as ATT for the matched cohort.
 #
-# Outcome panels:
-#   Panel A — ITT enrollment outcomes (full matched sample; non-NSC = 0)
-#   Panel B — NSC-conditional enrollment + institution outcomes
-#             (has_nsc_record == 1)
-#   Panel C — Persistence + degree outcomes
-#             (enroll_ever == 1; cohort restrictions per outcome)
-#   Panel D — STEM outcomes
-#             (ITT enrollment: full sample; pers_1y_stem: enroll_ever == 1,
-#              hs_grad_year <= 2021)
+# Outcome panels (consolidated, policy-relevant set of 8):
+#   All panels condition on has_nsc_record == 1 — i.e., students with an NSC
+#   query record. Per PI input, students not appearing in NSC went to college
+#   per Hillman's own records but their institution did not report to NSC, so
+#   we cannot reliably infer enrollment for them. Conditioning on has_nsc_record
+#   restricts to the population for whom NSC actually tracked outcomes.
 #
-# Cohort restrictions:
-#   reten_1y, pers_1y, pers_1y_stem — hs_grad_year <= 2021
-#   degree outcomes                  — hs_grad_year <= 2022
-#   Year 2022 excluded from matching (reten/pers all NA — data lag)
-#   Year 2023 excluded from PA matching (only 1 treated student)
+#   Panel A — Enrollment (NSC-matched students)
+#             enroll_seamless, enroll_seamless_stem
+#   Panel B — Institution at entry (NSC-matched students)
+#             inst_4yr_entry, inst_2yr_entry
+#   Panel C — Persistence + degree (NSC-matched and enrolled, enroll_ever == 1)
+#             pers_1y, pers_1y_stem,
+#             deg_bach_6y (=7y window), deg_any_stem_6y
+#
+# Year-window naming caveat: deg_bach_6y is stored under the original variable
+# name but Danielle's loop range (0/6, inclusive of year 0) makes it a 7-year
+# window. The 5-year version (deg_bach_4y) was identical to the 7-year version
+# in the matched sample and was dropped from the consolidated set. Table
+# headers in script 8 read "within 7 years".
+#
+# Analytic sample is restricted to HS grad cohorts 2018–2021 in script 3b
+# (2022 partial NSC coverage; 2023+ no NSC enrollment data). Per-panel cohort
+# filters are therefore not needed here. Degree outcomes are right-censored
+# for cohorts younger than the full nominal window — interpret as observed
+# rates within the available follow-up.
 #
 # Samples:
 #   All states:      matched_all_states_year_only.rds
@@ -33,20 +48,15 @@
 #
 # Output:  output/att_results_all_states.rds
 #          output/att_results_pa.rds
-#          output/att_table_all_states.html/.tex
-#          output/att_table_pa.html/.tex
-#          output/desc_by_year_all_states.html/.tex
-#          output/desc_by_year_pa.html/.tex
-#          output/het_plot_all_states.png
-#          output/het_plot_pa.png
+#          output/att_results_het.rds
+#          output/att_results_cohort.rds   (per-cohort ATT, focal outcomes)
+# Tables and figures are produced by 8_1d_tables_figures.R.
 # =============================================================================
 
 library(dplyr)
 library(tidyr)
 library(purrr)
-library(estimatr)
-library(gt)
-library(ggplot2)
+library(marginaleffects)
 library(here)
 
 # =============================================================================
@@ -54,7 +64,7 @@ library(here)
 # =============================================================================
 
 matched_all <- readRDS(here("data", "matched", "matched_all_states_year_only.rds"))
-matched_pa <- readRDS(here("data", "matched", "matched_pa_year_only.rds"))
+matched_pa  <- readRDS(here("data", "matched", "matched_pa_year_only.rds"))
 
 message(
   "All-states: ",
@@ -84,77 +94,43 @@ message(
 # Outcome panels
 # ---------------------------------------------------------------------------
 
-# Panel A: ITT enrollment — all matched students; non-NSC-matches coded 0
+# Panel A: Enrollment — NSC-matched students only
 panel_a_outcomes <- c(
-  "enroll_seamless_itt",
-  "enroll_ever_itt"
+  "enroll_seamless",
+  "enroll_seamless_stem"
 )
 
-# Panel B: NSC-conditional enrollment + institution — has_nsc_record == 1
+# Panel B: Institution at entry — has_nsc_record == 1
 panel_b_outcomes <- c(
-  "enroll_seamless",
-  "enroll_ever",
-  "enroll_firsttime_fulltime",
   "inst_4yr_entry",
-  "inst_public4yr_entry",
-  "inst_private4yr_entry",
-  "inst_instate_entry",
-  "enroll_delayed"
+  "inst_2yr_entry"
 )
 
 # Panel C: Persistence + degree — enroll_ever == 1; cohort restrictions apply
 panel_c_outcomes <- c(
-  "reten_1y",
   "pers_1y",
-  "deg_any_ever",
-  "deg_bach_ever",
-  "deg_any_6y",
-  "deg_bach_4y",
-  "deg_bach_6y"
-)
-
-# Panel D: STEM outcomes
-# ITT enrollment: full matched sample
-# pers_1y_stem:   enroll_ever == 1 & hs_grad_year <= 2021
-panel_d_outcomes <- c(
-  "enroll_seamless_stem_itt",
-  "enroll_ever_stem_itt",
-  "enroll_seamless_stem",
-  "enroll_ever_stem",
-  "pers_1y_stem"
+  "pers_1y_stem",
+  "deg_bach_6y",      # actually 7-year window (see header note)
+  "deg_any_stem_6y"
 )
 
 # ---------------------------------------------------------------------------
-# Labels
+# Labels — year-window labels reflect Danielle's actual loop ranges, not
+# the original variable names (see header).
 # ---------------------------------------------------------------------------
 
 outcome_labels <- c(
-  # Panel A
-  enroll_seamless_itt = "Seamless enrollment (ITT)",
-  enroll_ever_itt = "Ever enrolled (ITT)",
-  # Panel B
-  enroll_seamless = "Seamless enrollment",
-  enroll_ever = "Ever enrolled",
-  enroll_firsttime_fulltime = "First-time full-time enrollment",
-  inst_4yr_entry = "Initial enrollment: any 4-year",
-  inst_public4yr_entry = "Initial enrollment: public 4-year",
-  inst_private4yr_entry = "Initial enrollment: private 4-year",
-  inst_instate_entry = "Initial enrollment: in-state",
-  enroll_delayed = "Delayed enrollment",
-  # Panel C
-  reten_1y = "Retained into 2nd year",
-  pers_1y = "Persisted to 2nd year (any inst.)",
-  deg_any_ever = "Any degree ever",
-  deg_bach_ever = "Bachelor's degree ever",
-  deg_any_6y = "Any degree within 6 years",
-  deg_bach_4y = "Bachelor's degree within 4 years",
-  deg_bach_6y = "Bachelor's degree within 6 years",
-  # Panel D
-  enroll_seamless_stem_itt = "Seamless STEM enrollment (ITT)",
-  enroll_ever_stem_itt = "Ever enrolled STEM (ITT)",
+  # Panel A — Enrollment (NSC-matched)
+  enroll_seamless      = "Seamless enrollment",
   enroll_seamless_stem = "Seamless STEM enrollment",
-  enroll_ever_stem = "Ever enrolled STEM",
-  pers_1y_stem = "Persisted in STEM to 2nd year"
+  # Panel B — Institution at entry
+  inst_4yr_entry = "Initial enrollment: any 4-year",
+  inst_2yr_entry = "Initial enrollment: any 2-year",
+  # Panel C — Persistence + degree
+  pers_1y         = "Persisted to 2nd year (any inst.)",
+  pers_1y_stem    = "Persisted in STEM to 2nd year",
+  deg_bach_6y     = "Bachelor's degree within 7 years",
+  deg_any_stem_6y = "Any STEM degree within 6 years"
 )
 
 # ---------------------------------------------------------------------------
@@ -164,9 +140,12 @@ outcome_labels <- c(
 
 base_covars <- c(
   "gender",
+  # Grade dummies: grade_11 is the implicit reference (modal grade, ~60% of
+  # sample). Including all four with the intercept makes the design matrix
+  # rank-deficient and lm() silently drops one. Consistent with script 5's
+  # PS formula.
   "grade_9",
   "grade_10",
-  "grade_11",
   "grade_12",
   "gpa",
   "psat_math",
@@ -174,23 +153,28 @@ base_covars <- c(
   "house_size",
   "racially_marginalized",
   "bi_multi_racial",
+  # urban/suburban/rural are mutually exclusive after geo-NA imputation.
+  # `suburban` is the implicit reference (modal category) — including all
+  # three plus the geo-missing indicator and the intercept introduces a
+  # linear identity (urban + rural + urban_miss + intercept).
   "urban",
-  "suburban",
   "rural",
   "disability",
   "neg_school",
   "us_citizen",
   "first_gen",
-  # missing indicators — only included where variation exists in matched sample
-  # gender_miss, stipend_miss, us_citizen_miss excluded (one unique value — no variation)
+  # missing indicators — only included where missingness exists in matched
+  # sample AND the column is not redundant.
+  # Excluded as constant: gender_miss, stipend_miss, us_citizen_miss.
+  # Excluded as redundant duplicates: suburban_miss, rural_miss
+  # (all three geo _miss columns are derived from the same field and are
+  # therefore identical; urban_miss alone covers the geographic missingness).
   "gpa_miss",
   "psat_math_miss",
   "house_size_miss",
   "racially_marginalized_miss",
   "bi_multi_racial_miss",
   "urban_miss",
-  "suburban_miss",
-  "rural_miss",
   "disability_miss",
   "neg_school_miss",
   "first_gen_miss"
@@ -207,11 +191,16 @@ pa_covars <- c(
 
 
 # =============================================================================
-# 3. HELPER: FIT LPM + EXTRACT ATT
+# 3. HELPER: FIT LPM + EXTRACT ATT VIA G-COMPUTATION
 # =============================================================================
-# Fits a weighted LPM with HC2 robust SEs via lm_robust(). Year FEs included.
-# Constant predictors in a subsample are dropped automatically to avoid
-# rank-deficient models (common in small subgroup analyses).
+# Fits a weighted LPM via lm() (the LPM choice keeps the marginal RD as the
+# natural ATT scale for binary outcomes). The ATT is recovered via
+# marginaleffects::avg_comparisons() with HC3 robust SEs and newdata
+# restricted to treated units — i.e., g-computation averaged over the treated.
+# Year FEs included. Constant predictors in a subsample are dropped
+# automatically to avoid rank-deficient models (common in small subgroup
+# analyses). HC3 is the recommended SE for matching with replacement
+# (Hill & Reiter 2006); HC1 fallback if leverage = 1 produces NaN SE.
 
 fit_att <- function(data, outcome_var, predictors) {
   data <- droplevels(data)
@@ -229,29 +218,32 @@ fit_att <- function(data, outcome_var, predictors) {
     " + factor(year)"
   )
 
-  fit <- lm_robust(
-    as.formula(formula_str),
-    data = data,
-    weights = weights,
-    se_type = "HC2"
+  fit <- lm(as.formula(formula_str), data = data, weights = weights)
+
+  # G-computation: average marginal effect of treated_in_year (0 → 1) over
+  # treated units (newdata = subset of treated → ATT). Uses HC3 robust SEs.
+  ac <- tryCatch(
+    avg_comparisons(
+      fit,
+      variables  = "treated_in_year",
+      vcov       = "HC3",
+      newdata    = subset(data, treated_in_year == 1)
+    ),
+    error = function(e) NULL
   )
 
-  coef_row <- summary(fit)$coefficients["treated_in_year", ]
-
-  # HC2 breaks down when any observation has leverage h_ii = 1 (small matched
-  # subsamples with replacement). Fall back to HC1 and warn so the caller knows.
-  if (is.nan(coef_row["Std. Error"])) {
+  # HC3 can fail with leverage = 1 in tiny matched subsamples — fall back to HC1
+  if (is.null(ac) || is.na(ac$std.error) || is.nan(ac$std.error)) {
     warning(
-      "HC2 SE is NaN for outcome '", outcome_var,
+      "HC3 SE is NA/NaN for outcome '", outcome_var,
       "' (n=", nrow(data), ") — falling back to HC1"
     )
-    fit <- lm_robust(
-      as.formula(formula_str),
-      data = data,
-      weights = weights,
-      se_type = "HC1"
+    ac <- avg_comparisons(
+      fit,
+      variables  = "treated_in_year",
+      vcov       = "HC1",
+      newdata    = subset(data, treated_in_year == 1)
     )
-    coef_row <- summary(fit)$coefficients["treated_in_year", ]
   }
 
   wt_mean <- function(x, w) weighted.mean(x, w, na.rm = TRUE)
@@ -270,11 +262,11 @@ fit_att <- function(data, outcome_var, predictors) {
       data[[outcome_var]][data$treated_in_year == 1],
       data$weights[data$treated_in_year == 1]
     ),
-    att = coef_row["Estimate"],
-    se = coef_row["Std. Error"],
-    pval = coef_row["Pr(>|t|)"],
-    conf_lo = coef_row["CI Lower"],
-    conf_hi = coef_row["CI Upper"]
+    att     = ac$estimate,
+    se      = ac$std.error,
+    pval    = ac$p.value,
+    conf_lo = ac$conf.low,
+    conf_hi = ac$conf.high
   )
 }
 
@@ -283,31 +275,30 @@ fit_att <- function(data, outcome_var, predictors) {
 # =============================================================================
 
 run_all_outcomes <- function(matched, covars, sample_label) {
-  # Panel A: ITT enrollment — full matched sample
+  matched_nsc <- matched |> filter(has_nsc_record == 1)
   message(
     "\n--- ",
     sample_label,
-    ": Panel A — ITT enrollment (full sample) ---"
-  )
-  results_a <- map(panel_a_outcomes, \(out) {
-    message("  Fitting: ", out)
-    fit_att(matched, out, covars)
-  }) |>
-    list_rbind() |>
-    mutate(panel = "A")
-
-  # Panel B: NSC-conditional enrollment — has_nsc_record == 1
-  message("\n--- ", sample_label, ": Panel B — NSC-conditional enrollment ---")
-  matched_nsc <- matched |> filter(has_nsc_record == 1)
-  message(
-    "  NSC subsample: ",
+    ": NSC-matched subsample = ",
     nrow(matched_nsc),
     " (",
     sum(matched_nsc$treated_in_year == 1),
     " treated / ",
     sum(matched_nsc$treated_in_year == 0),
-    " control)"
+    " control) ---"
   )
+
+  # Panel A: Enrollment — NSC-matched
+  message("\n--- ", sample_label, ": Panel A — enrollment ---")
+  results_a <- map(panel_a_outcomes, \(out) {
+    message("  Fitting: ", out)
+    fit_att(matched_nsc, out, covars)
+  }) |>
+    list_rbind() |>
+    mutate(panel = "A")
+
+  # Panel B: Institution at entry — NSC-matched
+  message("\n--- ", sample_label, ": Panel B — institution at entry ---")
   results_b <- map(panel_b_outcomes, \(out) {
     message("  Fitting: ", out)
     fit_att(matched_nsc, out, covars)
@@ -315,21 +306,15 @@ run_all_outcomes <- function(matched, covars, sample_label) {
     list_rbind() |>
     mutate(panel = "B")
 
-  # Panel C: Persistence + degree — enroll_ever == 1; cohort restrictions
+  # Panel C: Persistence + degree — enroll_ever == 1.
+  # Analytic sample is already restricted to 2018–2021 in script 3b; no
+  # per-outcome cohort filters needed here.
   message("\n--- ", sample_label, ": Panel C — persistence + degree ---")
   results_c <- map(panel_c_outcomes, \(out) {
     message("  Fitting: ", out)
 
     data_sub <- matched |>
       filter(enroll_ever == 1, !is.na(.data[[out]]))
-
-    # Cohort restrictions: reten/pers need fall follow-up through 2022;
-    # degree outcomes need sufficient time to complete (≤ 2022 for 6-year rates).
-    if (out %in% c("reten_1y", "pers_1y")) {
-      data_sub <- data_sub |> filter(hs_grad_year <= 2021)
-    } else if (out %in% c("deg_any_ever", "deg_bach_ever", "deg_any_6y", "deg_bach_4y", "deg_bach_6y")) {
-      data_sub <- data_sub |> filter(hs_grad_year <= 2022)
-    }
 
     message(
       "    n = ",
@@ -345,40 +330,7 @@ run_all_outcomes <- function(matched, covars, sample_label) {
     list_rbind() |>
     mutate(panel = "C")
 
-  # Panel D: STEM outcomes
-  message("\n--- ", sample_label, ": Panel D — STEM outcomes ---")
-  results_d <- map(panel_d_outcomes, \(out) {
-    message("  Fitting: ", out)
-
-    data_sub <- if (
-      out %in% c("enroll_seamless_stem_itt", "enroll_ever_stem_itt")
-    ) {
-      # ITT: full matched sample
-      matched
-    } else if (out == "pers_1y_stem") {
-      # Persistence in STEM: enrolled, cohort <= 2021
-      matched |>
-        filter(enroll_ever == 1, hs_grad_year <= 2021, !is.na(.data[[out]]))
-    } else {
-      # NSC-conditional STEM enrollment: has_nsc_record == 1
-      matched |> filter(has_nsc_record == 1)
-    }
-
-    message(
-      "    n = ",
-      nrow(data_sub),
-      " (",
-      sum(data_sub$treated_in_year == 1),
-      " treated / ",
-      sum(data_sub$treated_in_year == 0),
-      " control)"
-    )
-    fit_att(data_sub, out, covars)
-  }) |>
-    list_rbind() |>
-    mutate(panel = "D")
-
-  bind_rows(results_a, results_b, results_c, results_d) |>
+  bind_rows(results_a, results_b, results_c) |>
     mutate(subsample = sample_label)
 }
 
@@ -387,7 +339,7 @@ run_all_outcomes <- function(matched, covars, sample_label) {
 # =============================================================================
 
 results_all <- run_all_outcomes(matched_all, base_covars, "All States")
-results_pa <- run_all_outcomes(matched_pa, pa_covars, "PA Public Schools")
+results_pa  <- run_all_outcomes(matched_pa, pa_covars, "PA Public Schools")
 
 # Quick inspect
 results_all |>
@@ -397,370 +349,20 @@ results_pa |>
   select(panel, label, n_treated, n_control, ctrl_mean, trt_mean, att, se, pval)
 
 # =============================================================================
-# 6. MAKE ATT TABLE (gt)
+# 6. HETEROGENEITY ANALYSIS
 # =============================================================================
-# Four panels: A (ITT enrollment), B (NSC enrollment + inst), C (persistence
-# + degree), D (STEM). ATT and means reported as proportions.
-
-make_att_table <- function(results, title_subtitle) {
-  fmt_pval <- function(p) {
-    case_when(p < 0.001 ~ "<0.001", TRUE ~ sprintf("%.3f", p))
-  }
-
-  sig_stars <- function(p) {
-    case_when(
-      p < 0.01 ~ "***",
-      p < 0.05 ~ "**",
-      p < 0.1 ~ "*",
-      TRUE ~ ""
-    )
-  }
-
-  prep_panel <- function(data) {
-    data |>
-      mutate(
-        ctrl_mean_fmt = sprintf("%.3f", ctrl_mean),
-        trt_mean_fmt = sprintf("%.3f", trt_mean),
-        att_fmt = paste0(sprintf("%.3f", att), sig_stars(pval)),
-        se_fmt = paste0("(", sprintf("%.3f", se), ")"),
-        ci_fmt = paste0(
-          "[",
-          sprintf("%.3f", conf_lo),
-          ", ",
-          sprintf("%.3f", conf_hi),
-          "]"
-        ),
-        pval_fmt = fmt_pval(pval)
-      ) |>
-      select(
-        panel,
-        label,
-        n_obs,
-        n_treated,
-        ctrl_mean_fmt,
-        trt_mean_fmt,
-        att_fmt,
-        se_fmt,
-        ci_fmt,
-        pval_fmt
-      )
-  }
-
-  tbl <- results |>
-    prep_panel() |>
-    arrange(panel)
-
-  last_row <- nrow(tbl)
-
-  tbl |>
-    gt(rowname_col = "label") |>
-    tab_header(
-      title = md(paste0("**", title_subtitle[1], "**")),
-      subtitle = title_subtitle[2]
-    ) |>
-    tab_row_group(
-      label = md("**Panel D: STEM Outcomes**"),
-      rows = panel == "D"
-    ) |>
-    tab_row_group(
-      label = md(
-        "**Panel C: Persistence and Degree Outcomes** *(enrolled students; cohort restrictions apply)*"
-      ),
-      rows = panel == "C"
-    ) |>
-    tab_row_group(
-      label = md(
-        "**Panel B: NSC-Conditional Enrollment and Institution Outcomes** *(NSC-matched students only)*"
-      ),
-      rows = panel == "B"
-    ) |>
-    tab_row_group(
-      label = md(
-        "**Panel A: ITT Enrollment Outcomes** *(full matched sample; non-NSC-matches coded 0)*"
-      ),
-      rows = panel == "A"
-    ) |>
-    cols_hide(panel) |>
-    cols_label(
-      n_obs = "N",
-      n_treated = "Treated",
-      ctrl_mean_fmt = "Control",
-      trt_mean_fmt = "Treated",
-      att_fmt = "ATT",
-      se_fmt = "(SE)",
-      ci_fmt = "95% CI",
-      pval_fmt = "p-value"
-    ) |>
-    tab_spanner(label = "Sample Size", columns = c(n_obs, n_treated)) |>
-    tab_spanner(
-      label = "Mean Outcome",
-      columns = c(ctrl_mean_fmt, trt_mean_fmt)
-    ) |>
-    tab_spanner(
-      label = "Treatment Effect",
-      columns = c(att_fmt, se_fmt, ci_fmt, pval_fmt)
-    ) |>
-    cols_align(align = "left", columns = label) |>
-    cols_align(align = "center", columns = -label) |>
-    tab_style(
-      style = cell_borders(sides = "top", color = "black", weight = px(2)),
-      locations = cells_body(rows = 1)
-    ) |>
-    tab_style(
-      style = cell_borders(sides = "bottom", color = "black", weight = px(2)),
-      locations = cells_body(rows = last_row)
-    ) |>
-    tab_style(
-      style = cell_text(style = "italic"),
-      locations = cells_row_groups()
-    ) |>
-    tab_source_note(
-      source_note = md(paste0(
-        "*Notes:* ATT = average treatment effect on the treated, estimated via a ",
-        "linear probability model (LPM) with matching weights, cohort fixed effects, ",
-        "and HC2 heteroskedasticity-robust standard errors. ",
-        "All outcomes are binary (0/1); ATT and means are reported as proportions. ",
-        "\\* p < 0.10, \\*\\* p < 0.05, \\*\\*\\* p < 0.01."
-      ))
-    ) |>
-    tab_source_note(
-      source_note = md(paste0(
-        "Panel A uses all matched students with non-NSC-matched students coded as ",
-        "non-enrolled (ITT estimand). ",
-        "Panel B restricts to NSC-matched students. ",
-        "Panel C restricts to enrolled students (enroll_ever == 1); reten_1y and ",
-        "pers_1y further restricted to cohorts 2018–2021 (2022 excluded — no fall ",
-        "2023 follow-up in NSC file). Degree outcomes restricted to cohorts 2018–2022. ",
-        "Panel D STEM enrollment uses ITT (full sample) or NSC-conditional sample; ",
-        "pers_1y_stem restricted to enrolled students, cohorts 2018–2021."
-      ))
-    ) |>
-    tab_source_note(
-      source_note = md(paste0(
-        "Propensity scores estimated via logistic regression with nearest-neighbor ",
-        "matching with replacement, caliper = 0.5 SD, exact match on application year. ",
-        "Year 2022 excluded from matching (insufficient follow-up for retention outcomes). ",
-        "Year 2023 excluded from PA matching (only 1 treated student)."
-      ))
-    ) |>
-    tab_options(
-      table.font.size = px(11),
-      heading.title.font.size = px(13),
-      heading.subtitle.font.size = px(11),
-      heading.align = "left",
-      column_labels.font.weight = "bold",
-      column_labels.border.top.color = "black",
-      column_labels.border.top.width = px(2),
-      column_labels.border.bottom.color = "black",
-      column_labels.border.bottom.width = px(1),
-      table_body.border.bottom.color = "black",
-      table_body.border.bottom.width = px(2),
-      row_group.border.top.color = "black",
-      row_group.border.top.width = px(1),
-      row_group.border.bottom.color = "gray80",
-      row_group.border.bottom.width = px(1),
-      row_group.background.color = "gray97",
-      table.border.top.color = "white",
-      table.border.bottom.color = "white",
-      source_notes.font.size = px(10),
-      data_row.padding = px(3)
-    )
-}
-
-att_gt_all <- make_att_table(
-  results_all,
-  c(
-    "Table 2: Effects of the Hillman Summer Program on College Outcomes",
-    "All States — Propensity Score Matched Sample"
-  )
-)
-
-att_gt_pa <- make_att_table(
-  results_pa,
-  c(
-    "Table 3: Effects of the Hillman Summer Program on College Outcomes",
-    "PA Public Schools — Propensity Score Matched Sample"
-  )
-)
-
-att_gt_all
-att_gt_pa
-
-# =============================================================================
-# 7. DESCRIPTIVE TABLE BY COHORT
-# =============================================================================
-# Weighted means by year and treatment status for focal outcomes.
-# No inference — purely descriptive.
-
-focal_outcomes <- c(
-  "enroll_seamless_itt",
-  "enroll_seamless_stem_itt",
-  "inst_4yr_entry",
-  "inst_public4yr_entry",
-  "reten_1y",
-  "deg_any_6y"
-)
-
-focal_labels <- c(
-  enroll_seamless_itt = "Seamless enrollment (ITT)",
-  enroll_seamless_stem_itt = "Seamless STEM enrollment (ITT)",
-  inst_4yr_entry = "Initial enrollment: any 4-year",
-  inst_public4yr_entry = "Initial enrollment: public 4-year",
-  reten_1y = "Retained into 2nd year",
-  deg_any_6y = "Any degree within 6 years"
-)
-
-make_year_table <- function(matched, title_subtitle) {
-  years <- sort(unique(matched$year))
-
-  tbl <- matched |>
-    group_by(year, treated_in_year) |>
-    summarise(
-      n = n(),
-      across(all_of(focal_outcomes), ~ weighted.mean(., weights, na.rm = TRUE)),
-      .groups = "drop"
-    ) |>
-    mutate(group = if_else(treated_in_year == 1, "trt", "ctrl")) |>
-    select(-treated_in_year) |>
-    pivot_longer(
-      all_of(focal_outcomes),
-      names_to = "outcome",
-      values_to = "mean"
-    ) |>
-    pivot_wider(names_from = group, values_from = c(mean, n)) |>
-    mutate(
-      censored = (mean_trt == 0 & mean_ctrl == 0),
-      mean_ctrl = if_else(censored, NA_real_, mean_ctrl),
-      mean_trt = if_else(censored, NA_real_, mean_trt),
-      diff = mean_trt - mean_ctrl,
-      outcome_label = focal_labels[outcome],
-      ctrl_fmt = if_else(is.na(mean_ctrl), "—", sprintf("%.3f", mean_ctrl)),
-      trt_fmt = if_else(is.na(mean_trt), "—", sprintf("%.3f", mean_trt)),
-      diff_fmt = case_when(
-        is.na(diff) ~ "—",
-        diff >= 0 ~ paste0("+", sprintf("%.3f", diff)),
-        TRUE ~ sprintf("%.3f", diff)
-      ),
-      year = as.character(year)
-    ) |>
-    select(outcome_label, year, n_trt, n_ctrl, ctrl_fmt, trt_fmt, diff_fmt) |>
-    arrange(factor(outcome_label, levels = focal_labels), year) |>
-    pivot_wider(
-      names_from = year,
-      values_from = c(n_trt, n_ctrl, ctrl_fmt, trt_fmt, diff_fmt),
-      names_glue = "{year}_{.value}"
-    )
-
-  # t() gives year-grouped order: 2017_n_trt, 2017_n_ctrl, ..., 2018_n_trt, ...
-  # Without t(), as.vector reads column-major (stats-grouped), scrambling labels.
-  year_stat_cols <- c(t(outer(
-    as.character(years),
-    c("n_trt", "n_ctrl", "ctrl_fmt", "trt_fmt", "diff_fmt"),
-    paste,
-    sep = "_"
-  )))
-
-  ordered_cols <- c("outcome_label", year_stat_cols)
-  tbl <- tbl |> select(all_of(ordered_cols))
-  n_rows <- nrow(tbl)
-
-  label_list <- setNames(
-    rep(list("NT", "NC", "Control", "Treated", "Diff."), length(years)),
-    year_stat_cols
-  )
-
-  gt_tbl <- tbl |>
-    gt(rowname_col = "outcome_label") |>
-    tab_header(
-      title = md(paste0("**", title_subtitle[1], "**")),
-      subtitle = title_subtitle[2]
-    ) |>
-    cols_label(.list = label_list)
-
-  for (yr in as.character(years)) {
-    gt_tbl <- gt_tbl |>
-      tab_spanner(
-        label = md(paste0("**", yr, "**")),
-        columns = starts_with(paste0(yr, "_"))
-      )
-  }
-
-  gt_tbl |>
-    cols_align(align = "left", columns = 1) |>
-    cols_align(align = "center", columns = -1) |>
-    tab_style(
-      style = cell_borders(sides = "top", color = "black", weight = px(2)),
-      locations = cells_body(rows = 1)
-    ) |>
-    tab_style(
-      style = cell_borders(sides = "bottom", color = "black", weight = px(2)),
-      locations = cells_body(rows = n_rows)
-    ) |>
-    tab_source_note(
-      source_note = md(paste0(
-        "*Notes:* Means are weighted by matching weights. ",
-        "NT = treated students; NC = matched controls. ",
-        "Diff. = treated minus control mean (descriptive only — no inference). ",
-        "Cells marked '—' indicate outcomes not yet observed due to insufficient ",
-        "follow-up time for that cohort. ",
-        "Year 2022 excluded from matching (insufficient follow-up for retention). ",
-        "Year 2023 excluded from PA sample (only 1 treated student)."
-      ))
-    ) |>
-    tab_options(
-      table.font.size = px(11),
-      heading.title.font.size = px(13),
-      heading.subtitle.font.size = px(11),
-      heading.align = "left",
-      column_labels.font.weight = "bold",
-      column_labels.border.top.color = "black",
-      column_labels.border.top.width = px(2),
-      column_labels.border.bottom.color = "black",
-      column_labels.border.bottom.width = px(1),
-      table_body.border.bottom.color = "black",
-      table_body.border.bottom.width = px(2),
-      table.border.top.color = "white",
-      table.border.bottom.color = "white",
-      source_notes.font.size = px(10),
-      data_row.padding = px(3)
-    )
-}
-
-desc_gt_all <- make_year_table(
-  matched_all,
-  c(
-    "Descriptive Outcome Means by Cohort and Treatment Status",
-    "All States — Matched Sample"
-  )
-)
-
-desc_gt_pa <- make_year_table(
-  matched_pa,
-  c(
-    "Descriptive Outcome Means by Cohort and Treatment Status",
-    "PA Public Schools — Matched Sample"
-  )
-)
-
-desc_gt_all
-desc_gt_pa
-
-# =============================================================================
-# 8. HETEROGENEITY ANALYSIS
-# =============================================================================
-# Re-run fit_att() within subgroups for two focal outcomes:
-#   - enroll_seamless_stem_itt (STEM enrollment, Panel D)
-#   - pers_1y_stem             (STEM persistence, Panel D)
+# Re-run fit_att() within subgroups for two focal STEM outcomes:
+#   - enroll_seamless_stem (STEM enrollment, Panel A; has_nsc_record == 1)
+#   - pers_1y_stem         (STEM persistence, Panel C; enroll_ever == 1)
 #
 # Subgroups: racially_marginalized, first_gen, gender, urban/rural
-# Results visualised as faceted dot-and-whisker plots.
-# Small within-subgroup samples produce wide CIs — interpret with caution.
+# Results saved to RDS; plots produced by 8_1d_tables_figures.R.
 
-het_outcomes <- c("enroll_seamless_stem_itt", "pers_1y_stem")
+het_outcomes <- c("enroll_seamless_stem", "pers_1y_stem")
 
 het_labels <- c(
-  enroll_seamless_stem_itt = "Seamless STEM Enrollment (ITT)",
-  pers_1y_stem = "Persisted in STEM to 2nd Year"
+  enroll_seamless_stem = "Seamless STEM Enrollment",
+  pers_1y_stem         = "Persisted in STEM to 2nd Year"
 )
 
 run_het <- function(matched, covars, sample_label) {
@@ -800,10 +402,15 @@ run_het <- function(matched, covars, sample_label) {
           matched |> filter(.data[[sg$var]] == sg$levels[[level_label]])
         }
 
-        # Apply same cohort restriction as main analysis for pers_1y_stem
-        if (out == "pers_1y_stem") {
+        # Conditioning matches the main analysis: enroll_seamless_stem is
+        # NSC-conditional (has_nsc_record == 1); pers_1y_stem is conditional
+        # on enrollment (enroll_ever == 1, which implies has_nsc_record == 1).
+        if (out == "enroll_seamless_stem") {
           data_sub <- data_sub |>
-            filter(enroll_ever == 1, hs_grad_year <= 2021, !is.na(.data[[out]]))
+            filter(has_nsc_record == 1, !is.na(.data[[out]]))
+        } else if (out == "pers_1y_stem") {
+          data_sub <- data_sub |>
+            filter(enroll_ever == 1, !is.na(.data[[out]]))
         }
 
         # Require at least 15 treated obs
@@ -829,7 +436,7 @@ run_het <- function(matched, covars, sample_label) {
 }
 
 results_het_all <- run_het(matched_all, base_covars, "All States")
-results_het_pa <- run_het(matched_pa, pa_covars, "PA Public Schools")
+results_het_pa  <- run_het(matched_pa, pa_covars, "PA Public Schools")
 
 results_het <- bind_rows(results_het_all, results_het_pa) |>
   mutate(
@@ -850,104 +457,159 @@ results_het <- bind_rows(results_het_all, results_het_pa) |>
     subsample = factor(subsample, levels = c("All States", "PA Public Schools"))
   )
 
-# Dot-and-whisker plot faceted by outcome and sample
-het_plot <- results_het |>
-  ggplot(aes(x = subgroup_label, y = att)) +
-  geom_hline(
-    yintercept = 0,
-    linetype = "dashed",
-    color = "gray60",
-    linewidth = 0.6
-  ) +
-  geom_errorbar(
-    aes(ymin = conf_lo, ymax = conf_hi),
-    width = 0.15,
-    color = "#2c6e9e",
-    linewidth = 0.8
-  ) +
-  geom_point(size = 3.5, color = "#f28e2b") +
-  facet_grid(subsample ~ outcome_label, scales = "free_y") +
-  scale_y_continuous(
-    labels = \(x) paste0(ifelse(x > 0, "+", ""), round(x * 100, 1), " pp"),
-    breaks = scales::pretty_breaks(n = 5)
-  ) +
-  labs(
-    title = "Heterogeneity in Program Effects by Subgroup",
-    subtitle = "ATT with 95% confidence intervals",
-    x = NULL,
-    y = "Treatment effect (percentage points)",
-    caption = paste0(
-      "Notes: Estimates from a linear probability model with matching weights, ",
-      "cohort fixed effects, and HC2 robust SEs. ",
-      "Subgroups with fewer than 15 treated students are excluded. ",
-      "Interpret wide CIs with caution — small within-subgroup samples."
-    )
-  ) +
-  theme_minimal(base_size = 12) +
-  theme(
-    plot.title = element_text(face = "bold", size = 13),
-    plot.subtitle = element_text(
-      color = "gray40",
-      size = 10,
-      margin = margin(b = 10)
-    ),
-    plot.caption = element_text(
-      color = "gray40",
-      size = 8,
-      hjust = 0,
-      margin = margin(t = 10),
-      lineheight = 1.3
-    ),
-    axis.text.x = element_text(size = 9, angle = 30, hjust = 1),
-    axis.title.y = element_text(size = 11),
-    panel.grid.minor = element_blank(),
-    panel.grid.major.x = element_blank(),
-    strip.text = element_text(face = "bold", size = 11),
-    strip.background = element_rect(fill = "gray95", color = NA),
-    plot.margin = margin(10, 15, 10, 15)
-  )
-
-het_plot
-
 # =============================================================================
-# 9. SAVE ALL OUTPUTS
+# 7. COHORT-SPECIFIC ATT (focal outcomes)
 # =============================================================================
+# Per-application-year (cohort) ATT for the four focal policy outcomes:
+#   - enroll_seamless         (Panel A, NSC-matched)
+#   - enroll_seamless_stem    (Panel A, NSC-matched)
+#   - pers_1y_stem            (Panel C, enroll_ever == 1)
+#   - deg_bach_6y             (Panel C, enroll_ever == 1; 7y window)
+#
+# The cohort variable is `year` (application year, = year of Hillman summer
+# program participation). This is what matching exact-matched on, so within-
+# cohort covariate balance is exact by construction. The 2020 application
+# year was already dropped in script 3a (COVID disruption to program).
+#
+# Implementation uses the MatchIt-vignette pattern for moderation: add a
+# treated_in_year × factor(year) interaction to the LPM, then call
+# avg_comparisons() with by = "year" to extract per-cohort ATTs from a
+# single fit. Cells with fewer than 15 treated students are suppressed
+# (matching the heterogeneity-analysis convention) — they're returned in
+# the output with NA estimates and suppressed = TRUE.
 
-dir.create(here("output", "tables"), recursive = TRUE, showWarnings = FALSE)
-dir.create(here("output", "figures"), recursive = TRUE, showWarnings = FALSE)
-
-# ATT tables
-gtsave(att_gt_all, here("output", "tables", "att_table_all_states.html"))
-gtsave(att_gt_all, here("output", "tables", "att_table_all_states.tex"))
-gtsave(att_gt_pa, here("output", "tables", "att_table_pa.html"))
-gtsave(att_gt_pa, here("output", "tables", "att_table_pa.tex"))
-
-# Descriptive tables
-gtsave(desc_gt_all, here("output", "tables", "desc_by_year_all_states.html"))
-gtsave(desc_gt_all, here("output", "tables", "desc_by_year_all_states.tex"))
-gtsave(desc_gt_pa, here("output", "tables", "desc_by_year_pa.html"))
-gtsave(desc_gt_pa, here("output", "tables", "desc_by_year_pa.tex"))
-
-# Heterogeneity plot
-ggsave(
-  here("output", "figures", "het_plot.png"),
-  het_plot,
-  width = 12,
-  height = 7,
-  dpi = 300
+cohort_focal_outcomes <- list(
+  list(name = "enroll_seamless",      panel = "A", filter = "nsc"),
+  list(name = "enroll_seamless_stem", panel = "A", filter = "nsc"),
+  list(name = "pers_1y_stem",         panel = "C", filter = "enrolled"),
+  list(name = "deg_bach_6y",          panel = "C", filter = "enrolled")
 )
 
-# Results RDS
-saveRDS(results_all, here("output", "att_results_all_states.rds"))
-saveRDS(results_pa, here("output", "att_results_pa.rds"))
-saveRDS(results_het, here("output", "att_results_het.rds"))
+fit_att_by_cohort <- function(data, outcome_var, predictors, min_treated = 15) {
+  data <- droplevels(data)
+
+  predictors <- predictors[sapply(predictors, \(p) {
+    col <- data[[p]]
+    !is.null(col) && length(unique(col[!is.na(col)])) > 1
+  })]
+
+  # treated_in_year * factor(year) already implies the year main effects, so
+  # we drop the separate factor(year) FE that the pooled spec includes.
+  formula_str <- paste0(
+    outcome_var,
+    " ~ treated_in_year * factor(year) + ",
+    paste(predictors, collapse = " + ")
+  )
+
+  fit <- lm(as.formula(formula_str), data = data, weights = weights)
+
+  ac <- tryCatch(
+    avg_comparisons(
+      fit,
+      variables = "treated_in_year",
+      vcov      = "HC3",
+      newdata   = subset(data, treated_in_year == 1),
+      by        = "year"
+    ),
+    error = function(e) NULL
+  )
+
+  # HC3 → HC1 fallback for leverage = 1 in tiny cells
+  if (is.null(ac) || any(is.na(ac$std.error)) || any(is.nan(ac$std.error))) {
+    warning(
+      "HC3 SE is NA/NaN for cohort ATT '", outcome_var,
+      "' — falling back to HC1"
+    )
+    ac <- tryCatch(
+      avg_comparisons(
+        fit,
+        variables = "treated_in_year",
+        vcov      = "HC1",
+        newdata   = subset(data, treated_in_year == 1),
+        by        = "year"
+      ),
+      error = function(e) NULL
+    )
+  }
+
+  if (is.null(ac)) return(tibble())
+
+  # Per-cohort cell sizes and weighted means
+  cell_summary <- data |>
+    group_by(year) |>
+    summarise(
+      n_treated = sum(treated_in_year == 1),
+      n_control = sum(treated_in_year == 0),
+      ctrl_mean = weighted.mean(
+        .data[[outcome_var]][treated_in_year == 0],
+        weights[treated_in_year == 0],
+        na.rm = TRUE
+      ),
+      trt_mean = weighted.mean(
+        .data[[outcome_var]][treated_in_year == 1],
+        weights[treated_in_year == 1],
+        na.rm = TRUE
+      ),
+      .groups = "drop"
+    )
+
+  as_tibble(ac) |>
+    select(year, att = estimate, se = std.error,
+           pval = p.value, conf_lo = conf.low, conf_hi = conf.high) |>
+    left_join(cell_summary, by = "year") |>
+    mutate(
+      outcome    = outcome_var,
+      label      = outcome_labels[outcome_var],
+      suppressed = n_treated < min_treated,
+      across(c(att, se, pval, conf_lo, conf_hi),
+             \(x) if_else(suppressed, NA_real_, x))
+    ) |>
+    select(outcome, label, year, n_treated, n_control,
+           ctrl_mean, trt_mean, att, se, pval, conf_lo, conf_hi, suppressed)
+}
+
+run_cohort_att <- function(matched, covars, sample_label) {
+  message("\n--- ", sample_label, ": cohort ATT (focal outcomes) ---")
+
+  matched_nsc <- matched |> filter(has_nsc_record == 1)
+
+  map(cohort_focal_outcomes, \(o) {
+    message("  Fitting cohort ATT: ", o$name)
+
+    data_sub <- if (o$filter == "nsc") {
+      matched_nsc
+    } else {
+      matched |> filter(enroll_ever == 1, !is.na(.data[[o$name]]))
+    }
+
+    fit_att_by_cohort(data_sub, o$name, covars) |>
+      mutate(panel = o$panel)
+  }) |>
+    list_rbind() |>
+    mutate(subsample = sample_label)
+}
+
+results_cohort_all <- run_cohort_att(matched_all, base_covars, "All States")
+results_cohort_pa  <- run_cohort_att(matched_pa,  pa_covars,   "PA Public Schools")
+
+results_cohort <- bind_rows(results_cohort_all, results_cohort_pa) |>
+  mutate(
+    subsample = factor(subsample, levels = c("All States", "PA Public Schools"))
+  )
+
+# =============================================================================
+# 8. SAVE RESULTS
+# =============================================================================
+
+dir.create(here("output"), recursive = TRUE, showWarnings = FALSE)
+
+saveRDS(results_all,    here("output", "att_results_all_states.rds"))
+saveRDS(results_pa,     here("output", "att_results_pa.rds"))
+saveRDS(results_het,    here("output", "att_results_het.rds"))
+saveRDS(results_cohort, here("output", "att_results_cohort.rds"))
 
 message("\n=== Impact analysis complete ===")
-message("Saved: att_table_all_states.html/.tex")
-message("Saved: att_table_pa.html/.tex")
-message("Saved: desc_by_year_all_states.html/.tex")
-message("Saved: desc_by_year_pa.html/.tex")
-message("Saved: het_plot.png")
 message(
-  "Saved: att_results_all_states.rds / att_results_pa.rds / att_results_het.rds"
+  "Saved: att_results_all_states.rds / att_results_pa.rds / ",
+  "att_results_het.rds / att_results_cohort.rds"
 )

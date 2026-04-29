@@ -13,15 +13,18 @@
 #
 # treated_before_2017: created HERE from year columns -- do NOT recreate in 3a
 #
-# Input:  data/Alumni Tracker (Updated 9.13.2023 - SJ) with Charts.csv
+# Input:  data/raw/alumni/Alumni Tracker (Updated 9.13.2023 - SJ) with Charts.csv
 # Output: `alum`   -- one row per student with treatment flags
 #         `alum_n` -- alumni counts by participation year
+#         output/counts/n_alumni_by_year.csv
 # =============================================================================
 
 library(tidyverse)
-library(readxl)
 library(here)
 library(janitor)
+
+source(here("code", "helpers.R"))
+
 dir.create(here("output", "counts"), recursive = TRUE, showWarnings = FALSE)
 
 # =============================================================================
@@ -57,19 +60,8 @@ stopifnot(sum(str_detect(names(alum_raw), "^year[0-9]+$")) <= 4)
 
 alum <- alum_raw |>
   mutate(
-    first_name = first |>
-      str_to_lower() |>
-      str_remove_all('"[^"]*"') |>
-      str_remove_all('\\([^)]*\\)') |>
-      str_replace_all("[^a-z]", " ") |>
-      str_squish(),
-    last_name = last |>
-      str_to_lower() |>
-      str_remove_all('"[^"]*"') |>
-      str_remove_all('\\([^)]*\\)') |>
-      str_remove("\\s+(jr|sr|ii|iii)\\.?$") |>
-      str_replace_all("[^a-z]", " ") |>
-      str_squish()
+    first_name = clean_person_name(first),
+    last_name  = clean_person_name(last, strip_suffix = TRUE)
   ) |>
   mutate(
     last_name = case_when(
@@ -127,7 +119,7 @@ message("alum_long after dedup: ", nrow(alum_long), " rows")
 alum_flags <- alum_long |>
   group_by(first_name, last_name) |>
   summarise(
-    first_treatment_year = min(year, na.rm = TRUE),
+    first_treatment_year = min(year),
     total_times_treated = n_distinct(year),
     .groups = "drop"
   ) |>
@@ -161,12 +153,16 @@ treated_years[setdiff(paste0("treated_", 2017:2023), names(treated_years))] <- 0
 treated_years <- treated_years |>
   select(first_name, last_name, paste0("treated_", 2017:2023))
 
-# Join flags and year indicators back to alum (one row per student)
+# Join flags and year indicators back to alum (one row per student).
+# The source CSV has 8 duplicate (first_name, last_name) pairs with identical
+# data — collapse them so downstream joins (in 3a) don't silently double the
+# applicant rows for those students.
 alum <- alum |>
   select(-matches("^year[0-9]+$")) |>
   left_join(alum_flags, by = c("first_name", "last_name")) |>
   left_join(treated_years, by = c("first_name", "last_name")) |>
-  mutate(across(starts_with("treated_"), ~ replace_na(.x, 0L)))
+  mutate(across(starts_with("treated_"), ~ replace_na(.x, 0L))) |>
+  distinct(first_name, last_name, .keep_all = TRUE)
 
 message("alum: ", nrow(alum), " rows x ", ncol(alum), " cols")
 
@@ -175,6 +171,7 @@ message("alum: ", nrow(alum), " rows x ", ncol(alum), " cols")
 # =============================================================================
 
 alum_n <- alum_long |>
+  distinct(first_name, last_name, year) |>
   count(year, name = "n_alumni") |>
   mutate(
     cumulative_n = cumsum(n_alumni),

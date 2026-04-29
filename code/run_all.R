@@ -1,87 +1,39 @@
-#   7_1d_impact_subgroup.R      — subgroup ATT estimates by stipend,
-#                                 racially marginalized, urban, suburban, rural,
-#                                 disability, neg. school environment, first-gen.
-#                                 Subgroups with < 20 treated are suppressed.
-#                                 Sources 7_1d_impact.R internally to inherit
-#                                 shared objects (fit_att, matched data, etc.).
-#                                 → `results_subgroup_all`, `results_subgroup_pa`
-#                                 → output/att_subgroup_all_states.rds
-#                                 → output/att_subgroup_pa.rds
-#                                 → output/att_subgroup_table_all_states.html/.tex
-#                                 → output/att_subgroup_table_pa.html/.tex                            drop 2020 (COVID)
-#                                → `merged_df`
+# =============================================================================
+# run_all.R — Full pipeline driver for the Hillman Summer STEM Program impact
+# study. Sources scripts in order; downstream scripts inherit upstream objects
+# from the calling environment.
 #
-#   3b_1d_merge_clean.R        — standardize covariates; merge NSC college
-#                                outcome data; restrict to graduation cohorts
-#                                2018–2022
-#                                → `merged_clean`
-#
-#   4_1d_merge_school_info.R   — normalize school names; link to PA AUN codes
-#                                via crosswalk; merge school-level covariates
-#                                (PA public schools only)
-#                                → `merged_df_all`, `merged_df_pa`
-#                                → data/merged_all_states.csv
-#                                → data/merged_df_pa_public.csv
-#
-#   5_1d_matching.R            — propensity score matching for both samples:
-#                                nearest-neighbor, with replacement,
-#                                caliper = 0.5 SD, exact match on year.
-#                                PA model adds school-level covariates.
-#                                → `matched_data_all`, `matched_data_pa`
-#                                → data/matched_all_states_year_only.rds
-#                                → data/matched_pa_year_only.rds
-#                                → output/balance_table_all_states.html/.tex
-#                                → output/balance_table_pa.html/.tex
-#                                → output/sample_table_all_states.html/.tex
-#                                → output/sample_table_pa.html/.tex
-#
-#   7_1d_impact.R              — ATT estimates via doubly-robust weighted LPMs
-#                                with cohort FEs and cluster-robust SEs.
-#                                Three outcome groups: enrollment (full),
-#                                enrollment (NSC-matched), degree/persistence.
-#                                GPA heterogeneity analysis for both samples.
-#                                → `results_all`, `results_pa`
-#                                → output/att_results_all_states_year_only.rds
-#                                → output/att_results_pa_year_only.rds
-#                                → output/att_table_all_states.html/.tex
-#                                → output/att_table_pa.html/.tex
-#                                → output/desc_by_year_all_states.html/.tex
-#                                → output/desc_by_year_pa.html/.tex
-#
-#   7_1d_impact_subgroup.R     — subgroup ATT estimates by stipend,
-#                                racially marginalized, urban, suburban, rural,
-#                                disability, neg. school environment, first-gen.
-#                                Subgroups with < 20 treated are suppressed.
-#                                 Sources 7_1d_impact.R internally to inherit
-#                                 shared objects (fit_att, matched data, etc.).
-#                                 → `results_subgroup_all`, `results_subgroup_pa`
-#                                 → output/att_subgroup_all_states.rds
-#                                 → output/att_subgroup_pa.rds
-#                                 → output/att_subgroup_table_all_states.html/.tex
-#                                 → output/att_subgroup_table_pa.html/.tex
-#
-#   8_1d_tables_figures.R       — publication-ready tables and figures
-#                                 formatted to Meyer et al. (2024) conventions:
-#                                 control mean | ATT | SE | N, panels A/B/C,
-#                                 horizontal coefficient plots for subgroups
-#                                 and GPA heterogeneity.
-#                                 → output/table_1_balance.html/.tex
-#                                 → output/table_2_att_all_states.html/.tex
-#                                 → output/table_3_att_pa.html/.tex
-#                                 → output/appendix_table_a1_balance_pa.html/.tex
-#                                 → output/appendix_table_a2_sample_by_cohort.html/.tex
-#                                 → output/figure_1_subgroup_enrollment.pdf/.png
-#                                 → output/figure_2_subgroup_stem.pdf/.png
-#                                 → output/figure_3_subgroup_retention.pdf/.png
-#                                 → output/figure_4_gpa_heterogeneity.pdf/.png
+# Pipeline:
+#   1_1d_applicant_clean.R      — clean raw applicant files (2017–2023)
+#   2_1d_alumni_clean.R         — clean alumni tracker, build treatment indicators
+#   3a_1d_master_merge.R        — merge applicants + alumni; drop 2020 (COVID)
+#                                 → `merged_df`
+#   3b_1d_merge_clean.R         — standardize covariates; merge NSC outcomes
+#                                 → `merged_clean`
+#   4_1d_merge_school_info.R    — link PA AUN codes; merge school-level covariates
+#                                 → `merged_df_all`, `merged_df_pa`
+#                                 → data/processed/merged_all_states.csv
+#                                 → data/processed/merged_df_pa_public.csv
+#   5_1d_matching.R             — PSM (nearest-neighbor, caliper 0.5 SD, exact on year)
+#                                 → data/matched/matched_{all_states,pa}_year_only.rds
+#                                 → data/matched/matchit_object_{all_states,pa}.rds
+#                                 → data/matched/matching_data_{all_states,pa}.rds
+#   7_1d_impact.R               — doubly-robust ATT via weighted LPMs (HC2 SEs)
+#                                 → output/att_results_{all_states,pa}.rds
+#                                 → output/att_results_het.rds
+#   7_1d_impact_subgroup.R      — subgroup ATT estimates (suppressed if <20 treated)
+#                                 → output/att_subgroup_{all_states,pa}.rds
+#   8_1d_tables_figures.R       — all publication tables and figures (HTML/PNG)
+#                                 → output/tables/table_{1,2,3,4}_*.html
+#                                 → output/tables/appendix_a{1,2}_*.html
+#                                 → output/figures/figure_{1,2}_*.png
 #
 # Notes:
 #   - Requires the `here` package; project root is set by the .Rproj file.
-#   - Year 2020 excluded (COVID disruption); year 2022 excluded (insufficient
-#     follow-up for most outcomes).
+#   - Year 2020 excluded (COVID); 2022 excluded from matching (NSC follow-up lag);
+#     2023 excluded from PA matching (only 1 treated).
 #   - Non-NSC-matched students coded as 0 for enrollment outcomes in the main
-#     spec; Panel B of impact tables restricts to NSC-matched students as a
-#     robustness check.
+#     spec; Panel B restricts to NSC-matched students as a robustness check.
 #
 # Usage:
 #   source("code/run_all.R")
