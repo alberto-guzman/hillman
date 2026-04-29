@@ -49,7 +49,6 @@
 # Output:  output/att_results_all_states.rds
 #          output/att_results_pa.rds
 #          output/att_results_het.rds
-#          output/att_results_cohort.rds   (per-cohort ATT, focal outcomes)
 # Tables and figures are produced by 8_1d_tables_figures.R.
 # =============================================================================
 
@@ -200,9 +199,10 @@ pa_covars <- c(
 # Year FEs included. Constant predictors in a subsample are dropped
 # automatically to avoid rank-deficient models (common in small subgroup
 # analyses). HC3 is the recommended SE for matching with replacement
-# (Hill & Reiter 2006); HC1 fallback if leverage = 1 produces NaN SE.
+# (Hill & Reiter 2006; MatchIt vignette).
 
 fit_att <- function(data, outcome_var, predictors) {
+  stopifnot("weights" %in% names(data))
   data <- droplevels(data)
 
   # Drop predictors that are constant or missing in this subsample
@@ -221,30 +221,13 @@ fit_att <- function(data, outcome_var, predictors) {
   fit <- lm(as.formula(formula_str), data = data, weights = weights)
 
   # G-computation: average marginal effect of treated_in_year (0 → 1) over
-  # treated units (newdata = subset of treated → ATT). Uses HC3 robust SEs.
-  ac <- tryCatch(
-    avg_comparisons(
-      fit,
-      variables  = "treated_in_year",
-      vcov       = "HC3",
-      newdata    = subset(data, treated_in_year == 1)
-    ),
-    error = function(e) NULL
+  # treated units (newdata = subset of treated → ATT). HC3 robust SEs.
+  ac <- avg_comparisons(
+    fit,
+    variables = "treated_in_year",
+    vcov      = "HC3",
+    newdata   = subset(data, treated_in_year == 1)
   )
-
-  # HC3 can fail with leverage = 1 in tiny matched subsamples — fall back to HC1
-  if (is.null(ac) || is.na(ac$std.error) || is.nan(ac$std.error)) {
-    warning(
-      "HC3 SE is NA/NaN for outcome '", outcome_var,
-      "' (n=", nrow(data), ") — falling back to HC1"
-    )
-    ac <- avg_comparisons(
-      fit,
-      variables  = "treated_in_year",
-      vcov       = "HC1",
-      newdata    = subset(data, treated_in_year == 1)
-    )
-  }
 
   wt_mean <- function(x, w) weighted.mean(x, w, na.rm = TRUE)
 
@@ -458,158 +441,17 @@ results_het <- bind_rows(results_het_all, results_het_pa) |>
   )
 
 # =============================================================================
-# 7. COHORT-SPECIFIC ATT (focal outcomes)
-# =============================================================================
-# Per-application-year (cohort) ATT for the four focal policy outcomes:
-#   - enroll_seamless         (Panel A, NSC-matched)
-#   - enroll_seamless_stem    (Panel A, NSC-matched)
-#   - pers_1y_stem            (Panel C, enroll_ever == 1)
-#   - deg_bach_6y             (Panel C, enroll_ever == 1; 7y window)
-#
-# The cohort variable is `year` (application year, = year of Hillman summer
-# program participation). This is what matching exact-matched on, so within-
-# cohort covariate balance is exact by construction. The 2020 application
-# year was already dropped in script 3a (COVID disruption to program).
-#
-# Implementation uses the MatchIt-vignette pattern for moderation: add a
-# treated_in_year × factor(year) interaction to the LPM, then call
-# avg_comparisons() with by = "year" to extract per-cohort ATTs from a
-# single fit. Cells with fewer than 15 treated students are suppressed
-# (matching the heterogeneity-analysis convention) — they're returned in
-# the output with NA estimates and suppressed = TRUE.
-
-cohort_focal_outcomes <- list(
-  list(name = "enroll_seamless",      panel = "A", filter = "nsc"),
-  list(name = "enroll_seamless_stem", panel = "A", filter = "nsc"),
-  list(name = "pers_1y_stem",         panel = "C", filter = "enrolled"),
-  list(name = "deg_bach_6y",          panel = "C", filter = "enrolled")
-)
-
-fit_att_by_cohort <- function(data, outcome_var, predictors, min_treated = 15) {
-  data <- droplevels(data)
-
-  predictors <- predictors[sapply(predictors, \(p) {
-    col <- data[[p]]
-    !is.null(col) && length(unique(col[!is.na(col)])) > 1
-  })]
-
-  # treated_in_year * factor(year) already implies the year main effects, so
-  # we drop the separate factor(year) FE that the pooled spec includes.
-  formula_str <- paste0(
-    outcome_var,
-    " ~ treated_in_year * factor(year) + ",
-    paste(predictors, collapse = " + ")
-  )
-
-  fit <- lm(as.formula(formula_str), data = data, weights = weights)
-
-  ac <- tryCatch(
-    avg_comparisons(
-      fit,
-      variables = "treated_in_year",
-      vcov      = "HC3",
-      newdata   = subset(data, treated_in_year == 1),
-      by        = "year"
-    ),
-    error = function(e) NULL
-  )
-
-  # HC3 → HC1 fallback for leverage = 1 in tiny cells
-  if (is.null(ac) || any(is.na(ac$std.error)) || any(is.nan(ac$std.error))) {
-    warning(
-      "HC3 SE is NA/NaN for cohort ATT '", outcome_var,
-      "' — falling back to HC1"
-    )
-    ac <- tryCatch(
-      avg_comparisons(
-        fit,
-        variables = "treated_in_year",
-        vcov      = "HC1",
-        newdata   = subset(data, treated_in_year == 1),
-        by        = "year"
-      ),
-      error = function(e) NULL
-    )
-  }
-
-  if (is.null(ac)) return(tibble())
-
-  # Per-cohort cell sizes and weighted means
-  cell_summary <- data |>
-    group_by(year) |>
-    summarise(
-      n_treated = sum(treated_in_year == 1),
-      n_control = sum(treated_in_year == 0),
-      ctrl_mean = weighted.mean(
-        .data[[outcome_var]][treated_in_year == 0],
-        weights[treated_in_year == 0],
-        na.rm = TRUE
-      ),
-      trt_mean = weighted.mean(
-        .data[[outcome_var]][treated_in_year == 1],
-        weights[treated_in_year == 1],
-        na.rm = TRUE
-      ),
-      .groups = "drop"
-    )
-
-  as_tibble(ac) |>
-    select(year, att = estimate, se = std.error,
-           pval = p.value, conf_lo = conf.low, conf_hi = conf.high) |>
-    left_join(cell_summary, by = "year") |>
-    mutate(
-      outcome    = outcome_var,
-      label      = outcome_labels[outcome_var],
-      suppressed = n_treated < min_treated,
-      across(c(att, se, pval, conf_lo, conf_hi),
-             \(x) if_else(suppressed, NA_real_, x))
-    ) |>
-    select(outcome, label, year, n_treated, n_control,
-           ctrl_mean, trt_mean, att, se, pval, conf_lo, conf_hi, suppressed)
-}
-
-run_cohort_att <- function(matched, covars, sample_label) {
-  message("\n--- ", sample_label, ": cohort ATT (focal outcomes) ---")
-
-  matched_nsc <- matched |> filter(has_nsc_record == 1)
-
-  map(cohort_focal_outcomes, \(o) {
-    message("  Fitting cohort ATT: ", o$name)
-
-    data_sub <- if (o$filter == "nsc") {
-      matched_nsc
-    } else {
-      matched |> filter(enroll_ever == 1, !is.na(.data[[o$name]]))
-    }
-
-    fit_att_by_cohort(data_sub, o$name, covars) |>
-      mutate(panel = o$panel)
-  }) |>
-    list_rbind() |>
-    mutate(subsample = sample_label)
-}
-
-results_cohort_all <- run_cohort_att(matched_all, base_covars, "All States")
-results_cohort_pa  <- run_cohort_att(matched_pa,  pa_covars,   "PA Public Schools")
-
-results_cohort <- bind_rows(results_cohort_all, results_cohort_pa) |>
-  mutate(
-    subsample = factor(subsample, levels = c("All States", "PA Public Schools"))
-  )
-
-# =============================================================================
-# 8. SAVE RESULTS
+# 7. SAVE RESULTS
 # =============================================================================
 
 dir.create(here("output"), recursive = TRUE, showWarnings = FALSE)
 
-saveRDS(results_all,    here("output", "att_results_all_states.rds"))
-saveRDS(results_pa,     here("output", "att_results_pa.rds"))
-saveRDS(results_het,    here("output", "att_results_het.rds"))
-saveRDS(results_cohort, here("output", "att_results_cohort.rds"))
+saveRDS(results_all, here("output", "att_results_all_states.rds"))
+saveRDS(results_pa,  here("output", "att_results_pa.rds"))
+saveRDS(results_het, here("output", "att_results_het.rds"))
 
 message("\n=== Impact analysis complete ===")
 message(
   "Saved: att_results_all_states.rds / att_results_pa.rds / ",
-  "att_results_het.rds / att_results_cohort.rds"
+  "att_results_het.rds"
 )

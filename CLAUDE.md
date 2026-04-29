@@ -66,8 +66,11 @@ revert to reading the LPM coefficient directly** — that breaks if anyone
 adds treatment-covariate interactions later.
 
 HC3 (not HC2 or cluster-on-subclass) is correct for matching with
-replacement per Hill & Reiter (2006) and the MatchIt vignette. HC1 fallback
-is preserved for leverage = 1 cases.
+replacement per Hill & Reiter (2006) and the MatchIt vignette. There is
+**no HC1 fallback** — if HC3 fails (e.g., leverage = 1 in a tiny cell),
+that's a signal the cell is degenerate and the result should be suppressed
+(via the `n_treated < min_treated` rule for cohort ATT) rather than
+silently demoted to a less rigorous SE.
 
 ## Pipeline structure
 

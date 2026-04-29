@@ -274,7 +274,11 @@ outcomes <- outcomes_raw |>
     # Never-enrolled students have inst_sector_initial_nsc = NA; %in% returns
     # FALSE, so they are coded 0 — matching how inst_4yr_entry treats them
     # (Stata's `==` returns 0 when comparing to missing).
-    inst_2yr_entry = as.integer(inst_sector_initial_nsc %in% c(4L, 5L, 6L))
+    # Cast to integer first because haven::read_dta() can return labelled
+    # types where %in% would compare against labels rather than codes.
+    inst_2yr_entry = as.integer(
+      as.integer(inst_sector_initial_nsc) %in% c(4L, 5L, 6L)
+    )
   ) |>
   select(-inst_sector_initial_nsc)
 
@@ -313,7 +317,12 @@ if (nrow(outcomes_dupes) > 0) {
 # and reflects actual graduation, accounting for held-back/skipped grades.
 # Joining on the 3-key (first_name, last_name, hs_grad_year) silently
 # drops 3+ in-sample students whose grade-derived hs_grad_year disagrees.
-stopifnot(!any(duplicated(outcomes[, c("first_name", "last_name")])))
+if (any(duplicated(outcomes[, c("first_name", "last_name")]))) {
+  stop(
+    "Duplicate (first_name, last_name) pairs remain in NSC outcomes after ",
+    "deduplication — investigate the dedup step before joining."
+  )
+}
 
 merged_clean <- merged_clean |>
   left_join(
@@ -364,10 +373,12 @@ merged_clean <- merged_clean |>
 # =============================================================================
 # FILTER TO ANALYTIC SAMPLE (graduation cohorts 2018–2021)
 # =============================================================================
-# 2017: only 18 students, predates program — excluded
-# 2022: NSC query has only ~54% control seamless rate (vs ~80% prior cohorts),
-#       suggesting partial NSC coverage — excluded to avoid biased denominators
-# 2023+: NSC query returned 0% enrollment — no data, excluded
+# 2017: n=18 students; seamless-STEM rate is 22% vs 41–52% for 2018–2021,
+#       likely small-N noise or measurement degradation in older NSC vintages.
+#       Excluded out of conservatism on a headline outcome.
+# 2022: NSC query has only ~57% control seamless rate (vs ~80% prior cohorts);
+#       partial NSC coverage — excluded to avoid biased denominators.
+# 2023+: NSC query returned 0% enrollment — no data, excluded.
 
 pre_filter_n <- nrow(merged_clean)
 
@@ -453,6 +464,17 @@ message(
     merged_clean$has_nsc_record == 1 & merged_clean$enroll_ever == 1,
     na.rm = TRUE
   )
+)
+
+# Invariant: enroll_ever == 1 implies has_nsc_record == 1.
+# Downstream Panel C analysis (script 7) reads from the unfiltered matched
+# sample and conditions only on enroll_ever == 1 — relying on this invariant
+# rather than re-asserting has_nsc_record. Guard it here so any future change
+# to the NSC join or recoding logic surfaces immediately.
+stopifnot(
+  all(merged_clean$has_nsc_record == 1 |
+        is.na(merged_clean$enroll_ever) |
+        merged_clean$enroll_ever != 1L)
 )
 
 # =============================================================================
