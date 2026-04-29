@@ -76,7 +76,7 @@ pa_extra_covariates <- c(
 
 # Per-sample full covariate vectors used by the PS model and balance tables.
 all_states_covariates <- c(base_covariates, all_states_extra_covariates)
-pa_covariates         <- c(base_covariates, pa_extra_covariates)
+pa_covariates <- c(base_covariates, pa_extra_covariates)
 
 # =============================================================================
 # HELPER: PREPARE MATCHING DATA
@@ -126,7 +126,7 @@ prepare_matching_data <- function(data, covariates, exclude_years = NULL) {
     filter(
       !is.na(treated_in_year),
       !year %in% c(2022, exclude_years),
-      us_citizen != 0 | is.na(us_citizen),
+      us_citizen == 1,
       treated_before_2017 == 0,
       has_nsc_record == 1
     )
@@ -198,16 +198,15 @@ run_matching <- function(data, covariates, exact_vars = "year") {
     method = "nearest",
     exact = reformulate(exact_vars),
     distance = "glm",
-    caliper = 0.25,         # 0.25 pooled SDs of the propensity score
-                            # (Austin 2011, Stuart 2010 standard)
+    caliper = 0.25, # 0.25 pooled SDs of the propensity score (Austin 2011 / Stuart 2010)
     caliper.d = "pooled SD",
     replace = TRUE,
-    ratio = 3               # 1:3 nearest-neighbor matching with replacement.
-                            # Control:treated ratio in the analytic pool is
-                            # ~3.5:1 (all-states) and ~3:1 (PA), so 1:3 uses
-                            # the available control supply. Each kth match
-                            # must still pass the caliper, so degenerate
-                            # candidates are still rejected.
+    ratio = 3 # 1:3 nearest-neighbor matching with replacement.
+    # Control:treated ratio in the analytic pool is
+    # ~3.5:1 (all-states) and ~3:1 (PA), so 1:3 uses
+    # the available control supply. Each kth match
+    # must still pass the caliper, so degenerate
+    # candidates are still rejected.
   )
 }
 
@@ -225,13 +224,23 @@ report_common_support <- function(m_out, sample_label) {
   ps_c <- ps[!trt]
 
   message(
-    "\n  Common support (", sample_label, "):",
-    "\n    Treated PS range:  [", sprintf("%.3f, %.3f", min(ps_t), max(ps_t)), "]",
-    "\n    Control PS range:  [", sprintf("%.3f, %.3f", min(ps_c), max(ps_c)), "]",
-    "\n    Treated below min(control PS): ", sum(ps_t < min(ps_c)),
-    "\n    Treated above max(control PS): ", sum(ps_t > max(ps_c)),
-    "\n    Control below min(treated PS): ", sum(ps_c < min(ps_t)),
-    "\n    Control above max(treated PS): ", sum(ps_c > max(ps_t))
+    "\n  Common support (",
+    sample_label,
+    "):",
+    "\n    Treated PS range:  [",
+    sprintf("%.3f, %.3f", min(ps_t), max(ps_t)),
+    "]",
+    "\n    Control PS range:  [",
+    sprintf("%.3f, %.3f", min(ps_c), max(ps_c)),
+    "]",
+    "\n    Treated below min(control PS): ",
+    sum(ps_t < min(ps_c)),
+    "\n    Treated above max(control PS): ",
+    sum(ps_t > max(ps_c)),
+    "\n    Control below min(treated PS): ",
+    sum(ps_c < min(ps_t)),
+    "\n    Control above max(treated PS): ",
+    sum(ps_c > max(ps_t))
   )
 
   # m_out$caliper stores the absolute caliper width (caliper * sd(ps) already
@@ -239,7 +248,9 @@ report_common_support <- function(m_out, sample_label) {
   caliper_abs <- as.numeric(m_out$caliper)
   caliper_std <- caliper_abs / sd(ps)
   message(
-    "    Caliper (", sprintf("%.2f", caliper_std), " SD = ",
+    "    Caliper (",
+    sprintf("%.2f", caliper_std),
+    " SD = ",
     sprintf("%.3f", caliper_abs),
     " on PS scale) eliminated ",
     sum(m_out$weights == 0 & trt),
@@ -296,6 +307,7 @@ report_common_support(m.out_all, "All states")
 summary(m.out_all)
 bal.tab(m.out_all, un = TRUE, thresholds = c(m = 0.1))
 bal.tab(m.out_all, cluster = "year", un = TRUE, thresholds = c(m = 0.1))
+bal.tab(m.out_all, thresholds = c(m = 0.2))
 
 matched_data_all <- match.data(m.out_all)
 
@@ -349,6 +361,7 @@ report_common_support(m.out_pa, "PA public schools")
 summary(m.out_pa)
 bal.tab(m.out_pa, un = TRUE, thresholds = c(m = 0.1))
 bal.tab(m.out_pa, cluster = "year", un = TRUE, thresholds = c(m = 0.1))
+bal.tab(m.out_pa, thresholds = c(m = 0.2))
 
 matched_data_pa <- match.data(m.out_pa)
 
@@ -369,22 +382,36 @@ message(
 dir.create(here("data", "matched"), recursive = TRUE, showWarnings = FALSE)
 
 # Matched datasets (used by scripts 7 and 8)
-saveRDS(matched_data_all, here("data", "matched", "matched_all_states_year_only.rds"))
-saveRDS(matched_data_pa,  here("data", "matched", "matched_pa_year_only.rds"))
+saveRDS(
+  matched_data_all,
+  here("data", "matched", "matched_all_states_year_only.rds")
+)
+saveRDS(matched_data_pa, here("data", "matched", "matched_pa_year_only.rds"))
 
 # MatchIt objects (used by script 8 for balance tables + Love plot)
 saveRDS(m.out_all, here("data", "matched", "matchit_object_all_states.rds"))
-saveRDS(m.out_pa,  here("data", "matched", "matchit_object_pa.rds"))
+saveRDS(m.out_pa, here("data", "matched", "matchit_object_pa.rds"))
 
 # Pre-match analytic samples (used by script 8 for descriptive table + A2)
-saveRDS(matching_data_all, here("data", "matched", "matching_data_all_states.rds"))
-saveRDS(matching_data_pa,  here("data", "matched", "matching_data_pa.rds"))
+saveRDS(
+  matching_data_all,
+  here("data", "matched", "matching_data_all_states.rds")
+)
+saveRDS(matching_data_pa, here("data", "matched", "matching_data_pa.rds"))
 
 message("\n=== Matching complete ===")
-message("Saved: matched_all_states_year_only.rds (", nrow(matched_data_all), " rows)")
+message(
+  "Saved: matched_all_states_year_only.rds (",
+  nrow(matched_data_all),
+  " rows)"
+)
 message("Saved: matched_pa_year_only.rds (", nrow(matched_data_pa), " rows)")
 message("Saved: matchit_object_all_states.rds")
 message("Saved: matchit_object_pa.rds")
-message("Saved: matching_data_all_states.rds (", nrow(matching_data_all), " rows)")
+message(
+  "Saved: matching_data_all_states.rds (",
+  nrow(matching_data_all),
+  " rows)"
+)
 message("Saved: matching_data_pa.rds (", nrow(matching_data_pa), " rows)")
 # =============================================================================
