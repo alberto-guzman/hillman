@@ -5,7 +5,7 @@
 #            1. All states (merged_df_all)
 #            2. PA public schools (merged_df_pa) — adds school-level covariates
 #
-# Method:  Nearest-neighbor matching with replacement (caliper = 0.25 SD),
+# Method:  1:3 nearest-neighbor matching with replacement (caliper = 0.25 SD),
 #          logistic propensity score, exact match on application year.
 #          Missing covariates are imputed to 0; missing indicators are added.
 #
@@ -178,7 +178,13 @@ run_matching <- function(data, covariates) {
     caliper = 0.25,         # 0.25 pooled SDs of the propensity score
                             # (Austin 2011, Stuart 2010 standard)
     caliper.d = "pooled SD",
-    replace = TRUE
+    replace = TRUE,
+    ratio = 3               # 1:3 nearest-neighbor matching with replacement.
+                            # Control:treated ratio in the analytic pool is
+                            # ~3.5:1 (all-states) and ~3:1 (PA), so 1:3 uses
+                            # the available control supply. Each kth match
+                            # must still pass the caliper, so degenerate
+                            # candidates are still rejected.
   )
 }
 
