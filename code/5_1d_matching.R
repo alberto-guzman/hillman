@@ -6,8 +6,15 @@
 #            2. PA public schools (merged_df_pa) — adds school-level covariates
 #
 # Method:  1:3 nearest-neighbor matching with replacement (caliper = 0.25 SD),
-#          logistic propensity score, exact match on application year.
-#          Missing covariates are imputed to 0; missing indicators are added.
+#          logistic propensity score. Missing covariates are imputed to 0;
+#          missing indicators are added.
+#
+#          Exact match:
+#            All-states sample — exact on (year, pa_state). Hillman selection
+#              is heavily concentrated in PA, so we force within-state-of-
+#              residence comparisons instead of allowing the PS-only match
+#              to span PA and non-PA students.
+#            PA sample — exact on year only (pa_state is constant in PA).
 #
 # Input:   `merged_df_all` — all-states cleaned dataset (from script 4)
 #          `merged_df_pa`  — PA public school dataset (from script 4)
@@ -145,7 +152,7 @@ prepare_matching_data <- function(data, covariates, exclude_years = NULL) {
 # missingness are dropped because an all-zero column is collinear with the
 # intercept and adds no information.
 
-run_matching <- function(data, covariates) {
+run_matching <- function(data, covariates, exact_vars = "year") {
   miss_counts <- vapply(
     paste0(covariates, "_miss"),
     function(v) sum(data[[v]]),
@@ -165,6 +172,7 @@ run_matching <- function(data, covariates) {
     length(miss_vars),
     " _miss)"
   )
+  message("  Exact match on: ", paste(exact_vars, collapse = " + "))
   if (length(miss_vars) < length(covariates)) {
     dropped <- setdiff(paste0(covariates, "_miss"), miss_vars)
     message(
@@ -188,7 +196,7 @@ run_matching <- function(data, covariates) {
     ps_formula,
     data = data,
     method = "nearest",
-    exact = ~year,
+    exact = reformulate(exact_vars),
     distance = "glm",
     caliper = 0.25,         # 0.25 pooled SDs of the propensity score
                             # (Austin 2011, Stuart 2010 standard)
@@ -273,7 +281,15 @@ message(
   " control)"
 )
 
-m.out_all <- run_matching(matching_data_all, all_states_covariates)
+m.out_all <- run_matching(
+  matching_data_all,
+  all_states_covariates,
+  exact_vars = c("year", "pa_state")
+)
+# Exact-on-(year, pa_state): Hillman selection is heavily PA-concentrated,
+# so we enforce within-state-of-residence comparisons for the all-states
+# match. This makes the all-states ATT a weighted average of the within-PA
+# and within-non-PA ATTs rather than allowing cross-state matches.
 
 report_common_support(m.out_all, "All states")
 
