@@ -1003,6 +1003,10 @@ applicants <- applicants |>
     school_impact,
     american_citizen,
     documented_disability,
+    # first_gen is extracted here for descriptive tables but is NOT used as
+    # a covariate in the PS or outcome models — the question wasn't on the
+    # 2017 or 2018 application forms, so its missing-indicator is collinear
+    # with year FE. See script 5 base_covariates note.
     first_gen,
     stipend,
     house_size,

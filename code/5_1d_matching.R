@@ -33,7 +33,6 @@ library(here)
 # the PA PS adds school-level covariates instead. `pa_state` would be a
 # constant in the PA sample so it's excluded there.
 # house_size included as SES proxy alongside stipend.
-# gender cast to integer here — sourced as dbl from applicant clean script.
 
 base_covariates <- c(
   "gender",
@@ -88,9 +87,19 @@ pa_covariates         <- c(base_covariates, pa_extra_covariates)
 #   - missing treated_in_year: data anomaly
 
 prepare_matching_data <- function(data, covariates, exclude_years = NULL) {
+  # Brittle-coupling guard: pa_state below assumes script 4's lowercase-full-name
+  # convention for `state`. If state ever flips to 2-letter abbreviations or
+  # title case, pa_state would silently become all-zero, killing the all-states
+  # PS's main geographic discriminator without warning.
+  if (!any(data$state == "pennsylvania", na.rm = TRUE)) {
+    stop(
+      "Expected at least some rows with state == 'pennsylvania' (lowercase). ",
+      "Has the state convention changed in script 4?"
+    )
+  }
+
   data <- data |>
     mutate(
-      gender = as.integer(gender),
       grade_9 = if_else(grade == 9, 1L, 0L),
       grade_10 = if_else(grade == 10, 1L, 0L),
       grade_11 = if_else(grade == 11, 1L, 0L),

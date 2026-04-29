@@ -113,8 +113,12 @@ message("alum_long after dedup: ", nrow(alum_long), " rows")
 # =============================================================================
 # treated_before_2017: student first participation year is before 2017.
 #   Created here -- do NOT recreate in 3a.
-# first_treatment_year: earliest participation year.
-# total_times_treated: number of distinct participation years.
+# first_treatment_year / total_times_treated: computed here from the raw
+#   alumni tracker (covers all participation years, including pre-2017).
+#   Script 3a *recomputes* both from in-sample applicant records (post-COVID
+#   filter, 2017–2023 application years) and uses the recomputed versions
+#   downstream. The values produced here are kept for diagnostic continuity
+#   only; consumers should rely on the 3a versions.
 
 alum_flags <- alum_long |>
   group_by(first_name, last_name) |>
