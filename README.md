@@ -47,6 +47,7 @@ Scripts execute in order:
 | `4_1d_merge_school_info.R` | Normalize school names; merge PA school-level covariates |
 | `5_1d_matching.R` | 1:3 propensity score matching (NN, with replacement, caliper = 0.25 SD, exact-on-year) |
 | `7_1d_impact.R` | ATT estimation via g-computation (LPM + `marginaleffects::avg_comparisons()`, HC3 SEs); pooled and heterogeneity |
+| `8_1d_tables.R` | EEPA-style publication tables via `gt` (descriptives, balance, impact); HTML + PNG + RDS outputs |
 
 > Scripts use `here` package for paths. Open the `.Rproj` file to set the
 > project root before running.
@@ -60,8 +61,8 @@ Scripts execute in order:
 - **Applicant cohorts (`year`):** 2017, 2018, 2019 — used for matching strata. 2020 excluded (program disrupted by COVID); 2021 excluded from matching (only 1 analytic-sample treated student all-states, 0 in PA); 2022/2023 application cohorts have no analyzable HS-grad windows yet.
 - **HS graduation cohorts (`hs_grad_year`):** 2018–2021 — drives outcome availability. 2022 cohort excluded (NSC partial coverage); 2023+ excluded (NSC has no enrollment data yet).
 - **Two analytic samples:**
-  - **PA public schools (primary)** — pre-match 327 (83 T / 244 C, NSC-trackable); matched 197 (72 T / 125 unique C). The Hillman program is based in Pittsburgh and recruits primarily from western Pennsylvania; the PA sample is its natural target population and avoids cross-state geographic confounding.
-  - **All states (robustness)** — pre-match 602 (136 T / 466 C); matched 314 (121 T / 193 unique C). Adds out-of-state applicants, but matched composition remains ~80% PA. Reported as a generalizability check.
+  - **PA public schools (primary)** — pre-match 325 (83 T / 242 C, NSC-trackable); matched 197 (72 T / 125 unique C). The Hillman program is based in Pittsburgh and recruits primarily from western Pennsylvania; the PA sample is its natural target population and avoids cross-state geographic confounding.
+  - **All states (robustness)** — pre-match 599 (136 T / 463 C); matched 314 (121 T / 193 unique C). Adds out-of-state applicants, but matched composition remains ~80% PA. Reported as a generalizability check.
   - Pre-match samples are restricted to students with `has_nsc_record == 1` so matching weights stay coherent through to outcome estimation (no broken 1:k pairs from post-match outcome filtering).
 
 ### Propensity-score matching (script 5)
@@ -120,6 +121,16 @@ Year-window degree outcomes (`deg_bach_6y` / 7-year window, `deg_any_stem_6y` / 
 - `att_results_all_states.rds`, `att_results_pa.rds` — pooled ATT, by panel (HC3 SEs)
 - `att_results_het.rds` — heterogeneity ATT (subgroup × focal STEM outcomes)
 
+### Tables (`output/tables/`)
+
+EEPA-style publication tables produced by `8_1d_tables.R`. Each table is saved
+as `.html` (web/Quarto), `.png` (figures or slides; rendered via `webshot2` +
+Chromium-based browser), and `.rds` (gt object, for embedding into Quarto/Word):
+
+- `table1_descriptives` — Sample Descriptive Statistics for the Matched Treated and Comparison Groups
+- `table2_balance` — Standardized Mean Differences and Variance Ratios Before and After Matching
+- `table3_impact` — Estimated Treatment Effects on College Enrollment, Institution Type, and Persistence
+
 ### Counts (`output/counts/`)
 
 - `n_applicants_by_year.csv`, `n_alumni_by_year.csv`, `n_merged_by_year.csv`,
@@ -133,7 +144,7 @@ Year-window degree outcomes (`deg_bach_6y` / 7-year window, `deg_any_stem_6y` / 
 | | PA public schools (primary) | All states (robustness) |
 |---|---:|---:|
 | Cleaned analytic sample (hs_grad 2018–2021) | 388 (98 T / 290 C) | 722 (159 T / 563 C) |
-| Pre-match (post-NSC + script-5 exclusions) | 327 (83 T / 244 C) | 602 (136 T / 466 C) |
+| Pre-match (post-NSC + script-5 exclusions) | 325 (83 T / 242 C) | 599 (136 T / 463 C) |
 | Matched (Panels A/B regression sample) | 197 (72 T / 125 unique C) | 314 (121 T / 193 unique C) |
 | Enrolled (Panel C regression sample) | 177 | 275 |
 
