@@ -239,12 +239,22 @@ The table style mirrors Page, Mata, & Russell (2026) — Lindsay's
 EdWorkingPaper #26-1409 in `docs/`. The advisor's manuscript is the
 reference for these conventions; before editing, look at her tables.
 
-Visual conventions:
-- Booktabs rules (`\toprule`, `\midrule`, `\bottomrule`); no vertical rules
+Visual conventions (revised 2026-07 — the "keep the new table style"
+decision; base remains Page et al. 2026 with these deliberate departures):
+- Booktabs rules (`\toprule`, `\midrule`, `\bottomrule`); no vertical rules.
+  Table 3 additionally draws an `\hline` before each panel block via
+  `pack_rows(hline_before = TRUE)` — intentional, don't remove.
 - **Plain (non-italic) section/panel headers** via
-  `pack_rows(italic = FALSE, bold = FALSE)`
-- Multi-column spanners via `add_header_above()`
-- "Comparison" not "Control"; italicized `$n$`
+  `pack_rows(italic = FALSE, bold = FALSE)`; panel labels use the
+  `(A) Enrollment` form (not "Panel A. Enrollment")
+- Multi-column spanners via `add_header_above()`; spanner text is `PA`
+  and `All states`
+- Column naming: Table 1 uses "Treated ($n=...$)" / "Matched Comparison
+  ($n=...$)"; Table 3 uses "Ctrl. Mean" with no per-panel $n$ columns —
+  sample sizes are reported in the Table 3 Notes instead
+  ("PA sample: $n_t$, $n_c$; All-states sample: ...")
+- `kable_styling(latex_options = "hold_position", font_size = 10)` on all
+  three tables
 - Significance markers (Lindsay's set):
   `$^{\sim}$` p < .10, `$^{*}$` p < .05, `$^{**}$` p < .01, `$^{***}$` p < .001
   (note: tilde, not dagger; matches her Table 2/3/4 footnotes)
@@ -254,7 +264,9 @@ Visual conventions:
 - **Source + Notes** paragraphs below each table via `kableExtra::footnote()`,
   with detailed prose describing the model, SE type, panel definitions, and
   citations. Concatenated into a single `general =` vector (see footnote
-  gotchas below).
+  gotchas below). Notes must say caliper "$=$ 0.25 SD of the propensity
+  score" (NOT "of the logit") and exact matching on "application year
+  $\times$ PA residence (PA vs. non-PA)" (NOT "state of residence").
 - Significance legend is a third entry in the Table 3 footnote vector.
 
 Content notes:
