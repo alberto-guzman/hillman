@@ -68,6 +68,15 @@ alum <- alum_raw |>
       first_name == "hiruni" & str_detect(last_name, "mayunne") ~
         str_replace(last_name, "mayunne", "mayadunne"),
       TRUE ~ last_name
+    ),
+    # AUDIT FIX (2026-07-19): tracker spells her "Hillary Liu" but the 2017
+    # application says "Hilary Liu" — IDENTICAL email in both sources, so the
+    # same person with certainty. The spelling broke the exact join and she
+    # sat in the all-states matched sample as a CONTROL despite being
+    # treated in 2017.
+    first_name = case_when(
+      first_name == "hillary" & last_name == "liu" ~ "hilary",
+      TRUE ~ first_name
     )
   ) |>
   select(-first, -last)

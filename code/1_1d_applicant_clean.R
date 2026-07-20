@@ -43,7 +43,49 @@ clean_custom_names <- function(df) {
 # completion status filter is applied there explicitly.
 
 # --- 2017 --------------------------------------------------------------------
-df_2017 <- read_excel(here("data", "raw", "applicants", "hillman_2017.xlsx")) |>
+# Read as text so the row-shift repair below can move values across columns
+# without type conflicts; the mutate block re-coerces numeric fields.
+raw_2017 <- read_excel(
+  here("data", "raw", "applicants", "hillman_2017.xlsx"),
+  col_types = "text"
+)
+
+# AUDIT FIX (2026-07-19): 11 raw rows have every survey answer displaced one
+# column RIGHT starting at "JKCF YOUNG SCHOLAR" (a stray number sits in the
+# JKCF cell; race sits in GEOGRAPHIC LOCATION; the school-impact answer sits
+# in AMERICAN CITIZEN, which coded us_citizen = 0 and silently ejected 6
+# analytic-sample students, 4 of them treated). Detect shifted rows by three
+# independent signatures and shift them back LEFT by one.
+jk_pos <- match("JKCF YOUNG SCHOLAR", names(raw_2017))
+# Detection: the numeric-garbage-in-JKCF signature alone identifies exactly
+# the 11 verified shifted rows. Broader heuristics (non-yes/no citizenship,
+# non-numeric household size) also match legitimate "Do not wish to answer"
+# rows and must NOT trigger the shift.
+shifted_rows <- which(
+  !is.na(raw_2017[["JKCF YOUNG SCHOLAR"]]) &
+    grepl("^[0-9]+$", raw_2017[["JKCF YOUNG SCHOLAR"]])
+)
+stopifnot(
+  "2017 column-shift repair expected exactly the 11 audited rows" =
+    length(shifted_rows) == 11
+)
+message("2017 column-shift repair: ", length(shifted_rows), " rows realigned")
+for (i in shifted_rows) {
+  raw_2017[i, jk_pos:(ncol(raw_2017) - 1)] <- raw_2017[i, (jk_pos + 1):ncol(raw_2017)]
+  raw_2017[i, ncol(raw_2017)] <- NA
+}
+
+# AUDIT FIX (2026-07-19): 7 rows carry a parent/guardian NAME in the
+# SELF IDENTITY column; downstream regexes coded those students
+# racially_marginalized = 0 off a person's name. NA them out (race unknown).
+parent_in_si <- !is.na(raw_2017[["SELF IDENTITY"]]) &
+  !is.na(raw_2017[["PARENT GUARD FULL NAME"]]) &
+  tolower(trimws(raw_2017[["SELF IDENTITY"]])) ==
+    tolower(trimws(raw_2017[["PARENT GUARD FULL NAME"]]))
+message("2017 parent-name-in-race repair: ", sum(parent_in_si), " rows NA'd")
+raw_2017[["SELF IDENTITY"]][parent_in_si] <- NA
+
+df_2017 <- raw_2017 |>
   clean_custom_names() |>
   select(
     -c(
@@ -118,6 +160,21 @@ df_2017 <- read_excel(here("data", "raw", "applicants", "hillman_2017.xlsx")) |>
 # --- 2018 --------------------------------------------------------------------
 df_2018 <- read_excel(here("data", "raw", "applicants", "hillman_2018.xlsx")) |>
   clean_custom_names() |>
+  # AUDIT FIX (2026-07-19): the "[other]" race write-in column was dropped,
+  # miscoding 12-16 racially-marginalized students (write-ins like "African
+  # American") as 0. Fold the write-in text into the main identity field so
+  # 3b's keyword regexes can see it.
+  mutate(
+    how_do_you_identify_yourself = if_else(
+      !is.na(`how_do_you_identify_yourself_[other]`),
+      paste(
+        coalesce(how_do_you_identify_yourself, ""),
+        `how_do_you_identify_yourself_[other]`,
+        sep = " "
+      ),
+      how_do_you_identify_yourself
+    )
+  ) |>
   select(
     -c(
       site,

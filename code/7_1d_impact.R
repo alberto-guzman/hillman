@@ -117,16 +117,22 @@ panel_c_outcomes <- c(
 # the original variable names (see header).
 # ---------------------------------------------------------------------------
 
+# "STEM" outcomes use the broad CIP list inherited from the NSC pipeline,
+# which includes the psychology (42), social science (45), health (51), and
+# transportation (49) CIP families in addition to core STEM fields. Per the
+# 2026-07-19 construct decision, outcomes are labeled "STEM/health-science"
+# and the CIP families are disclosed in the table notes (script 8) rather
+# than re-deriving with a strict federal STEM list.
 outcome_labels <- c(
   # Panel A — Enrollment (NSC-matched)
   enroll_seamless      = "Seamless enrollment",
-  enroll_seamless_stem = "Seamless STEM enrollment",
+  enroll_seamless_stem = "Seamless STEM/health-science enrollment",
   # Panel B — Institution at entry
   inst_4yr_entry = "Initial enrollment: any 4-year",
   inst_2yr_entry = "Initial enrollment: any 2-year",
   # Panel C — Persistence
   pers_1y         = "Persisted to 2nd year (any inst.)",
-  pers_1y_stem    = "Persisted in STEM to 2nd year"
+  pers_1y_stem    = "Persisted in STEM/health-science to 2nd year"
 )
 
 # ---------------------------------------------------------------------------
@@ -348,8 +354,8 @@ results_pa |>
 het_outcomes <- c("enroll_seamless_stem", "pers_1y_stem")
 
 het_labels <- c(
-  enroll_seamless_stem = "Seamless STEM Enrollment",
-  pers_1y_stem         = "Persisted in STEM to 2nd Year"
+  enroll_seamless_stem = "Seamless STEM/Health-Science Enrollment",
+  pers_1y_stem         = "Persisted in STEM/Health-Science to 2nd Year"
 )
 
 run_het <- function(matched, covars, sample_label) {

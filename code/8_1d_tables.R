@@ -515,7 +515,11 @@ table3_kbl <- impact_wide |>
         "standard errors are reported as proportions; comparison-group means",
         "are matched-sample proportions. Standard errors are shown in",
         "parentheses below each ATT. Panel C conditions on enrollment in any",
-        "postsecondary institution. PA is the primary analytic",
+        "postsecondary institution. STEM/health-science outcomes classify",
+        "majors using the NSC pipeline's CIP-code list, which comprises the",
+        "core STEM families (11, 14, 15, 26, 27, 40, 41) plus psychology (42),",
+        "social sciences (45), transportation (49), and health professions",
+        "(51). PA is the primary analytic",
         "sample; all-states is reported as a robustness check."
       ),
       "\\\\textit{Statistical significance:} $^{\\\\sim}$ $p<.10$;\\\\quad $^{*}$ $p<.05$;\\\\quad $^{**}$ $p<.01$;\\\\quad $^{***}$ $p<.001$."

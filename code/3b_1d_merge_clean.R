@@ -90,9 +90,14 @@ merged_clean <- merged_df |>
       TRUE ~ 0L
     ),
 
+    # AUDIT FIX (2026-07-19): the old pattern "no|0|false" matched the "not"
+    # inside "Do not wish to answer", coding decliners as 0 (and, for
+    # us_citizen below, silently ejecting them via the citizenship filter).
+    # Decline-to-answer is NA; word boundaries prevent substring matches.
     first_gen = case_when(
-      str_detect(tolower(as.character(first_gen)), "yes|1|true") ~ 1L,
-      str_detect(tolower(as.character(first_gen)), "no|0|false") ~ 0L,
+      str_detect(tolower(as.character(first_gen)), "do not wish") ~ NA_integer_,
+      str_detect(tolower(as.character(first_gen)), "\\byes\\b|^1$|\\btrue\\b") ~ 1L,
+      str_detect(tolower(as.character(first_gen)), "\\bno\\b|^0$|\\bfalse\\b") ~ 0L,
       TRUE ~ NA_integer_
     ),
 
@@ -181,8 +186,9 @@ merged_clean <- merged_df |>
     ),
 
     us_citizen = case_when(
-      str_detect(tolower(as.character(american_citizen)), "yes|1|true") ~ 1L,
-      str_detect(tolower(as.character(american_citizen)), "no|0|false") ~ 0L,
+      str_detect(tolower(as.character(american_citizen)), "do not wish") ~ NA_integer_,
+      str_detect(tolower(as.character(american_citizen)), "\\byes\\b|^1$|\\btrue\\b") ~ 1L,
+      str_detect(tolower(as.character(american_citizen)), "\\bno\\b|^0$|\\bfalse\\b") ~ 0L,
       TRUE ~ NA_integer_
     )
   )
@@ -317,21 +323,39 @@ if (nrow(outcomes_dupes) > 0) {
 # and reflects actual graduation, accounting for held-back/skipped grades.
 # Joining on the 3-key (first_name, last_name, hs_grad_year) silently
 # drops 3+ in-sample students whose grade-derived hs_grad_year disagrees.
-if (any(duplicated(outcomes[, c("first_name", "last_name")]))) {
+#
+# AUDIT FIX (2026-07-19): join on SPACE-STRIPPED cleaned names. The .dta
+# collapses compound names ("tabassum khatun" -> "tabassumkhatun",
+# "o donnell" -> "odonnell"), which produced 20 false NSC non-matches —
+# all 20 verified as real NSC records (identical space-stripped names,
+# matching hs_grad_year) — that the has_nsc_record filter then silently
+# ejected from the matching pools (including ~5 treated PA students).
+outcomes <- outcomes |>
+  mutate(
+    join_fn = str_remove_all(first_name, " "),
+    join_ln = str_remove_all(last_name, " ")
+  ) |>
+  select(-first_name, -last_name)
+
+if (any(duplicated(outcomes[, c("join_fn", "join_ln")]))) {
   stop(
-    "Duplicate (first_name, last_name) pairs remain in NSC outcomes after ",
-    "deduplication — investigate the dedup step before joining."
+    "Duplicate space-stripped (first_name, last_name) pairs remain in NSC ",
+    "outcomes after deduplication — investigate before joining."
   )
 }
 
 merged_clean <- merged_clean |>
+  mutate(
+    join_fn = str_remove_all(first_name, " "),
+    join_ln = str_remove_all(last_name, " ")
+  ) |>
   left_join(
     outcomes |> rename(hs_grad_year_nsc = hs_grad_year),
-    by = c("first_name", "last_name"),
+    by = c("join_fn", "join_ln"),
     relationship = "many-to-one"
   ) |>
   mutate(hs_grad_year = coalesce(hs_grad_year_nsc, hs_grad_year)) |>
-  select(-hs_grad_year_nsc)
+  select(-hs_grad_year_nsc, -join_fn, -join_ln)
 
 # =============================================================================
 # FLAG NSC MATCH (before dropping unmatched students)
