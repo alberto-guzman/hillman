@@ -11,9 +11,10 @@
 #
 #          Exact match:
 #            All-states sample — exact on (year, pa_state). Hillman selection
-#              is heavily concentrated in PA, so we force within-state-of-
-#              residence comparisons instead of allowing the PS-only match
-#              to span PA and non-PA students.
+#              is heavily concentrated in PA, so we force within-stratum
+#              comparisons on the PA / non-PA split. Note pa_state is a
+#              binary indicator: non-PA students can still match across
+#              different non-PA states.
 #            PA sample — exact on year only (pa_state is constant in PA).
 #
 # Input:   `merged_df_all` — all-states cleaned dataset (from script 4)
@@ -53,8 +54,11 @@ base_covariates <- c(
   "suburban",
   "rural",
   "disability",
-  "neg_school",
-  "us_citizen"
+  "neg_school"
+  # us_citizen excluded as a covariate: prepare_matching_data filters to
+  # us_citizen == 1 (commit 4ba1735), so it is constant 1 in every matching
+  # sample — as a formula term it was a no-op (glm returned an NA
+  # coefficient). It is a sample restriction, not a covariate.
   # first_gen excluded: question wasn't on the 2017 or 2018 application
   # forms, so it's 100% missing for those cohorts and the missing-indicator
   # method produces first_gen_miss == 1[year %in% c(2017, 2018)] — perfectly
@@ -86,8 +90,9 @@ pa_covariates <- c(base_covariates, pa_extra_covariates)
 #
 # Exclusions applied on true values before imputation:
 #   - treated_before_2017 == 1: would contaminate control group
-#   - us_citizen == 0 (confirmed non-citizen): NA citizenship retained and
-#     handled via us_citizen_miss in the PS model
+#   - us_citizen != 1: non-citizens AND missing citizenship both dropped
+#     (filter tightened in commit 4ba1735; us_citizen is a sample
+#     restriction, not a PS covariate)
 #   - year == 2022: redundant under script 3b's hs_grad_year ≤ 2021 cap
 #     (a 2022 applicant graduates ≥ 2022 and is already filtered upstream);
 #     kept defensively here in case the upstream cap is loosened.
@@ -128,7 +133,12 @@ prepare_matching_data <- function(data, covariates, exclude_years = NULL) {
       !year %in% c(2022, exclude_years),
       us_citizen == 1,
       treated_before_2017 == 0,
-      has_nsc_record == 1
+      has_nsc_record == 1,
+      # pa_state is an exact-match stratum in the all-states sample; a row
+      # with unknown state (NA after script 1's non-US/invalid recodes)
+      # cannot be placed in the PA / non-PA scheme. Constant-1 no-op in the
+      # PA sample (state == "pennsylvania" by construction).
+      !is.na(pa_state)
     )
 
   data <- data |>
@@ -198,8 +208,12 @@ run_matching <- function(data, covariates, exact_vars = "year") {
     method = "nearest",
     exact = reformulate(exact_vars),
     distance = "glm",
-    caliper = 0.25, # 0.25 pooled SDs of the propensity score (Austin 2011 / Stuart 2010)
-    caliper.d = "pooled SD",
+    # 0.25 SDs of the propensity score, on the PROBABILITY scale (MatchIt's
+    # std.caliper = TRUE default standardizes by sd(distance), and
+    # distance = "glm" stores fitted probabilities, not logits). Austin
+    # 2011 / Stuart 2010 phrase the recommendation on the logit scale;
+    # table notes must say "of the propensity score," not "of the logit."
+    caliper = 0.25,
     replace = TRUE,
     ratio = 3 # 1:3 nearest-neighbor matching with replacement.
     # Control:treated ratio in the analytic pool is
@@ -298,9 +312,10 @@ m.out_all <- run_matching(
   exact_vars = c("year", "pa_state")
 )
 # Exact-on-(year, pa_state): Hillman selection is heavily PA-concentrated,
-# so we enforce within-state-of-residence comparisons for the all-states
-# match. This makes the all-states ATT a weighted average of the within-PA
-# and within-non-PA ATTs rather than allowing cross-state matches.
+# so we enforce within-stratum comparisons on the PA / non-PA split. This
+# makes the all-states ATT a weighted average of the within-PA and
+# within-non-PA ATTs. Non-PA students may still match across different
+# non-PA states — pa_state is binary, not a full state identifier.
 
 report_common_support(m.out_all, "All states")
 

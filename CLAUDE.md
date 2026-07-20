@@ -65,11 +65,20 @@ own records but their institution did not report to NSC. Including them as
 zeros would bias outcomes downward. Script 7 filters all panels to
 `has_nsc_record == 1`; Panel C additionally filters on `enroll_ever == 1`.
 
-### Caliper is 0.25 SD (not 0.5)
+### Caliper is 0.25 SD (not 0.5) — on the PROBABILITY scale
 
 The caliper was tightened from 0.5 to 0.25 SD during code review (per
 Austin 2011 / Stuart 2010 standard). Don't loosen it without a substantive
 reason — PA balance materially improved at 0.25.
+
+The caliper is standardized by the SD of the propensity score on the
+**probability scale** (MatchIt's `std.caliper = TRUE` default with
+`distance = "glm"`, which stores fitted probabilities). Austin/Stuart
+phrase their recommendation on the logit scale — manuscript and table
+notes must say "0.25 SD of the propensity score," NOT "of the
+propensity-score logit." Switching to a true logit caliper
+(`distance = "glm", link = "linear.logit"`) would re-match and invalidate
+the published matched samples.
 
 ### 1:3 nearest-neighbor matching with replacement
 
@@ -90,10 +99,13 @@ observable in NSC. Don't move this filter back to the outcome stage.
 
 - **PA sample:** exact on `year`. PA students are all in PA by construction,
   so adding `pa_state` would be a constant.
-- **All-states sample:** exact on `(year, pa_state)`. Forces within-state-of-
-  residence comparisons. PA-treated cannot be paired with non-PA controls
-  (and vice versa) on PS distance alone — geographic confounding is too
-  large for the PS to fully adjust for.
+- **All-states sample:** exact on `(year, pa_state)`. Forces within-stratum
+  comparisons on the PA / non-PA split: PA-treated cannot be paired with
+  non-PA controls (and vice versa) — geographic confounding is too large
+  for the PS to fully adjust for. NOTE: `pa_state` is a binary indicator,
+  not a state identifier; non-PA students can still match across different
+  non-PA states. Do not describe this as "within-state-of-residence"
+  matching in the manuscript or table notes.
 
 Don't unify the exact specs — the asymmetry is intentional.
 
@@ -205,8 +217,16 @@ recommends `makecell` and `multirow` for richer table features).
     used to allow PA-treated to be paired with non-PA controls on PS
     distance alone, which understates geographic-confounding adjustment.
     The all-states match now uses `exact = ~ year + pa_state` to enforce
-    within-state comparisons. PA sample is unchanged (pa_state is constant
-    in PA). Don't unify the exact specs across samples.
+    within-stratum comparisons on the PA / non-PA split (non-PA students
+    can still match across different non-PA states — pa_state is binary).
+    PA sample is unchanged (pa_state is constant in PA). Don't unify the
+    exact specs across samples.
+11. **us_citizen as a "covariate."** `prepare_matching_data` filters to
+    `us_citizen == 1` (commit 4ba1735), which makes us_citizen constant 1
+    in every matching sample. It sat in the PS formula and outcome-model
+    covariate lists as a silent no-op (glm NA coefficient) until removed
+    in the 2026-07 audit. It is a sample restriction — do not re-add it
+    to `base_covariates`/`base_covars`.
 
 ## Tables (script 8) — kableExtra LaTeX, Page et al. (2026) style
 

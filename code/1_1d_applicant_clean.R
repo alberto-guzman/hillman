@@ -304,12 +304,24 @@ df_2019 <- read_excel(
     year = 2019
   )
 
-# Stipend data for 2019 is in a separate file
+# Stipend data for 2019 is in a separate file. Join on CLEANED names —
+# joining on raw names silently missed case/nickname/accent variants,
+# leaving stipend NA (coded 0 downstream) for those students.
 df_stipend <- read_excel(here("data", "raw", "applicants", "hillman_raw.xlsx"), sheet = "2019") |>
-  select(first_name, last_name, stipend)
+  select(first_name, last_name, stipend) |>
+  mutate(
+    .fn = clean_person_name(first_name),
+    .ln = clean_person_name(last_name, strip_suffix = TRUE)
+  ) |>
+  select(-first_name, -last_name)
 
 df_2019 <- df_2019 |>
-  left_join(df_stipend, by = c("first_name", "last_name"))
+  mutate(
+    .fn = clean_person_name(first_name),
+    .ln = clean_person_name(last_name, strip_suffix = TRUE)
+  ) |>
+  left_join(df_stipend, by = c(".fn", ".ln")) |>
+  select(-.fn, -.ln)
 rm(df_stipend)
 
 # --- 2020 --------------------------------------------------------------------
@@ -607,7 +619,8 @@ df_2023 <- read_csv(here("data", "raw", "applicants", "hillman_2023.csv")) |>
   ) |>
   mutate(year = 2023)
 
-# Stipend data for 2023 is in a separate text file
+# Stipend data for 2023 is in a separate text file. Join on CLEANED names
+# (same rationale as the 2019 stipend join above).
 df2023_stipend <- read_delim(
   here("data", "raw", "applicants", "2023_applicants_stipendEligible.txt"),
   delim = "\t",
@@ -619,10 +632,20 @@ df2023_stipend <- read_delim(
     stipend = stipend_eligible,
     first_name = applicant_first_name,
     last_name = applicant_last_name
-  )
+  ) |>
+  mutate(
+    .fn = clean_person_name(first_name),
+    .ln = clean_person_name(last_name, strip_suffix = TRUE)
+  ) |>
+  select(-first_name, -last_name)
 
 df_2023 <- df_2023 |>
-  left_join(df2023_stipend, by = c("first_name", "last_name")) |>
+  mutate(
+    .fn = clean_person_name(first_name),
+    .ln = clean_person_name(last_name, strip_suffix = TRUE)
+  ) |>
+  left_join(df2023_stipend, by = c(".fn", ".ln")) |>
+  select(-.fn, -.ln) |>
   # stipend join creates duplicates when nickname partially matches legal name;
   # keep row with non-missing stipend, otherwise first row. This resolves most
   # cases at join time; the global remove_duplicates block below catches any
@@ -897,8 +920,8 @@ remove_duplicates <- tibble(
   )
 )
 
-# Tag each row within its name/year group, then drop rows 2+ only for flagged
-# duplicates. This preserves the first (kept) record even if there are 3+ rows.
+# Tag each row within its name/year group, then drop ALL rows 2+ for flagged
+# duplicates (not just row 2), keeping the completeness-sorted first record.
 applicants <- applicants |>
   group_by(first_name, last_name, year) |>
   arrange(
@@ -908,11 +931,12 @@ applicants <- applicants |>
   ) |>
   mutate(.row_n = row_number()) |>
   ungroup() |>
-  anti_join(
-    remove_duplicates |> mutate(.row_n = 2L),
-    by = c("first_name", "last_name", "year", ".row_n")
+  left_join(
+    remove_duplicates |> mutate(.flagged = TRUE),
+    by = c("first_name", "last_name", "year")
   ) |>
-  select(-.row_n)
+  filter(!(coalesce(.flagged, FALSE) & .row_n >= 2L)) |>
+  select(-.row_n, -.flagged)
 
 # Normalize state to uppercase 2-letter abbreviations.
 # Strips non-alpha characters (e.g. "PA`"), converts full names to
@@ -968,12 +992,28 @@ applicants <- applicants |>
         # Non-US entries — recode to NA
         "BRAZIL" ~ NA_character_,
         "INDIA" ~ NA_character_,
+        "SK" ~ NA_character_, # South Korea (Seoul International School applicant)
         # Invalid / ambiguous — recode to NA
         "NA" ~ NA_character_,
         .default = s
       )
     }
   )
+
+# Surface any state values that survived normalization without mapping to a
+# valid 2-letter US code — previously these passed through silently ("for
+# manual review") but nothing downstream reviewed them.
+valid_states <- c(
+  state.abb, "DC", "PR", "VI", "GU", "AS", "MP"
+)
+unrecognized_states <- setdiff(unique(applicants$state), c(valid_states, NA))
+if (length(unrecognized_states) > 0) {
+  warning(
+    "Unrecognized state value(s) passed through normalization: ",
+    paste(unrecognized_states, collapse = ", "),
+    " — add mappings (or NA recodes) to the case_match above."
+  )
+}
 
 # =============================================================================
 # FINAL WHITELIST

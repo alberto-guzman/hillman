@@ -130,7 +130,12 @@ outcome_labels <- c(
 )
 
 # ---------------------------------------------------------------------------
-# Covariates — must match PS model exactly (same covars + _miss indicators)
+# Covariates — mirror the PS model (same covars + _miss indicators), with two
+# deliberate exceptions:
+#   - pa_state (all-states PS model): balanced by construction via exact
+#     matching on (year, pa_state), so it is omitted from the outcome model.
+#   - us_citizen: constant 1 in the matched samples (script 5 filters to
+#     us_citizen == 1), so it is a sample restriction, not a covariate.
 # Grade dummies used (consistent with PS model); raw grade dropped
 # ---------------------------------------------------------------------------
 
@@ -157,7 +162,6 @@ base_covars <- c(
   "rural",
   "disability",
   "neg_school",
-  "us_citizen",
   # first_gen excluded: question wasn't on the 2017 or 2018 application
   # forms, so first_gen_miss == 1[year %in% c(2017, 2018)] is perfectly
   # collinear with year FE. See script 5 base_covariates note.
