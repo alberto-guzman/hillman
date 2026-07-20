@@ -68,9 +68,10 @@ Scripts execute in order:
 ### Propensity-score matching (script 5)
 
 - 1:3 nearest-neighbor with replacement
-- Caliper = **0.25 pooled SDs** of the propensity score
-- **Exact match on `year` for the PA sample; `(year, pa_state)` for the all-states sample.** The all-states match enforces within-state-of-residence comparisons so PA-treated are not paired with non-PA controls (and vice versa) on PS distance alone.
-- Logistic PS model with grade dummies (grade 11 reference), 13 base covariates, 1 PA-residence indicator (all-states only), 5 school-level covariates (PA only), and missingness indicators where applicable. `first_gen` excluded due to structural missingness in 2017–2018 cohorts.
+- Caliper = **0.25 SDs of the propensity score** (probability scale —
+  MatchIt's `std.caliper` default with `distance = "glm"`; not the logit)
+- **Exact match on `year` for the PA sample; `(year, pa_state)` for the all-states sample.** The all-states match enforces within-stratum comparisons on the PA / non-PA split, so PA-treated are not paired with non-PA controls (and vice versa). `pa_state` is a binary indicator — non-PA students may still match across different non-PA states.
+- Logistic PS model with grade dummies (grade 11 reference), 12 base covariates, 1 PA-residence indicator (all-states only), 5 school-level covariates (PA only), and missingness indicators where applicable. `first_gen` excluded due to structural missingness in 2017–2018 cohorts; `us_citizen` is a sample restriction (`us_citizen == 1` filter), not a covariate.
 - `set.seed(20260428)` for reproducibility
 
 ### Outcome estimation (script 7)

@@ -22,8 +22,8 @@
 #   7_1d_impact.R               — doubly-robust ATT via weighted LPMs (HC3 SEs)
 #                                 → output/att_results_{all_states,pa}.rds
 #                                 → output/att_results_het.rds
-#   8_1d_tables.R               — publication-ready gt tables
-#                                 → output/tables/table{1,2,3}_*.{html,png,rds}
+#   8_1d_tables.R               — publication-ready kableExtra LaTeX tables
+#                                 → output/tables/table{1,2,3}_*.{tex,png}
 #
 # Notes:
 #   - Requires the `here` package; project root is set by the .Rproj file.

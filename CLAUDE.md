@@ -58,6 +58,19 @@ The analytic sample is restricted to `hs_grad_year ∈ [2018, 2021]` because:
 This means the 2022 and 2023 **application-year cohorts** are also fully
 excluded (they all have hs_grad_year ≥ 2022). The exclusion is in script 3b.
 
+### Repeat participation and the 2020 COVID drop (verified 2026-07-19)
+
+Dropping 2020 before computing `first_treatment_year` raised the concern
+that a student first treated in 2020 who returned in 2021+ would be
+miscoded as "first-treated 2021." Verified against the alumni tracker:
+7 such students exist program-wide, and **none reach either matched
+sample** (3a drops 2020; the 2021/2022 application years are excluded
+from both matchings). Three matched all-states treated students were
+first treated in 2018/2019 (correctly coded) and ALSO participated in
+2020+ — that is repeat dosage, not timing contamination. Worth one
+manuscript sentence framing the estimand as "effect of first
+participation, inclusive of any later repeat participation."
+
 ### All panels condition on `has_nsc_record == 1`
 
 Per PI input: students not appearing in NSC went to college per Hillman's
