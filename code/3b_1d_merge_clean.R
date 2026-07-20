@@ -71,6 +71,8 @@ library(haven)
 library(janitor)
 library(here)
 
+source(here("code", "helpers.R")) # clean_person_name (used by the raw-NSC audit-fix block)
+
 dir.create(here("output", "counts"), recursive = TRUE, showWarnings = FALSE)
 
 # =============================================================================
@@ -356,6 +358,138 @@ merged_clean <- merged_clean |>
   ) |>
   mutate(hs_grad_year = coalesce(hs_grad_year_nsc, hs_grad_year)) |>
   select(-hs_grad_year_nsc, -join_fn, -join_ln)
+
+# =============================================================================
+# AUDIT FIXES (2026-07-19), Stages 2-3 — entry-timed STEM flag and
+# cross-pull false-zero correction, both derived from the RAW NSC files
+# =============================================================================
+# Stage 2: the .dta's seamless_enrollSTEM is an artifact of Stata's
+#   `duplicates drop, force` — it reflects the student's LAST observed
+#   enrollment record's major (58% of positives were not STEM at entry).
+#   Rebuild enroll_seamless_stem as: her seamless_enroll == 1 AND a
+#   STEM/health-science CIP on the FIRST post-HS-graduation enrollment
+#   record (pre-graduation dual-enrollment records excluded).
+# Stage 3: 29 students returned enrollment records in the Oct 2021 NSC pull
+#   but "Record Found = N" in the Feb 2023 analysis pull (an NSC matching
+#   regression), so the .dta carries false never-enrolled zeros for them.
+#   Their outcomes are unobservable in the analysis pull -> set the NSC
+#   outcome columns to NA so has_nsc_record excludes them from matching.
+
+strip_key <- function(x) str_remove_all(x, " ")
+
+nsc_raw_2023 <- read_csv(
+  here("data", "raw", "nsc", "Hillman_only603384st_T213790.202302221357_DA_2023.csv"),
+  col_types = cols(.default = "c")
+) |>
+  clean_names() |>
+  mutate(
+    join_fn = strip_key(clean_person_name(first_name)),
+    join_ln = strip_key(clean_person_name(last_name, strip_suffix = TRUE)),
+    beg = as.Date(enrollment_begin, "%Y%m%d")
+  )
+
+stem_cips <- read_csv(
+  here("data", "processed", "cip_codes_stem_final.csv"),
+  col_types = cols(.default = "c")
+) |>
+  pull(cip_code) |>
+  unique()
+
+# STEM flag on the first enrollment record at or after May 1 of the
+# student's HS-graduation year (drops pre-graduation dual enrollment).
+first_entry_stem <- nsc_raw_2023 |>
+  filter(!is.na(beg)) |>
+  inner_join(
+    merged_clean |>
+      transmute(
+        join_fn = strip_key(first_name),
+        join_ln = strip_key(last_name),
+        hs_grad_year
+      ) |>
+      distinct(join_fn, join_ln, .keep_all = TRUE),
+    by = c("join_fn", "join_ln")
+  ) |>
+  filter(is.na(hs_grad_year) | beg >= as.Date(paste0(hs_grad_year, "-05-01"))) |>
+  group_by(join_fn, join_ln) |>
+  filter(beg == min(beg)) |>
+  summarise(
+    entry_stem = as.integer(any(
+      coalesce(enrollment_cip_1 %in% stem_cips, FALSE) |
+        coalesce(enrollment_cip_2 %in% stem_cips, FALSE)
+    )),
+    .groups = "drop"
+  )
+
+merged_clean <- merged_clean |>
+  mutate(
+    join_fn = strip_key(first_name),
+    join_ln = strip_key(last_name)
+  ) |>
+  left_join(first_entry_stem, by = c("join_fn", "join_ln")) |>
+  mutate(
+    enroll_seamless_stem = case_when(
+      is.na(enroll_seamless) ~ NA_integer_,
+      enroll_seamless == 0L ~ 0L,
+      TRUE ~ coalesce(entry_stem, 0L)
+    )
+  ) |>
+  select(-entry_stem)
+
+message(
+  "Entry-timed STEM rebuild: enroll_seamless_stem positives = ",
+  sum(merged_clean$enroll_seamless_stem == 1, na.rm = TRUE)
+)
+
+# Stage 3: cross-pull regressions -> NA out the false zeros.
+pull_2021 <- read_csv(
+  here("data", "raw", "nsc", "502003_T209672.202110221010_DA.csv"),
+  col_types = cols(.default = "c")
+) |>
+  clean_names()
+stopifnot(all(c("first_name", "last_name") %in% names(pull_2021)))
+
+enrolled_2021 <- pull_2021 |>
+  filter(!is.na(enrollment_begin)) |>
+  transmute(
+    join_fn = strip_key(clean_person_name(first_name)),
+    join_ln = strip_key(clean_person_name(last_name, strip_suffix = TRUE))
+  ) |>
+  distinct()
+
+not_found_2023 <- nsc_raw_2023 |>
+  group_by(join_fn, join_ln) |>
+  summarise(all_n = all(record_found_y_n == "N"), .groups = "drop") |>
+  filter(all_n)
+
+cross_pull_regressions <- inner_join(
+  enrolled_2021, not_found_2023 |> select(-all_n),
+  by = c("join_fn", "join_ln")
+)
+message(
+  "Cross-pull NSC regressions (false zeros -> NA): ",
+  nrow(cross_pull_regressions), " students program-wide"
+)
+
+nsc_outcome_cols <- c(
+  "enroll_seamless", "enroll_seamless_stem", "enroll_ever",
+  "enroll_ever_stem", "enroll_delayed", "enroll_firsttime_fulltime",
+  "inst_public4yr_entry", "inst_private4yr_entry", "inst_4yr_entry",
+  "inst_2yr_entry", "inst_instate_entry", "reten_1y", "pers_1y",
+  "pers_1y_stem", "deg_any_ever", "deg_bach_ever", "deg_any_6y",
+  "deg_bach_6y", "deg_any_stem_6y"
+)
+
+merged_clean <- merged_clean |>
+  mutate(
+    .cross_pull = paste(join_fn, join_ln) %in%
+      paste(cross_pull_regressions$join_fn, cross_pull_regressions$join_ln),
+    across(all_of(nsc_outcome_cols), ~ if_else(.cross_pull, NA_integer_, .x))
+  )
+message(
+  "  ...of which in analytic-sample rows: ",
+  sum(merged_clean$.cross_pull)
+)
+merged_clean <- merged_clean |> select(-.cross_pull, -join_fn, -join_ln)
 
 # =============================================================================
 # FLAG NSC MATCH (before dropping unmatched students)

@@ -756,6 +756,19 @@ applicants <- applicants |>
     last_name  = clean_person_name(last_name, strip_suffix = TRUE)
   )
 
+# AUDIT FIX (2026-07-19): "amanda lu" is TWO different students (2018 file
+# has two rows with DOBs two years apart, different grades and schools; the
+# alumni tracker independently lists two Amanda Lus with different treatment
+# histories). The name-keyed pipeline cannot distinguish them, so both
+# identities are excluded rather than risk chimeric merged records. The old
+# remove_duplicates entry for amanda/lu/2018 is now redundant but harmless.
+is_amanda_lu <- coalesce(
+  applicants$first_name == "amanda" & applicants$last_name == "lu",
+  FALSE
+)
+applicants <- applicants |> filter(!is_amanda_lu)
+message("Amanda Lu identity-collision exclusion: ", sum(is_amanda_lu), " rows removed")
+
 # GPA standardization to 4.0 scale.
 #
 # Conversion logic:
