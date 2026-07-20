@@ -32,3 +32,7 @@ vignettes/*.pdf
 .DS_Store
 2020_hillman.Rproj
 .html
+
+# Reference papers and old proposals kept locally, not versioned
+docs/ai24-564_v2.pdf
+docs/ASHE 2019 Proposal*.docx
